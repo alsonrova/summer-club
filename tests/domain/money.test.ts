@@ -3,16 +3,16 @@ import { formatAriary, appliquerPourcentage } from '@/domain/money'
 
 describe('formatAriary', () => {
   it('groupe les milliers avec une espace insécable', () => {
-    expect(formatAriary(45000)).toBe('45 000 Ar')
+    expect(formatAriary(45000)).toBe('45\u00A0000\u00A0Ar')
   })
   it("n'affiche aucune décimale", () => {
-    expect(formatAriary(1500)).toBe('1 500 Ar')
+    expect(formatAriary(1500)).toBe('1\u00A0500\u00A0Ar')
   })
   it('gère zéro', () => {
-    expect(formatAriary(0)).toBe('0 Ar')
+    expect(formatAriary(0)).toBe('0\u00A0Ar')
   })
   it('gère les grands montants', () => {
-    expect(formatAriary(1250000)).toBe('1 250 000 Ar')
+    expect(formatAriary(1250000)).toBe('1\u00A0250\u00A0000\u00A0Ar')
   })
 })
 

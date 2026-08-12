@@ -1,8 +1,8 @@
-const NBSP = ' '
+const NBSP = '\u00A0'
 
 export function formatAriary(montant: number): string {
   const entier = Math.round(montant)
-  const groupes = entier.toLocaleString('fr-FR').replace(/\s| /g, NBSP)
+  const groupes = entier.toLocaleString('fr-FR').replace(/\s|\u202F/g, NBSP)
   return `${groupes}${NBSP}Ar`
 }
 
