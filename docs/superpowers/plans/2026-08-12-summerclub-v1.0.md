@@ -561,6 +561,16 @@ ALTER TABLE "Variant" ADD CONSTRAINT "variant_stock_non_negatif" CHECK ("stock" 
 
 Run: `npx prisma migrate dev`
 
+Ajouter dans la foulée les index de clés étrangères — Prisma n'en crée aucun implicitement sur PostgreSQL, et ce sont les chemins de lecture les plus fréquents du projet : `@@index([categoryId])` sur `Product`, `@@index([orderId])` sur `OrderItem` et sur `Payment`, `@@index([productId])` et `@@index([statut, epingle])` sur `Review`. Ajouter aussi `@@unique([productId, libelle])` sur `Variant`, qui empêche deux déclinaisons de même libellé sur un même produit.
+
+Note d'exécution : `prisma migrate dev` refuse de tourner sans terminal interactif dès qu'il doit avertir d'une contrainte d'unicité. Dans ce cas, générer le SQL par différentiel puis l'appliquer :
+
+```bash
+npx prisma migrate diff --from-schema-datasource prisma/schema.prisma \
+  --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/<horodatage>_<nom>/migration.sql
+npx prisma migrate deploy
+```
+
 - [ ] **Step 5: Créer le client partagé**
 
 `src/server/db.ts` :

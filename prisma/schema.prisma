@@ -50,6 +50,7 @@ model Product {
   updatedAt   DateTime  @updatedAt
 
   @@index([actif, ordre])
+  @@index([categoryId])
 }
 
 model Variant {
@@ -64,6 +65,7 @@ model Variant {
   orderItems  OrderItem[]
 
   @@index([productId])
+  @@unique([productId, libelle])
 }
 
 model Media {
@@ -130,6 +132,8 @@ model OrderItem {
   nomFige         String
   prixUnitaireFige Int
   quantite        Int
+
+  @@index([orderId])
 }
 
 model Payment {
@@ -143,6 +147,8 @@ model Payment {
   payloadBrut    Json?
   idempotencyKey String @unique
   createdAt      DateTime @default(now())
+
+  @@index([orderId])
 }
 
 enum PortePromo {
@@ -198,6 +204,9 @@ model Review {
   epingle   Boolean    @default(false)
   position  Int        @default(0)
   createdAt DateTime   @default(now())
+
+  @@index([productId])
+  @@index([statut, epingle])
 }
 
 model DeliveryZone {
