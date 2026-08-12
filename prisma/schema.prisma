@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  membre
+}
+
+model User {
+  id    String  @id @default(cuid())
+  email String  @unique
+  nom   String?
+  tel   String?
+  role  Role    @default(membre)
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  nom         String
+  description String?
+  image       String?
+  ordre       Int       @default(0)
+  products    Product[]
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  nom         String
+  description String
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id])
+  prixBase    Int
+  prixAchat   Int       @default(0)
+  actif       Boolean   @default(true)
+  ordre       Int       @default(0)
+  metaTitle       String?
+  metaDescription String?
+  variants    Variant[]
+  media       Media[]
+  reviews     Review[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([actif, ordre])
+}
+
+model Variant {
+  id          String  @id @default(cuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  libelle     String
+  sku         String  @unique
+  deltaPrix   Int     @default(0)
+  stock       Int     @default(0)
+  seuilAlerte Int     @default(2)
+  orderItems  OrderItem[]
+
+  @@index([productId])
+}
+
+model Media {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  chemin    String
+  alt       String
+  position  Int     @default(0)
+  isPrimary Boolean @default(false)
+
+  @@index([productId, position])
+}
+
+enum Canal {
+  orange_money
+  whatsapp
+  livraison
+}
+
+enum StatutCommande {
+  en_attente_confirmation
+  en_attente_paiement
+  confirmee
+  en_preparation
+  expediee
+  prete_retrait
+  livree
+  annulee
+  echec_paiement
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  reference     String   @unique
+  tokenSuivi    String   @unique
+  canal         Canal
+  statut        StatutCommande @default(en_attente_confirmation)
+  clientNom     String
+  tel           String
+  email         String?
+  zoneId        String?
+  zone          DeliveryZone? @relation(fields: [zoneId], references: [id])
+  adresse       String?
+  sousTotal     Int
+  fraisLivraison Int
+  remise        Int      @default(0)
+  total         Int
+  items         OrderItem[]
+  payments      Payment[]
+  reviews       Review[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([statut, createdAt])
+}
+
+model OrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId       String
+  variant         Variant @relation(fields: [variantId], references: [id])
+  nomFige         String
+  prixUnitaireFige Int
+  quantite        Int
+}
+
+model Payment {
+  id             String @id @default(cuid())
+  orderId        String
+  order          Order  @relation(fields: [orderId], references: [id])
+  provider       String
+  montant        Int
+  statut         String
+  refExterne     String?
+  payloadBrut    Json?
+  idempotencyKey String @unique
+  createdAt      DateTime @default(now())
+}
+
+enum PortePromo {
+  produit
+  categorie
+  tout
+}
+
+enum TypePromo {
+  percent
+  fixed
+}
+
+model Promotion {
+  id               String     @id @default(cuid())
+  nom              String
+  type             TypePromo
+  valeur           Int
+  portee           PortePromo
+  cibleId          String?
+  debut            DateTime?
+  fin              DateTime?
+  joursSemaine     Int        @default(127)
+  heureDebut       Int?
+  heureFin         Int?
+  membresSeulement Boolean    @default(false)
+  priorite         Int        @default(0)
+  actif            Boolean    @default(true)
+}
+
+enum SourceAvis {
+  verifie
+  importe
+}
+
+enum StatutAvis {
+  en_attente
+  publie
+  rejete
+}
+
+model Review {
+  id        String @id @default(cuid())
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id])
+  note      Int
+  texte     String
+  auteur    String
+  source    SourceAvis
+  statut    StatutAvis @default(en_attente)
+  epingle   Boolean    @default(false)
+  position  Int        @default(0)
+  createdAt DateTime   @default(now())
+}
+
+model DeliveryZone {
+  id      String  @id @default(cuid())
+  nom     String
+  tarif   Int
+  delai   String
+  actif   Boolean @default(true)
+  ordre   Int     @default(0)
+  orders  Order[]
+}
+
+model Setting {
+  cle    String @id
+  valeur Json
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  acteur    String
+  action    String
+  entite    String
+  entiteId  String
+  avant     Json?
+  apres     Json?
+  createdAt DateTime @default(now())
+
+  @@index([entite, createdAt])
+}

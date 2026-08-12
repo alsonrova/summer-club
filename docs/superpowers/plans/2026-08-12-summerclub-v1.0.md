@@ -389,7 +389,11 @@ model Media {
   @@index([productId, position])
 }
 
-enum Canal { orange_money whatsapp livraison }
+enum Canal {
+  orange_money
+  whatsapp
+  livraison
+}
 
 enum StatutCommande {
   en_attente_confirmation
@@ -452,8 +456,16 @@ model Payment {
   createdAt      DateTime @default(now())
 }
 
-enum PortePromo { produit categorie tout }
-enum TypePromo { percent fixed }
+enum PortePromo {
+  produit
+  categorie
+  tout
+}
+
+enum TypePromo {
+  percent
+  fixed
+}
 
 model Promotion {
   id               String     @id @default(cuid())
@@ -472,8 +484,16 @@ model Promotion {
   actif            Boolean    @default(true)
 }
 
-enum SourceAvis { verifie importe }
-enum StatutAvis { en_attente publie rejete }
+enum SourceAvis {
+  verifie
+  importe
+}
+
+enum StatutAvis {
+  en_attente
+  publie
+  rejete
+}
 
 model Review {
   id        String @id @default(cuid())
