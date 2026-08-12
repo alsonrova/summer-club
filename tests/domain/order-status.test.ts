@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { transitionAutorisee, effetSurStock } from '@/domain/order-status'
+import type { Statut } from '@/domain/order-status'
 
 describe('transitionAutorisee', () => {
   it('autorise le passage de en_attente_paiement à confirmee', () => {
@@ -38,5 +39,35 @@ describe('effetSurStock', () => {
   })
   it('ne touche pas au stock entre deux états post-confirmation', () => {
     expect(effetSurStock('en_preparation', 'expediee')).toBe('aucun')
+  })
+})
+
+describe('effetSurStock — transitions interdites', () => {
+  it('ne décrémente pas le stock d\'une commande annulée (survente)', () => {
+    expect(effetSurStock('annulee', 'confirmee')).toBe('aucun')
+  })
+  it('ne recrédite pas un bijou déjà livré (stock fantôme)', () => {
+    expect(effetSurStock('livree', 'annulee')).toBe('aucun')
+  })
+  it('ne décrémente pas depuis un échec de paiement vers confirmee', () => {
+    expect(effetSurStock('echec_paiement', 'confirmee')).toBe('aucun')
+  })
+  it('ne décrémente pas en sautant l\'étape confirmee', () => {
+    expect(effetSurStock('en_attente_confirmation', 'en_preparation')).toBe('aucun')
+  })
+
+  it('respecte l\'invariant : transition interdite => effet aucun, pour tous les couples possibles', () => {
+    const statuts: Statut[] = [
+      'en_attente_confirmation', 'en_attente_paiement', 'confirmee',
+      'en_preparation', 'expediee', 'prete_retrait', 'livree',
+      'annulee', 'echec_paiement',
+    ]
+    for (const de of statuts) {
+      for (const vers of statuts) {
+        if (!transitionAutorisee(de, vers)) {
+          expect(effetSurStock(de, vers)).toBe('aucun')
+        }
+      }
+    }
   })
 })
