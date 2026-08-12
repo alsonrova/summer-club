@@ -1,0 +1,37 @@
+@theme {
+  --color-sand: #F7F3EE;
+  --color-shell: #FDFBF8;
+  --color-clay: #EDE5DA;
+  --color-taupe: #B9A992;
+  --color-sage: #7C8B72;
+  --color-sage-deep: #5E6B55;
+  --color-bark: #42392F;
+  --color-bark-soft: #6E6255;
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-body: var(--font-instrument), system-ui, sans-serif;
+
+  --radius-arch: 48% 48% 14px 14px / 32% 32% 4px 4px;
+
+  --ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  :root { color-scheme: light; }
+  body {
+    background-color: var(--color-sand);
+    color: var(--color-bark);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 300; }
+  ::selection { background: var(--color-clay); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
