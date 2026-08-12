@@ -25,5 +25,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"
+  },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
   }
 }
