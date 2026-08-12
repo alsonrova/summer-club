@@ -88,13 +88,14 @@ Pas de mode sombre sur la vitrine. Le back-office hérite de la même palette.
 --font-display: 'Fraunces', Georgia, serif;
 --font-body: 'Instrument Sans', system-ui, sans-serif;
 
---t-hero:    clamp(2.75rem, 7vw, 5.25rem);  /* 300 · lh .98 · ls -.02em */
---t-h1:      clamp(2rem, 4.5vw, 3.25rem);   /* 300 · lh 1.08 */
---t-h2:      clamp(1.5rem, 3vw, 2.25rem);   /* 400 · lh 1.15 */
---t-h3:      1.25rem;                        /* 500 · lh 1.3 */
---t-body:    1rem;                           /* 400 · lh 1.7 */
---t-small:   0.875rem;                       /* 400 · lh 1.6 */
---t-eyebrow: 0.6875rem;                      /* 500 · ls .16em · majuscules */
+/* Espace de noms --text-* de Tailwind v4 : génère les utilitaires text-hero, text-h1… */
+--text-hero:    clamp(2.75rem, 7vw, 5.25rem);  /* 300 · lh .98 · ls -.02em */
+--text-h1:      clamp(2rem, 4.5vw, 3.25rem);   /* 300 · lh 1.08 */
+--text-h2:      clamp(1.5rem, 3vw, 2.25rem);   /* 400 · lh 1.15 */
+--text-h3:      1.25rem;                        /* 500 · lh 1.3 */
+--text-body:    1rem;                           /* 400 · lh 1.7 */
+--text-small:   0.875rem;                       /* 400 · lh 1.6 */
+--text-eyebrow: 0.6875rem;                      /* 500 · ls .16em · majuscules */
 ```
 
 Règles : les titres sont en graisse 300, jamais en gras. Les majuscules ne servent qu'aux sur-titres et libellés courts. La longueur de ligne est plafonnée à 68 caractères. Polices sous-groupées en latin, `font-display: swap`.

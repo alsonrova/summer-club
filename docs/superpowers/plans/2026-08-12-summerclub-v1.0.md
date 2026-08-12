@@ -137,6 +137,14 @@ Créer `src/styles/tokens.css` :
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Instrument Sans', system-ui, sans-serif;
 
+  --text-hero: clamp(2.75rem, 7vw, 5.25rem);
+  --text-h1: clamp(2rem, 4.5vw, 3.25rem);
+  --text-h2: clamp(1.5rem, 3vw, 2.25rem);
+  --text-h3: 1.25rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-eyebrow: 0.6875rem;
+
   --radius-arch: 48% 48% 14px 14px / 32% 32% 4px 4px;
 
   --ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);
@@ -2527,7 +2535,7 @@ export default async function BoutiquePage() {
   const produits = await listerProduits()
   return (
     <main className="mx-auto max-w-[1200px] px-6 py-24 md:px-10 md:py-40">
-      <h1 className="text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.08]">La boutique</h1>
+      <h1 className="text-h1 leading-[1.08]">La boutique</h1>
       <div className="mt-16 grid grid-cols-2 gap-x-6 gap-y-14 md:grid-cols-4 md:gap-x-8">
         {produits.map((p) => <ProductCard key={p.slug} produit={p} />)}
       </div>
@@ -2574,7 +2582,7 @@ export default async function FicheProduitPage(
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Gallery images={fiche.images} />
       <div>
-        <h1 className="text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.08]">{fiche.nom}</h1>
+        <h1 className="text-h1 leading-[1.08]">{fiche.nom}</h1>
         <p className="mt-6 max-w-[68ch] leading-[1.7] text-bark-soft">{fiche.description}</p>
         <VariantPicker fiche={fiche} />
       </div>
@@ -2821,7 +2829,7 @@ export function Avis({ avis }: { avis: AvisAffiche[] }) {
   if (avis.length === 0) return null
   return (
     <section className="mx-auto max-w-[1200px] px-6 py-24 md:px-10 md:py-40">
-      <h2 className="text-[clamp(1.5rem,3vw,2.25rem)]">Elles les portent</h2>
+      <h2 className="text-h2">Elles les portent</h2>
       <div className="mt-14 grid gap-8 md:grid-cols-3">
         {avis.map((a, i) => (
           <Reveal key={a.id} delay={i * 70}>
@@ -2862,7 +2870,7 @@ export function Hero() {
         <p className="text-[11px] uppercase tracking-[.16em] text-bark-soft">
           Nouvelle saison
         </p>
-        <h1 className="mt-5 text-[clamp(2.75rem,7vw,5.25rem)] font-light leading-[.98] tracking-[-.02em]">
+        <h1 className="mt-5 text-hero font-light leading-[.98] tracking-[-.02em]">
           Le bijou<br />que vous<br />
           <span className="font-medium text-sage-deep">oubliez</span>
         </h1>
@@ -2894,7 +2902,7 @@ export function Hero() {
 }
 ```
 
-Écrire ensuite `about.tsx`, `selection.tsx` et `cta.tsx` en suivant la même structure : conteneur `mx-auto max-w-[1200px] px-6 py-24 md:px-10 md:py-40`, titre en `text-[clamp(1.5rem,3vw,2.25rem)]`, corps en `text-bark-soft leading-[1.7]` limité à `max-w-[68ch]`, et chaque groupe d'éléments enveloppé dans `<Reveal delay={i * 70}>`. `about.tsx` porte trois arguments au maximum (acier inoxydable, plaqué or 18k, résistant à l'eau et à la transpiration). `selection.tsx` réutilise `<ProductCard>` dans la même grille que le catalogue. `cta.tsx` contient un lien vers `/boutique` et les liens Instagram et WhatsApp.
+Écrire ensuite `about.tsx`, `selection.tsx` et `cta.tsx` en suivant la même structure : conteneur `mx-auto max-w-[1200px] px-6 py-24 md:px-10 md:py-40`, titre en `text-h2`, corps en `text-bark-soft leading-[1.7]` limité à `max-w-[68ch]`, et chaque groupe d'éléments enveloppé dans `<Reveal delay={i * 70}>`. `about.tsx` porte trois arguments au maximum (acier inoxydable, plaqué or 18k, résistant à l'eau et à la transpiration). `selection.tsx` réutilise `<ProductCard>` dans la même grille que le catalogue. `cta.tsx` contient un lien vers `/boutique` et les liens Instagram et WhatsApp.
 
 - [ ] **Step 3: Écrire le test de bout en bout**
 
