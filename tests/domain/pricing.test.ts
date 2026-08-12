@@ -97,3 +97,88 @@ describe('resolvePrix', () => {
     expect(resolvePrix(args([base({ type: 'fixed', valeur: 999999 })])).prixFinal).toBe(0)
   })
 })
+
+describe('resolvePrix — robustesse fuseau et fenêtres horaires', () => {
+  // 2026-08-14 est un vendredi, 2026-08-15 un samedi.
+  // Antananarivo = UTC+3 toute l'année (pas d'heure d'été/hiver).
+
+  it('applique un happy hour qui franchit minuit, à l\'intérieur de la plage', () => {
+    const p = base({ heureDebut: 22, heureFin: 2 })
+    // 23h00 à Antananarivo (vendredi) = 20h00 UTC (vendredi).
+    const vendredi23h = new Date('2026-08-14T20:00:00Z')
+    expect(resolvePrix(args([p], vendredi23h)).prixFinal).toBe(40000)
+
+    // 0h30 à Antananarivo (samedi) = 21h30 UTC (vendredi).
+    const samedi0h30 = new Date('2026-08-14T21:30:00Z')
+    expect(resolvePrix(args([p], samedi0h30)).prixFinal).toBe(40000)
+  })
+
+  it('ignore un happy hour qui franchit minuit, en dehors de la plage', () => {
+    const p = base({ heureDebut: 22, heureFin: 2 })
+    // 21h00 à Antananarivo (vendredi) = 18h00 UTC (vendredi).
+    const vendredi21h = new Date('2026-08-14T18:00:00Z')
+    expect(resolvePrix(args([p], vendredi21h)).prixFinal).toBe(50000)
+
+    // 2h00 à Antananarivo (samedi) = 23h00 UTC (vendredi).
+    const samedi2h = new Date('2026-08-14T23:00:00Z')
+    expect(resolvePrix(args([p], samedi2h)).prixFinal).toBe(50000)
+  })
+
+  it('applique une promotion pile à minuit heure locale (heure = 0, pas 24)', () => {
+    const p = base({ heureDebut: 0, heureFin: 6 })
+    // 0h00 à Antananarivo (samedi) = 21h00 UTC (vendredi).
+    const samediMinuit = new Date('2026-08-14T21:00:00Z')
+    expect(resolvePrix(args([p], samediMinuit)).prixFinal).toBe(40000)
+  })
+
+  it('ne s\'applique jamais si seule une borne de la plage horaire est renseignée', () => {
+    const debutSeul = base({ heureDebut: 20, heureFin: null })
+    const finSeule = base({ heureDebut: null, heureFin: 22 })
+    // 20h00 à Antananarivo (vendredi) = 17h00 UTC (vendredi).
+    const vendredi20h = new Date('2026-08-14T17:00:00Z')
+    expect(resolvePrix(args([debutSeul], vendredi20h)).prixFinal).toBe(50000)
+    expect(resolvePrix(args([finSeule], vendredi20h)).prixFinal).toBe(50000)
+  })
+
+  it('la plage horaire normale est inclusive au début et exclusive à la fin', () => {
+    const p = base({ heureDebut: 20, heureFin: 22 })
+    // 20h00 à Antananarivo (vendredi) = 17h00 UTC (vendredi) : borne de début, appliquée.
+    const vendredi20h = new Date('2026-08-14T17:00:00Z')
+    expect(resolvePrix(args([p], vendredi20h)).prixFinal).toBe(40000)
+
+    // 22h00 à Antananarivo (vendredi) = 19h00 UTC (vendredi) : borne de fin, non appliquée.
+    const vendredi22h = new Date('2026-08-14T19:00:00Z')
+    expect(resolvePrix(args([p], vendredi22h)).prixFinal).toBe(50000)
+  })
+
+  it('scénario combiné : une seule des trois promotions simultanées s\'applique', () => {
+    const promoProduit = base({
+      id: 'promoProduit', portee: 'produit', cibleId: 'prod1', priorite: 1, valeur: 10,
+    })
+    const promoCategorieHorsHeure = base({
+      id: 'promoCategorieHorsHeure', portee: 'categorie', cibleId: 'cat1',
+      heureDebut: 9, heureFin: 18, priorite: 10, valeur: 80,
+    })
+    const promoHappyHour = base({
+      id: 'promoHappyHour', portee: 'tout', heureDebut: 19, heureFin: 21, priorite: 5, valeur: 30,
+    })
+    // 20h00 à Antananarivo (vendredi) = 17h00 UTC (vendredi).
+    const vendredi20h = new Date('2026-08-14T17:00:00Z')
+    const r = resolvePrix(
+      args([promoProduit, promoCategorieHorsHeure, promoHappyHour], vendredi20h),
+    )
+    // promoCategorieHorsHeure a la priorité la plus haute mais n'est pas dans sa
+    // plage horaire (9h-18h) à 20h : elle est écartée malgré sa priorité.
+    // Entre promoProduit (priorité 1) et promoHappyHour (priorité 5), la plus
+    // prioritaire applicable gagne.
+    expect(r.promotionId).toBe('promoHappyHour')
+    expect(r.prixFinal).toBe(35000)
+  })
+
+  it('une fenêtre horaire de largeur nulle ne s\'applique jamais', () => {
+    const p = base({ heureDebut: 10, heureFin: 10 })
+    // 10h00 à Antananarivo (vendredi) = 07h00 UTC (vendredi).
+    const vendredi10h = new Date('2026-08-14T07:00:00Z')
+    expect(resolvePrix(args([p], vendredi10h)).prixFinal).toBe(50000)
+  })
+})
