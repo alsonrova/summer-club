@@ -36,4 +36,10 @@ describe('contrastes de la charte', () => {
     expect(css).toContain('--color-sage-deep: #5E6B55')
     expect(css).toContain('--color-bark: #42392F')
   })
+  it("l'échelle typographique de la spec est déclarée", () => {
+    const css = readFileSync('src/styles/tokens.css', 'utf8')
+    expect(css).toContain('--text-hero: clamp(2.75rem, 7vw, 5.25rem)')
+    expect(css).toContain('--text-h1: clamp(2rem, 4.5vw, 3.25rem)')
+    expect(css).toContain('--text-eyebrow: 0.6875rem')
+  })
 })

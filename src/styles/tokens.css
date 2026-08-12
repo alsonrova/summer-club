@@ -11,6 +11,14 @@
   --font-display: var(--font-fraunces), Georgia, serif;
   --font-body: var(--font-instrument), system-ui, sans-serif;
 
+  --text-hero: clamp(2.75rem, 7vw, 5.25rem);
+  --text-h1: clamp(2rem, 4.5vw, 3.25rem);
+  --text-h2: clamp(1.5rem, 3vw, 2.25rem);
+  --text-h3: 1.25rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-eyebrow: 0.6875rem;
+
   --radius-arch: 48% 48% 14px 14px / 32% 32% 4px 4px;
 
   --ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);
