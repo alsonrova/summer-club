@@ -1175,9 +1175,15 @@ const TRANSITIONS: Record<Statut, Statut[]> = {
   echec_paiement: ['en_attente_paiement', 'annulee'],
 }
 
-/** États dans lesquels le stock est déjà retiré de l'inventaire. */
+/**
+ * États dans lesquels le stock est déjà retiré de l'inventaire.
+ * `en_attente_paiement` en fait partie : une commande Orange Money réserve
+ * le stock dès sa création, puisque l'argent est en vol. La confirmation ne
+ * décompte donc pas une seconde fois, et un échec de paiement recrédite.
+ */
 const STOCK_ENGAGE: Statut[] = [
   'confirmee', 'en_preparation', 'expediee', 'prete_retrait', 'livree',
+  'en_attente_paiement',
 ]
 
 export function transitionAutorisee(de: Statut, vers: Statut): boolean {
@@ -2163,6 +2169,12 @@ export async function appliquerStatut(orderId: string, vers: Statut, acteur: str
     const effet = effetSurStock(de, vers)
     for (const item of commande.items) {
       if (effet === 'decrementer') {
+        // Une commande WhatsApp n'a rien reserve a la creation : le stock a pu
+        // partir entre-temps. On verrouille, on relit, et on refuse proprement
+        // plutot que de laisser la contrainte CHECK de la base rattraper le coup.
+        await tx.$queryRaw`SELECT id FROM "Variant" WHERE id = ${item.variantId} FOR UPDATE`
+        const v = await tx.variant.findUniqueOrThrow({ where: { id: item.variantId } })
+        if (v.stock < item.quantite) throw new RuptureStockError(item.variantId)
         await tx.variant.update({
           where: { id: item.variantId }, data: { stock: { decrement: item.quantite } },
         })
