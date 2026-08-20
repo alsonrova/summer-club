@@ -22,8 +22,12 @@ describe('transitionAutorisee', () => {
 })
 
 describe('effetSurStock', () => {
-  it('décrémente à l\'entrée en confirmee', () => {
-    expect(effetSurStock('en_attente_paiement', 'confirmee')).toBe('decrementer')
+  // en_attente_paiement engage désormais le stock dès la création de la
+  // commande (canal orange_money, cf. STOCK_ENGAGE dans order-status.ts) :
+  // la réservation a déjà eu lieu avant ces transitions, donc la
+  // confirmation ne doit pas décompter une seconde fois.
+  it('n\'engage pas le stock une seconde fois à la confirmation d\'une commande orange_money (réservé dès en_attente_paiement)', () => {
+    expect(effetSurStock('en_attente_paiement', 'confirmee')).toBe('aucun')
   })
   it('décrémente aussi depuis en_attente_confirmation', () => {
     expect(effetSurStock('en_attente_confirmation', 'confirmee')).toBe('decrementer')
@@ -34,8 +38,14 @@ describe('effetSurStock', () => {
   it('recrédite à l\'annulation depuis en_preparation', () => {
     expect(effetSurStock('en_preparation', 'annulee')).toBe('recrediter')
   })
-  it('ne touche pas au stock si la commande n\'a jamais été confirmée', () => {
-    expect(effetSurStock('en_attente_paiement', 'echec_paiement')).toBe('aucun')
+  it('recrédite le stock réservé si le paiement orange_money échoue', () => {
+    expect(effetSurStock('en_attente_paiement', 'echec_paiement')).toBe('recrediter')
+  })
+  it('recrédite le stock réservé si une commande orange_money est annulée avant paiement', () => {
+    expect(effetSurStock('en_attente_paiement', 'annulee')).toBe('recrediter')
+  })
+  it('ne recrédite rien à l\'annulation d\'une commande whatsapp : rien n\'avait été réservé', () => {
+    expect(effetSurStock('en_attente_confirmation', 'annulee')).toBe('aucun')
   })
   it('ne touche pas au stock entre deux états post-confirmation', () => {
     expect(effetSurStock('en_preparation', 'expediee')).toBe('aucun')

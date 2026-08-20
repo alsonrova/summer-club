@@ -15,7 +15,7 @@ async function main() {
     },
   })
   await prisma.variant.upsert({
-    where: { sku: 'VAH-45' }, update: { stock: 5 },
+    where: { sku: 'VAH-45' }, update: {},
     create: { productId: produit.id, libelle: '45 cm', sku: 'VAH-45', stock: 5 },
   })
   await prisma.deliveryZone.upsert({
@@ -24,4 +24,9 @@ async function main() {
   })
 }
 
-main().finally(() => prisma.$disconnect())
+main()
+  .catch((err) => {
+    console.error(err)
+    process.exitCode = 1
+  })
+  .finally(() => prisma.$disconnect())

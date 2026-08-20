@@ -15,9 +15,21 @@ const TRANSITIONS: Record<Statut, Statut[]> = {
   echec_paiement: ['en_attente_paiement', 'annulee'],
 }
 
-/** États dans lesquels le stock est déjà retiré de l'inventaire. */
-const STOCK_ENGAGE: Statut[] = [
+/**
+ * États dans lesquels le stock est déjà retiré de l'inventaire.
+ *
+ * `en_attente_paiement` y figure : le canal orange_money réserve le stock
+ * dès la création de la commande (avant même la confirmation du paiement),
+ * pour empêcher deux clientes de payer la même dernière pièce. Comme cet
+ * état est déjà dans l'ensemble, la transition en_attente_paiement →
+ * confirmee n'y ajoute rien : pas de second décrément sur un stock déjà
+ * réservé. En_attente_confirmation (canal whatsapp) n'y figure pas : ces
+ * commandes attendent un accord manuel qui peut ne jamais venir, donc rien
+ * n'est réservé avant la confirmation effective.
+ */
+export const STOCK_ENGAGE: Statut[] = [
   'confirmee', 'en_preparation', 'expediee', 'prete_retrait', 'livree',
+  'en_attente_paiement',
 ]
 
 export function transitionAutorisee(de: Statut, vers: Statut): boolean {
