@@ -21,6 +21,17 @@ const client = { nom: 'Test', tel: '0320000000' }
 beforeEach(async () => {
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
+  // Idempotent : remet à zéro tout état que les tests ci-dessous modifient
+  // en base, pour que la suite puisse repartir d'une base laissée dans
+  // n'importe quel état par une exécution interrompue (timeout vitest,
+  // Ctrl-C, crash du worker) sans intervention manuelle.
+  await prisma.promotion.deleteMany()
+  await prisma.product.update({
+    where: { slug: 'collier-vahine' }, data: { actif: true, prixBase: 45000 },
+  })
+  await prisma.variant.update({
+    where: { sku: 'VAH-45' }, data: { deltaPrix: 0 },
+  })
 })
 
 afterAll(() => prisma.$disconnect())
@@ -158,6 +169,17 @@ describe('creerCommande — agrégation des quantités par déclinaison', () => 
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(2)
   })
+
+  it("refuse deux lignes de 20 sur la même déclinaison même si le stock les couvre (la borne QUANTITE_MAX porte sur la quantité agrégée)", async () => {
+    const variantId = await variantTest(50)
+    await expect(creerCommande({
+      lignes: [{ variantId, quantite: 20 }, { variantId, quantite: 20 }],
+      canal: 'livraison', client, zoneId: null, estMembre: false,
+    })).rejects.toBeInstanceOf(QuantiteInvalideError)
+    const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
+    expect(v.stock).toBe(50)
+    expect(await prisma.order.count()).toBe(0)
+  })
 })
 
 describe('creerCommande — réservation du stock selon le canal', () => {
@@ -191,15 +213,11 @@ describe('creerCommande — produits et zones désactivés', () => {
     const variant = await prisma.variant.findUniqueOrThrow({ where: { sku: 'VAH-45' } })
     await prisma.variant.update({ where: { id: variant.id }, data: { stock: 5 } })
     await prisma.product.update({ where: { id: variant.productId }, data: { actif: false } })
-    try {
-      await expect(creerCommande({
-        lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
-        client, zoneId: null, estMembre: false,
-      })).rejects.toBeInstanceOf(ProduitIndisponibleError)
-      expect(await prisma.order.count()).toBe(0)
-    } finally {
-      await prisma.product.update({ where: { id: variant.productId }, data: { actif: true } })
-    }
+    await expect(creerCommande({
+      lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
+      client, zoneId: null, estMembre: false,
+    })).rejects.toBeInstanceOf(ProduitIndisponibleError)
+    expect(await prisma.order.count()).toBe(0)
   })
 
   it('refuse une commande vers une zone de livraison désactivée', async () => {
@@ -244,46 +262,32 @@ describe('creerCommande — prix figé', () => {
     await prisma.variant.update({
       where: { id: variant.id }, data: { stock: 5, deltaPrix: 3000 },
     })
-    const promo = await prisma.promotion.create({
+    await prisma.promotion.create({
       data: {
         nom: 'Promo test -10%', type: 'percent', valeur: 10,
         portee: 'produit', cibleId: variant.productId, actif: true,
       },
     })
-    try {
-      const c = await creerCommande({
-        lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
-        client, zoneId: null, estMembre: false,
-      })
-      const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: c.id } })
-      // (prixBase 45000 + deltaPrix 3000) remisé de 10% = 43200
-      expect(item.prixUnitaireFige).toBe(43200)
-    } finally {
-      await prisma.promotion.delete({ where: { id: promo.id } })
-      await prisma.variant.update({ where: { id: variant.id }, data: { deltaPrix: 0 } })
-    }
+    const c = await creerCommande({
+      lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
+      client, zoneId: null, estMembre: false,
+    })
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: c.id } })
+    // (prixBase 45000 + deltaPrix 3000) remisé de 10% = 43200
+    expect(item.prixUnitaireFige).toBe(43200)
   })
 
   it("conserve le prix figé de la ligne de commande même si le prix de base du produit change ensuite", async () => {
     const variantId = await variantTest(5)
     const variant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
-    const produitOriginal = await prisma.product.findUniqueOrThrow({
-      where: { id: variant.productId },
-    })
     const c = await creerCommande({
       lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
       client, zoneId: null, estMembre: false,
     })
-    try {
-      await prisma.product.update({
-        where: { id: variant.productId }, data: { prixBase: 99999 },
-      })
-      const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: c.id } })
-      expect(item.prixUnitaireFige).toBe(45000)
-    } finally {
-      await prisma.product.update({
-        where: { id: variant.productId }, data: { prixBase: produitOriginal.prixBase },
-      })
-    }
+    await prisma.product.update({
+      where: { id: variant.productId }, data: { prixBase: 99999 },
+    })
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: c.id } })
+    expect(item.prixUnitaireFige).toBe(45000)
   })
 })

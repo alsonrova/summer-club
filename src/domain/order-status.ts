@@ -27,7 +27,7 @@ const TRANSITIONS: Record<Statut, Statut[]> = {
  * commandes attendent un accord manuel qui peut ne jamais venir, donc rien
  * n'est réservé avant la confirmation effective.
  */
-export const STOCK_ENGAGE: Statut[] = [
+export const STOCK_ENGAGE: readonly Statut[] = [
   'confirmee', 'en_preparation', 'expediee', 'prete_retrait', 'livree',
   'en_attente_paiement',
 ]

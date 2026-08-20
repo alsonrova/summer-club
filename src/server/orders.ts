@@ -16,42 +16,36 @@ export class CommandeError extends Error {
 export class RuptureStockError extends CommandeError {
   constructor(public readonly variantId: string) {
     super('Stock insuffisant')
-    this.name = 'RuptureStockError'
   }
 }
 
 export class PanierVideError extends CommandeError {
   constructor() {
     super('Le panier est vide')
-    this.name = 'PanierVideError'
   }
 }
 
 export class QuantiteInvalideError extends CommandeError {
   constructor(public readonly variantId: string) {
     super('La quantité demandée pour cet article est invalide')
-    this.name = 'QuantiteInvalideError'
   }
 }
 
 export class VariantIntrouvableError extends CommandeError {
   constructor(public readonly variantId: string) {
     super("Cet article n'existe pas ou n'est plus disponible")
-    this.name = 'VariantIntrouvableError'
   }
 }
 
 export class ProduitIndisponibleError extends CommandeError {
   constructor(public readonly productId: string) {
     super("Ce produit n'est plus en vente")
-    this.name = 'ProduitIndisponibleError'
   }
 }
 
 export class ZoneInvalideError extends CommandeError {
   constructor(public readonly zoneId: string) {
     super("La zone de livraison sélectionnée n'est pas valide")
-    this.name = 'ZoneInvalideError'
   }
 }
 
@@ -108,16 +102,29 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
   // attendent un accord manuel qui peut ne jamais venir.
   const engageStock = STOCK_ENGAGE.includes(statutInitial)
 
-  // Agrégation des quantités par déclinaison avant tout contrôle : deux
-  // lignes du panier sur la même déclinaison doivent être vues comme une
-  // seule demande, sous peine de laisser passer deux décréments sur un
-  // stock qui n'en autorisait qu'un.
+  // Agrégation des quantités par déclinaison : deux lignes du panier sur
+  // la même déclinaison doivent être vues comme une seule demande, sous
+  // peine de laisser passer deux décréments sur un stock qui n'en
+  // autorisait qu'un.
   const quantitesParVariant = new Map<string, number>()
   for (const ligne of input.lignes) {
     quantitesParVariant.set(
       ligne.variantId,
       (quantitesParVariant.get(ligne.variantId) ?? 0) + ligne.quantite,
     )
+  }
+
+  // QUANTITE_MAX est une borne « par déclinaison » : elle doit donc être
+  // contrôlée sur la quantité agrégée, après regroupement, pas ligne par
+  // ligne — sinon deux lignes de 20 sur la même déclinaison passeraient
+  // alors que la commande porte en réalité sur 40 unités. Ce contrôle
+  // s'ajoute à celui, ligne par ligne, fait plus haut : il ne le remplace
+  // pas, car ce dernier est ce qui empêche des lignes de signe opposé
+  // (+1 / -1) de s'annuler avant même d'atteindre l'agrégation.
+  for (const [variantId, quantite] of quantitesParVariant) {
+    if (quantite > QUANTITE_MAX) {
+      throw new QuantiteInvalideError(variantId)
+    }
   }
 
   return prisma.$transaction(async (tx) => {
