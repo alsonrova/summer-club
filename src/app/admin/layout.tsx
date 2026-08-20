@@ -1,15 +1,9 @@
-import { requireAdmin } from '@/server/auth'
-
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin()
-  return (
-    <div className="min-h-screen bg-sand">
-      <nav className="border-b border-taupe/40 bg-shell px-6 py-4">
-        <span className="font-display text-lg font-light text-bark">
-          Summer Club — administration
-        </span>
-      </nav>
-      <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
-    </div>
-  )
+/**
+ * Coquille commune à tout /admin, connexion comprise.
+ * Elle ne vérifie AUCUNE session : la page de connexion en dépend, et un
+ * garde posé ici la ferait se rediriger vers elle-même en boucle infinie.
+ * La protection vit dans le groupe (protege).
+ */
+export default function AdminShellLayout({ children }: { children: React.ReactNode }) {
+  return <div className="min-h-screen bg-sand">{children}</div>
 }

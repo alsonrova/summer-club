@@ -14,9 +14,10 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   webServer: {
-    // Serveur de dev : plus simple qu'un build de production pour des tests locaux, et
-    // Next.js y charge .env de la même façon.
-    command: 'npm run dev',
+    // Serveur de production : `next dev` ne repond pas sur cette machine (il demarre
+    // sans jamais servir), et tester le build reellement deploye vaut mieux de toute
+    // facon. Un `npm run build` doit donc preceder `playwright test`.
+    command: 'npm run start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
