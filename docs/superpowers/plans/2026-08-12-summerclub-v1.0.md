@@ -1362,6 +1362,8 @@ describe('creerCommande', () => {
 Run: `npm test -- tests/server/orders.test.ts`
 Expected: FAIL — `@/server/orders` introuvable.
 
+> **Le code ci-dessous est le point de départ, pas le livrable.** La revue de cette tâche a démontré trois défauts qu'il faut corriger dès l'écriture : valider les entrées (panier non vide, quantité entière, strictement positive, plafonnée — **contrôle du plafond après agrégation**), **agréger les quantités par déclinaison** avant contrôle et décrément, et **ne jamais combiner `Serializable` avec `FOR UPDATE`** (sous `Serializable`, la transaction bloquée est avortée en 40001 au lieu d'obtenir le verrou, ce qui rejette des ventes légitimes). Refuser aussi les produits et zones désactivés, et exposer des erreurs typées dérivées de `CommandeError`.
+
 - [ ] **Step 4: Implémenter**
 
 `src/server/orders.ts` :
@@ -1381,7 +1383,7 @@ export class RuptureStockError extends Error {
 }
 
 function reference(): string {
-  return `SC-${randomBytes(4).toString('hex').toUpperCase()}`
+  return `SC-${randomBytes(6).toString('hex').toUpperCase()}`
 }
 
 export async function creerCommande(input: {
@@ -1475,7 +1477,7 @@ export async function creerCommande(input: {
       id: commande.id, reference: commande.reference,
       tokenSuivi: commande.tokenSuivi, total: commande.total,
     }
-  }, { isolationLevel: 'Serializable' })
+  }, { timeout: 15000, maxWait: 5000 })
 }
 ```
 
@@ -2154,6 +2156,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/server/db'
 import { enregistrerAudit } from '@/server/audit'
 import { transitionAutorisee, effetSurStock, type Statut } from '@/domain/order-status'
+import { RuptureStockError } from '@/server/orders'
 
 export async function appliquerStatut(orderId: string, vers: Statut, acteur: string) {
   return prisma.$transaction(async (tx) => {
@@ -2195,7 +2198,7 @@ export async function appliquerStatut(orderId: string, vers: Statut, acteur: str
 
     revalidatePath('/admin/commandes')
     return apres
-  }, { isolationLevel: 'Serializable' })
+  }, { timeout: 15000, maxWait: 5000 })
 }
 ```
 
