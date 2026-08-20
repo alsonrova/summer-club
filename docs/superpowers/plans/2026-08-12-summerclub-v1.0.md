@@ -2000,8 +2000,9 @@ export async function televerserMedia(productId: string, fichier: File) {
   }
 
   const buffer = Buffer.from(await fichier.arrayBuffer())
-  const nomBase = `${productId}-${Date.now()}`
-  const { chemin } = await traiterImage(buffer, nomBase)
+  // traiterImage assainit le nom et y ajoute elle-meme un suffixe aleatoire :
+  // inutile d'horodater ici, et surtout ne jamais passer le nom du fichier envoye.
+  const { chemin } = await traiterImage(buffer, productId)
 
   const compte = await prisma.media.count({ where: { productId } })
   const media = await prisma.media.create({
