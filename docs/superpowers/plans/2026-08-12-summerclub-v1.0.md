@@ -1602,11 +1602,17 @@ git commit -m "feat: pipeline de traitement d'images 4:5 en AVIF et WebP"
 ### Task 9: Authentification
 
 **Files:**
-- Create: `src/server/auth.ts`, `src/app/api/auth/[...all]/route.ts`, `src/app/admin/layout.tsx`, `src/app/admin/connexion/page.tsx`
+- Create: `src/server/auth.ts`, `src/app/api/auth/[...all]/route.ts`, `src/app/admin/layout.tsx`, `src/app/connexion/page.tsx`, `src/app/acces-refuse/page.tsx`, `src/proxy.ts`
 - Test: `e2e/admin-auth.spec.ts`
 
 **Interfaces:**
-- Produit : `auth` (instance Better Auth), `requireAdmin(): Promise<Session>` — redirige vers `/admin/connexion` si la session est absente ou si le rôle n'est pas `admin`.
+- Produit : `auth` (instance Better Auth), `requireAdmin(): Promise<Session>`.
+
+> **Livré différemment du code ci-dessous — lire ceci avant d'écrire un écran d'administration.**
+> La page de connexion vit à `/connexion`, **hors de `/admin`** : placée sous le layout protégé, elle se redirigeait vers elle-même en boucle infinie. `src/app/admin/layout.tsx` appelle donc `requireAdmin()` pour tout `/admin/*`, et toute route d'administration est protégée par construction.
+> `requireAdmin()` distingue les deux refus : pas de session → `/connexion` ; session de rôle `membre` → `/acces-refuse`, jamais le formulaire de connexion.
+> **Convention obligatoire :** un layout ne suffit pas. Il n'est pas ré-exécuté à chaque navigation, ne s'exécute pas du tout sur une route inexistante, et ne protège ni les Server Actions ni les Route Handlers. **Toute page, toute action serveur et tout Route Handler d'administration doit appeler `requireAdmin()` lui-même.** La lecture de session est mise en cache par requête, ce doublon ne coûte rien.
+> `src/proxy.ts` fait une garde optimiste sur `/admin/:path*` (présence du cookie seulement) : c'est un premier filtre, jamais la vérification réelle.
 
 - [ ] **Step 1: Installer et configurer**
 
@@ -1633,7 +1639,8 @@ export const auth = betterAuth({
 
 export async function requireAdmin() {
   const session = await auth.api.getSession({ headers: await headers() })
-  if (!session || session.user.role !== 'admin') redirect('/admin/connexion')
+  if (!session) redirect('/connexion')
+  if (session.user.role !== 'admin') redirect('/acces-refuse')
   return session
 }
 ```
@@ -1679,7 +1686,7 @@ test('le back-office est inaccessible sans session', async ({ page }) => {
 })
 
 test('un administrateur connecté atteint le tableau de bord', async ({ page }) => {
-  await page.goto('/admin/connexion')
+  await page.goto('/connexion')
   await page.getByLabel('Adresse e-mail').fill('admin@summerclub.mg')
   await page.getByLabel('Mot de passe').fill(process.env.E2E_ADMIN_PASSWORD!)
   await page.getByRole('button', { name: 'Se connecter' }).click()
