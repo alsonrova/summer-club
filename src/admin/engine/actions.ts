@@ -61,6 +61,25 @@ export function validerFormData<T>(
   return { succes: false, erreurs }
 }
 
+// Retire les champs système (id, createdAt, updatedAt par défaut — voir
+// CHAMPS_SYSTEME_PAR_DEFAUT dans resource.ts) des données validées, juste avant
+// l'écriture Prisma. Nécessaire même si formDataVersObjet ne les collecte déjà plus
+// depuis le FormData (ils sont absents de resource.fields) : un schéma peut leur donner
+// une valeur par défaut (`z.string().default(...)`), que Zod applique alors aux données
+// analysées malgré leur absence du formulaire soumis — sans ce retrait, cette valeur par
+// défaut (ou un id forgé si le schéma ne le rend pas optionnel) partirait telle quelle
+// vers `delegate.create`/`delegate.update`.
+function omettreChampsSysteme(
+  donnees: Record<string, unknown>,
+  champsSysteme: string[],
+): Record<string, unknown> {
+  const copie = { ...donnees }
+  for (const champ of champsSysteme) {
+    delete copie[champ]
+  }
+  return copie
+}
+
 // Sous-ensemble du delegate Prisma généré (ex. `prisma.produit`) dont l'engine a besoin.
 // Une ressource concrète (tâche 11+) fournit son propre delegate : l'engine reste
 // indépendant de tout modèle Prisma précis.
@@ -87,7 +106,11 @@ export async function creerRessource<T extends Record<string, unknown>>(
   const resultat = validerFormData(resource, formData)
   if (!resultat.succes) return resultat
 
-  const cree = await delegate.create({ data: resultat.donnees })
+  // Le cast vers T est sûr : `donneesAEcrire` est `resultat.donnees` privé des seules
+  // clés listées dans `resource.champsSysteme`, et le delegate Prisma réel génère ces
+  // colonnes lui-même (id, createdAt, updatedAt) — il ne les exige jamais en écriture.
+  const donneesAEcrire = omettreChampsSysteme(resultat.donnees, resource.champsSysteme) as T
+  const cree = await delegate.create({ data: donneesAEcrire })
   await enregistrerAudit({
     acteur: session.user.email,
     action: 'creer',
@@ -110,7 +133,9 @@ export async function modifierRessource<T extends Record<string, unknown>>(
   if (!resultat.succes) return resultat
 
   const avant = await delegate.findUnique({ where: { id: entiteId } })
-  const apres = await delegate.update({ where: { id: entiteId }, data: resultat.donnees })
+  // Voir le commentaire équivalent dans creerRessource : même retrait, même raison.
+  const donneesAEcrire = omettreChampsSysteme(resultat.donnees, resource.champsSysteme) as Partial<T>
+  const apres = await delegate.update({ where: { id: entiteId }, data: donneesAEcrire })
   await enregistrerAudit({
     acteur: session.user.email,
     action: 'modifier',

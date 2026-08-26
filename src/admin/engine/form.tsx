@@ -5,8 +5,22 @@ function valeurTexte(valeur: unknown): string {
   return valeur === undefined || valeur === null ? '' : String(valeur)
 }
 
-function ChampSaisie({ champ, valeur }: { champ: ChampAdmin; valeur: unknown }) {
+// `idErreur`/`enErreur` relient le champ à son message via aria-describedby/aria-invalid,
+// pour qu'un lecteur d'écran annonce l'erreur au moment où il atteint le champ — pas
+// seulement quand le message apparaît visuellement (voir AdminForm ci-dessous).
+function ChampSaisie({
+  champ,
+  valeur,
+  enErreur,
+  idErreur,
+}: {
+  champ: ChampAdmin
+  valeur: unknown
+  enErreur: boolean
+  idErreur: string
+}) {
   const id = `champ-${champ.name}`
+  const attrsErreur = enErreur ? { 'aria-invalid': true as const, 'aria-describedby': idErreur } : {}
 
   if (champ.kind === 'boolean') {
     return (
@@ -16,6 +30,7 @@ function ChampSaisie({ champ, valeur }: { champ: ChampAdmin; valeur: unknown }) 
         name={champ.name}
         defaultChecked={Boolean(valeur)}
         className="h-4 w-4 rounded border-taupe/40"
+        {...attrsErreur}
       />
     )
   }
@@ -28,6 +43,7 @@ function ChampSaisie({ champ, valeur }: { champ: ChampAdmin; valeur: unknown }) 
         defaultValue={valeurTexte(valeur)}
         required={champ.requis}
         className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
+        {...attrsErreur}
       >
         <option value="" disabled hidden>
           Choisir…
@@ -52,6 +68,7 @@ function ChampSaisie({ champ, valeur }: { champ: ChampAdmin; valeur: unknown }) 
       defaultValue={defaut}
       required={champ.requis}
       className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
+      {...attrsErreur}
     />
   )
 }
@@ -78,18 +95,29 @@ export function AdminForm<T>({
     <form action={action} className="flex max-w-lg flex-col gap-4">
       {resource.fields.map((champ) => {
         const messages = erreurs[champ.name]
+        const enErreur = Boolean(messages?.length)
+        const idErreur = `erreur-${champ.name}`
         return (
           <div key={champ.name} className="flex flex-col gap-1">
             <label htmlFor={`champ-${champ.name}`} className="text-small text-bark-soft">
-              {champ.name}
+              {champ.label}
               {champ.requis ? ' *' : ''}
             </label>
-            <ChampSaisie champ={champ} valeur={valeursInitiales[champ.name]} />
-            {messages?.map((message) => (
-              <p key={message} role="alert" className="text-small text-bark">
-                {message}
-              </p>
-            ))}
+            <ChampSaisie
+              champ={champ}
+              valeur={valeursInitiales[champ.name]}
+              enErreur={enErreur}
+              idErreur={idErreur}
+            />
+            {enErreur ? (
+              <div id={idErreur}>
+                {messages?.map((message) => (
+                  <p key={message} role="alert" className="text-small text-bark">
+                    {message}
+                  </p>
+                ))}
+              </div>
+            ) : null}
           </div>
         )
       })}
