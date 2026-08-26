@@ -1,9 +1,26 @@
-/**
- * Coquille commune à tout /admin, connexion comprise.
- * Elle ne vérifie AUCUNE session : la page de connexion en dépend, et un
- * garde posé ici la ferait se rediriger vers elle-même en boucle infinie.
- * La protection vit dans le groupe (protege).
- */
-export default function AdminShellLayout({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-screen bg-sand">{children}</div>
+import { requireAdmin } from '@/server/auth'
+import { BoutonDeconnexion } from '@/components/bouton-deconnexion'
+
+// Layout unique de tout /admin/* : la page de connexion vit hors de /admin (voir
+// src/app/connexion/page.tsx), donc requireAdmin() peut être appelé ici sans provoquer de
+// boucle de redirection. Toute route ajoutée sous /admin est protégée par construction.
+//
+// Défense en profondeur : un layout ne re-rend pas à chaque navigation (rendu partiel) et
+// ne protège ni les Server Actions ni le reste de la route — voir le commentaire dans
+// src/server/auth.ts. Les pages et Server Actions d'administration appellent donc aussi
+// requireAdmin() elles-mêmes.
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  await requireAdmin()
+
+  return (
+    <div className="min-h-screen bg-sand">
+      <nav className="flex items-center justify-between border-b border-taupe/40 bg-shell px-6 py-4">
+        <span className="font-display text-lg font-light text-bark">
+          Summer Club — administration
+        </span>
+        <BoutonDeconnexion />
+      </nav>
+      <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+    </div>
+  )
 }

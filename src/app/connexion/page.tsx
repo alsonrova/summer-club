@@ -24,16 +24,31 @@ export default function ConnexionPage() {
     const email = String(donnees.get('email') ?? '')
     const motDePasse = String(donnees.get('motDePasse') ?? '')
 
-    const { error } = await authClient.signIn.email({ email, password: motDePasse })
+    try {
+      const { error } = await authClient.signIn.email({ email, password: motDePasse })
 
-    if (error) {
-      setErreur('Adresse e-mail ou mot de passe incorrect.')
+      if (error) {
+        // Le message générique ci-dessous est volontaire pour les identifiants : il ne
+        // faut pas révéler si un compte existe. Le dépassement de limitation de débit
+        // (429) est une cause différente et ne divulgue rien à distinguer explicitement —
+        // sans quoi l'utilisateur re-tente aussitôt et se re-bloque, sans comprendre.
+        setErreur(
+          error.status === 429
+            ? 'Trop de tentatives. Réessayez dans quelques instants.'
+            : 'Adresse e-mail ou mot de passe incorrect.',
+        )
+        setEnCours(false)
+        return
+      }
+
+      router.push('/admin')
+      router.refresh()
+    } catch {
+      // Une exception réseau (serveur injoignable, etc.) ne doit pas laisser le bouton
+      // désactivé indéfiniment sans le moindre message.
+      setErreur('Connexion impossible. Vérifiez votre réseau et réessayez.')
       setEnCours(false)
-      return
     }
-
-    router.push('/admin')
-    router.refresh()
   }
 
   return (

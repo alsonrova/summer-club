@@ -4,7 +4,21 @@ import { admin } from 'better-auth/plugins'
 import { nextCookies } from 'better-auth/next-js'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
+import { cache } from 'react'
 import { prisma } from './db'
+
+// Better Auth ne fait qu'avertir (log) si BETTER_AUTH_SECRET est absent ou trop court : en
+// dehors de la production, il retombe silencieusement sur un secret par défaut connu de
+// tous. C'est exactement le scénario d'un déploiement qui copierait .env.example tel quel.
+// On refuse donc de démarrer, plutôt que de compter sur cet avertissement.
+const secret = process.env.BETTER_AUTH_SECRET
+if (!secret || secret.length < 32) {
+  throw new Error(
+    "BETTER_AUTH_SECRET est absent ou fait moins de 32 caractères. Générez-en un avec " +
+      "`openssl rand -base64 32` (ou `node -e \"console.log(require('crypto')." +
+      'randomBytes(32).toString(\'base64\'))"`) et placez-le dans `.env`.',
+  )
+}
 
 // Le modèle Prisma `User` a été aligné sur ce qu'attend Better Auth (voir le commentaire
 // dans prisma/schema.prisma). Le champ `name` de Better Auth est mappé sur la colonne
@@ -15,7 +29,13 @@ import { prisma } from './db'
 // par défaut (`admin` / `user`).
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
-  emailAndPassword: { enabled: true, minPasswordLength: 12 },
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 12,
+    // Le brief interdit l'inscription publique : sans ce champ, POST /api/auth/sign-up/email
+    // reste joignable sans session par n'importe qui.
+    disableSignUp: true,
+  },
   user: {
     fields: { name: 'nom' },
   },
@@ -25,16 +45,42 @@ export const auth = betterAuth({
     // autres endpoints vers l'API `cookies()` de Next.js (utile pour les Server Actions).
     nextCookies(),
   ],
-  rateLimit: { enabled: true, window: 60, max: 10 },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 10,
+    customRules: {
+      // La règle spéciale par défaut de Better Auth sur /sign-in* (3 tentatives / 10 s)
+      // autorise environ mille essais par heure : très large pour une boutique à un ou
+      // deux administrateurs. On la resserre spécifiquement pour la connexion.
+      '/sign-in/email': { window: 900, max: 10 },
+    },
+  },
 })
 
 /**
- * Exige une session administrateur pour accéder à la page appelante. Redirige vers
- * l'écran de connexion si la session est absente ou si l'utilisateur n'a pas le rôle
- * `admin` (ex. un futur compte membre).
+ * Convention d'administration : le layout de /admin appelle requireAdmin(), mais un
+ * layout ne protège ni les Server Actions, ni le reste de la route en cas de rendu
+ * partiel (voir node_modules/next/dist/docs/01-app/02-guides/authentication.md, section
+ * « Layouts and auth checks »). TOUTE page et TOUTE Server Action d'administration doit
+ * donc appeler requireAdmin() elle-même, au plus près de sa source de données — le layout
+ * ne suffit pas. `getSessionAdmin` est enveloppée dans `cache()` pour que plusieurs appels
+ * au cours d'un même rendu (layout + page, par exemple) ne déclenchent qu'une seule
+ * vérification de session.
+ */
+const getSessionAdmin = cache(async () => {
+  return auth.api.getSession({ headers: await headers() })
+})
+
+/**
+ * Exige une session administrateur pour accéder à la page ou à l'action appelante.
+ * Distingue deux échecs : pas de session -> redirection vers la connexion ; session valide
+ * mais rôle différent de `admin` -> redirection vers la page « accès réservé » (pas la
+ * connexion, pour ne pas produire de va-et-vient sans fin pour un utilisateur déjà connecté).
  */
 export async function requireAdmin() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session || session.user.role !== 'admin') redirect('/admin/connexion')
+  const session = await getSessionAdmin()
+  if (!session) redirect('/connexion')
+  if (session.user.role !== 'admin') redirect('/acces-refuse')
   return session
 }
