@@ -33,6 +33,7 @@ export function AdminTable<T extends Record<string, unknown>>({
   page,
   totalPages,
   filtres = {},
+  formatColonnes = {},
 }: {
   resource: ResourceConfig<T>
   lignes: T[]
@@ -40,6 +41,11 @@ export function AdminTable<T extends Record<string, unknown>>({
   page: number
   totalPages: number
   filtres?: Record<string, string>
+  // Dérogation ponctuelle au formatage générique de formaterValeur, colonne par colonne —
+  // pour une devise (Ariary, via formatAriary) par exemple, que `ChampAdmin['kind']` ne
+  // modélise pas. Optionnel et rétrocompatible : une ressource qui ne le fournit pas
+  // conserve exactement le rendu précédent.
+  formatColonnes?: Partial<Record<keyof T, (valeur: unknown) => string>>
 }) {
   const champsParNom = new Map(resource.fields.map((champ) => [champ.name, champ]))
 
@@ -49,7 +55,7 @@ export function AdminTable<T extends Record<string, unknown>>({
         <form method="get" action={cheminBase} className="mb-4 flex flex-wrap items-end gap-3">
           {resource.filters.map((nom) => (
             <label key={nom} className="flex flex-col text-small text-bark-soft">
-              {nom}
+              {champsParNom.get(nom)?.label ?? nom}
               <input
                 type="text"
                 name={nom}
@@ -70,11 +76,17 @@ export function AdminTable<T extends Record<string, unknown>>({
       <table className="w-full border-collapse text-left">
         <thead>
           <tr className="border-b border-taupe/40">
-            {resource.columns.map((col) => (
-              <th key={String(col)} className="px-3 py-2 text-small font-medium text-bark-soft">
-                {String(col)}
-              </th>
-            ))}
+            {resource.columns.map((col) => {
+              // La clé brute du schéma ("categoryId", "prixBase"…) n'est présentable que
+              // par accident ; resource.fields porte déjà le libellé français dérivé (ou
+              // surchargé via `libelles` dans defineResource).
+              const champ = champsParNom.get(String(col))
+              return (
+                <th key={String(col)} className="px-3 py-2 text-small font-medium text-bark-soft">
+                  {champ?.label ?? String(col)}
+                </th>
+              )
+            })}
           </tr>
         </thead>
         <tbody>
@@ -92,12 +104,16 @@ export function AdminTable<T extends Record<string, unknown>>({
                   {resource.columns.map((col) => {
                     const champ = champsParNom.get(String(col))
                     const estNombre = champ?.kind === 'number'
+                    const formateur = formatColonnes[col]
+                    const texte = formateur
+                      ? formateur(ligne[col as keyof T])
+                      : formaterValeur(ligne[col as keyof T], champ?.kind ?? 'text')
                     return (
                       <td
                         key={String(col)}
                         className={`px-3 py-2 text-bark${estNombre ? ' tabular-nums' : ''}`}
                       >
-                        {formaterValeur(ligne[col as keyof T], champ?.kind ?? 'text')}
+                        {texte}
                       </td>
                     )
                   })}

@@ -13,6 +13,15 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   retries: 0,
+  // Plafonné plutôt que laissé au nombre de cœurs (4 sur cette machine) : src/server/auth.ts
+  // documente que la limitation de débit de Better Auth sur /sign-in/email retombe sur un
+  // seul compartiment partagé par TOUS les appelants (`no-trusted-ip|...`) tant que
+  // `advanced.ipAddress` n'est pas configuré (prévu à la tâche 22, avec le reverse proxy).
+  // Constaté en pratique sur cette tâche : au-delà de 2 connexions admin réellement
+  // simultanées, des tests par ailleurs corrects échouent par « Trop de tentatives », pas par
+  // un vrai défaut de l'écran testé. Deux workers restent sous ce seuil ; à retirer une fois
+  // la tâche 22 livrée.
+  workers: 2,
   webServer: {
     // Serveur de production : `next dev` ne repond pas sur cette machine (il demarre
     // sans jamais servir), et tester le build reellement deploye vaut mieux de toute

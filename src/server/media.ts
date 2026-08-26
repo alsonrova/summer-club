@@ -6,6 +6,31 @@ import { randomBytes } from 'node:crypto'
 const LARGEURS = [400, 800, 1200] as const
 const DOSSIER = path.join(process.cwd(), 'public', 'uploads')
 
+// Types MIME acceptés pour un téléversement de photo produit, et taille maximale avant
+// même de tenter le décodage par sharp. Exportés pour rester la source unique de vérité
+// entre le contrôle (validerFichierMedia, ci-dessous) et ses tests — dupliquer ces valeurs
+// dans televerserMedia() les ferait diverger silencieusement d'ici.
+export const TYPES_IMAGE_ACCEPTES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const
+export const TAILLE_MAX_MEDIA_OCTETS = 8 * 1024 * 1024
+
+// Validation pure, sans effet de bord : ni écriture disque, ni session, ni base de
+// données. Elle doit s'exécuter AVANT traiterImage() dans televerserMedia(), pour qu'un
+// fichier refusé (mauvais format, trop lourd, absent) ne déclenche jamais mkdir/sharp sur
+// un fichier qui sera de toute façon rejeté. Retourne le message d'erreur en français à
+// afficher, ou null si le fichier est acceptable.
+export function validerFichierMedia(fichier: { type: string; size: number }): string | null {
+  if (fichier.size === 0) {
+    return 'Aucun fichier sélectionné.'
+  }
+  if (!(TYPES_IMAGE_ACCEPTES as readonly string[]).includes(fichier.type)) {
+    return 'Format non accepté. Utilisez JPEG, PNG, WebP ou AVIF.'
+  }
+  if (fichier.size > TAILLE_MAX_MEDIA_OCTETS) {
+    return 'Image trop lourde. Maximum 8 Mo.'
+  }
+  return null
+}
+
 export async function traiterImage(buffer: Buffer, nomBase: string) {
   // `traiterImage` est la défense du pipeline : elle n'accorde aucune
   // confiance à son appelant. On réduit `nomBase` à son composant de
