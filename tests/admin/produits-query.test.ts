@@ -95,3 +95,76 @@ describe('listerProduitsPagines', () => {
     expect(resultat.lignes.length).toBeGreaterThan(0)
   })
 })
+
+// Reproduit le cas réel plutôt que celui, artificiel, du bloc ci-dessus : un produit créé
+// depuis l'interface d'administration n'a aucune raison de porter un `ordre` distinct — le
+// formulaire par défaut à 0 (voir formulaire-produit.tsx). Avec cette clé de tri
+// intégralement constante, `orderBy: { ordre: 'asc' }` seul ne garantit aucun ordre stable
+// entre deux requêtes PostgreSQL : `skip`/`take` peut alors dupliquer une ligne d'une page
+// à l'autre et en oublier une autre. Ce bloc vérifie qu'aucune ligne ne se retrouve sur
+// deux pages, ni ne disparaît, avec un `ordre` identique pour tous les produits — via un
+// second critère de tri déterministe (`id`), pas via des valeurs d'`ordre` distinctes que
+// l'interface ne produit jamais.
+describe('listerProduitsPagines avec un `ordre` identique pour tous les produits (cas réel)', () => {
+  const PREFIXE_ORDRE_CONSTANT = 'pagtest-ordre-constant-'
+  let categoryIdOrdreConstant: string
+
+  beforeAll(async () => {
+    const categorie = await prisma.category.upsert({
+      where: { slug: 'pagination-test-ordre-constant' },
+      update: {},
+      create: { slug: 'pagination-test-ordre-constant', nom: 'Pagination Test Ordre Constant', ordre: 98 },
+    })
+    categoryIdOrdreConstant = categorie.id
+
+    await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE_ORDRE_CONSTANT } } })
+
+    const total = PRODUITS_PAR_PAGE + 5
+    for (let i = 0; i < total; i++) {
+      await prisma.product.create({
+        data: {
+          slug: `${PREFIXE_ORDRE_CONSTANT}${i}`,
+          nom: `Produit ordre constant ${i}`,
+          description: 'Produit créé uniquement pour vérifier la stabilité de la pagination.',
+          categoryId: categoryIdOrdreConstant,
+          prixBase: 10000,
+          // Valeur constante volontaire : c'est le cas réel, tout produit créé depuis
+          // l'interface a `ordre: 0` (défaut Prisma, jamais exposé au formulaire avant
+          // ce correctif — voir formulaire-produit.tsx).
+          ordre: 0,
+        },
+      })
+    }
+  })
+
+  afterAll(async () => {
+    await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE_ORDRE_CONSTANT } } })
+    await prisma.category.delete({ where: { id: categoryIdOrdreConstant } })
+  })
+
+  it("ne duplique et n'oublie aucune ligne entre deux pages quand `ordre` est identique pour tous les produits", async () => {
+    const page1 = await listerProduitsPagines(prisma.product, {
+      page: 1,
+      filtres: { categoryId: categoryIdOrdreConstant },
+    })
+    const page2 = await listerProduitsPagines(prisma.product, {
+      page: 2,
+      filtres: { categoryId: categoryIdOrdreConstant },
+    })
+
+    expect(page1.lignes).toHaveLength(PRODUITS_PAR_PAGE)
+    expect(page2.lignes).toHaveLength(5)
+
+    const idsPage1 = page1.lignes.map((l) => l.id)
+    const idsPage2 = page2.lignes.map((l) => l.id)
+
+    // Aucun chevauchement entre les deux pages...
+    for (const id of idsPage2) {
+      expect(idsPage1.includes(id)).toBe(false)
+    }
+    // ...et l'ensemble des deux pages couvre bien tous les produits créés, sans doublon ni
+    // absent.
+    const tousLesIds = new Set([...idsPage1, ...idsPage2])
+    expect(tousLesIds.size).toBe(PRODUITS_PAR_PAGE + 5)
+  })
+})

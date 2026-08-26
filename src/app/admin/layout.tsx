@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requireAdmin } from '@/server/auth'
 import { BoutonDeconnexion } from '@/components/bouton-deconnexion'
 
@@ -15,9 +16,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-sand">
       <nav className="flex items-center justify-between border-b border-taupe/40 bg-shell px-6 py-4">
-        <span className="font-display text-lg font-light text-bark">
-          Summer Club — administration
-        </span>
+        <div className="flex items-center gap-6">
+          <span className="font-display text-lg font-light text-bark">
+            Summer Club — administration
+          </span>
+          <Link href="/admin/produits" className="text-bark-soft hover:text-bark">
+            Produits
+          </Link>
+        </div>
         <BoutonDeconnexion />
       </nav>
       <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>

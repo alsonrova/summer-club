@@ -34,6 +34,7 @@ export function AdminTable<T extends Record<string, unknown>>({
   totalPages,
   filtres = {},
   formatColonnes = {},
+  lien,
 }: {
   resource: ResourceConfig<T>
   lignes: T[]
@@ -46,6 +47,11 @@ export function AdminTable<T extends Record<string, unknown>>({
   // modélise pas. Optionnel et rétrocompatible : une ressource qui ne le fournit pas
   // conserve exactement le rendu précédent.
   formatColonnes?: Partial<Record<keyof T, (valeur: unknown) => string>>
+  // Rend une colonne cliquable vers la fiche de la ligne (ex. la fiche produit) — sans quoi
+  // AdminTable ne pose aucun lien et la seule façon d'atteindre une fiche existante est de
+  // taper l'URL à la main. Optionnel et rétrocompatible : une ressource qui ne le fournit
+  // pas conserve exactement le rendu précédent (cellules en texte brut).
+  lien?: { colonne: keyof T; vers: (ligne: T) => string }
 }) {
   const champsParNom = new Map(resource.fields.map((champ) => [champ.name, champ]))
 
@@ -108,12 +114,24 @@ export function AdminTable<T extends Record<string, unknown>>({
                     const texte = formateur
                       ? formateur(ligne[col as keyof T])
                       : formaterValeur(ligne[col as keyof T], champ?.kind ?? 'text')
+                    const estColonneLien = lien !== undefined && col === lien.colonne
                     return (
                       <td
                         key={String(col)}
                         className={`px-3 py-2 text-bark${estNombre ? ' tabular-nums' : ''}`}
                       >
-                        {texte}
+                        {estColonneLien ? (
+                          // <a> ordinaire, pas <Link> : typedRoutes (next.config.ts) ne
+                          // type `href` que pour des routes littérales connues au moment de
+                          // la compilation, pas pour une URL construite dynamiquement à
+                          // partir de l'identifiant de la ligne — même raison que
+                          // construireUrl ci-dessus pour la pagination.
+                          <a href={lien.vers(ligne)} className="underline hover:no-underline">
+                            {texte}
+                          </a>
+                        ) : (
+                          texte
+                        )}
                       </td>
                     )
                   })}

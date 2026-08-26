@@ -2,11 +2,21 @@ import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import { formatAriary } from '@/domain/money'
-import { modifierProduit, ajusterStock, televerserMedia, reordonnerMedia } from '../actions'
+import {
+  modifierProduit,
+  ajusterStock,
+  televerserMedia,
+  reordonnerMedia,
+  creerDeclinaison,
+  modifierAltMedia,
+  definirPhotoPrincipale,
+  supprimerMedia,
+} from '../actions'
 import { etatFormulaireProduitInitial } from '../etats'
 import { FormulaireProduit } from '../formulaire-produit'
 import { FormulaireStock } from './formulaire-stock'
 import { FormulaireMedia } from './formulaire-media'
+import { FormulaireDeclinaison } from './formulaire-declinaison'
 import { MediaCarte } from './media-carte'
 
 export default async function FicheProduitPage({
@@ -32,6 +42,7 @@ export default async function FicheProduitPage({
 
   const modifierCeProduit = modifierProduit.bind(null, produit.id)
   const televerserPourCeProduit = televerserMedia.bind(null, produit.id)
+  const creerDeclinaisonPourCeProduit = creerDeclinaison.bind(null, produit.id)
 
   return (
     <div className="flex flex-col gap-10">
@@ -48,10 +59,7 @@ export default async function FicheProduitPage({
       <section>
         <h2 className="mb-3 font-display text-xl font-light text-bark">Déclinaisons</h2>
         {produit.variants.length === 0 ? (
-          <p className="text-bark-soft">
-            Aucune déclinaison pour ce produit. La création de déclinaisons n&apos;est pas
-            encore disponible depuis cet écran.
-          </p>
+          <p className="text-bark-soft">Aucune déclinaison pour ce produit.</p>
         ) : (
           <table className="w-full border-collapse text-left">
             <thead>
@@ -82,6 +90,8 @@ export default async function FicheProduitPage({
             </tbody>
           </table>
         )}
+
+        <FormulaireDeclinaison action={creerDeclinaisonPourCeProduit} prixBase={produit.prixBase} />
       </section>
 
       <section>
@@ -99,7 +109,14 @@ export default async function FicheProduitPage({
         {produit.media.length > 0 ? (
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {produit.media.map((media) => (
-              <MediaCarte key={media.id} media={media} action={reordonnerMedia.bind(null, media.id)} />
+              <MediaCarte
+                key={media.id}
+                media={media}
+                actionReordonner={reordonnerMedia.bind(null, media.id)}
+                actionAlt={modifierAltMedia.bind(null, media.id)}
+                actionPrincipale={definirPhotoPrincipale.bind(null, media.id)}
+                actionSupprimer={supprimerMedia.bind(null, media.id)}
+              />
             ))}
           </div>
         ) : (

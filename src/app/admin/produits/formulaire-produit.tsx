@@ -10,10 +10,14 @@ function texteInitial(valeurs: Record<string, unknown>, nom: string): string {
   return v === undefined || v === null ? '' : String(v)
 }
 
-function ChampErreurs({ messages }: { messages: string[] | undefined }) {
+// `idErreur`/`enErreur` relient le champ à son message via aria-describedby/aria-invalid —
+// même câblage que ChampSaisie dans src/admin/engine/form.tsx, pour qu'un lecteur d'écran
+// annonce l'erreur au moment où il atteint le champ, pas seulement quand elle apparaît
+// visuellement.
+function ChampErreurs({ id, messages }: { id: string; messages: string[] | undefined }) {
   if (!messages?.length) return null
   return (
-    <div>
+    <div id={id}>
       {messages.map((message) => (
         <p key={message} role="alert" className="text-small text-bark">
           {message}
@@ -54,7 +58,16 @@ export function FormulaireProduit({
 
   const categorieParDefaut = texteInitial(v, 'categoryId') || (categories[0]?.id ?? '')
   const prixAchatParDefaut = texteInitial(v, 'prixAchat') || '0'
+  const ordreParDefaut = texteInitial(v, 'ordre') || '0'
   const actifParDefaut = v.actif === undefined ? true : Boolean(v.actif)
+
+  const nomEnErreur = Boolean(etat.erreurs.nom?.length)
+  const slugEnErreur = Boolean(etat.erreurs.slug?.length)
+  const descriptionEnErreur = Boolean(etat.erreurs.description?.length)
+  const categoryIdEnErreur = Boolean(etat.erreurs.categoryId?.length)
+  const prixBaseEnErreur = Boolean(etat.erreurs.prixBase?.length)
+  const prixAchatEnErreur = Boolean(etat.erreurs.prixAchat?.length)
+  const ordreEnErreur = Boolean(etat.erreurs.ordre?.length)
 
   return (
     <form action={soumettre} className="flex max-w-lg flex-col gap-4">
@@ -67,9 +80,11 @@ export function FormulaireProduit({
           name="nom"
           type="text"
           defaultValue={texteInitial(v, 'nom')}
+          aria-invalid={nomEnErreur || undefined}
+          aria-describedby={nomEnErreur ? 'produit-nom-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <ChampErreurs messages={etat.erreurs.nom} />
+        <ChampErreurs id="produit-nom-erreur" messages={etat.erreurs.nom} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -81,10 +96,12 @@ export function FormulaireProduit({
           name="slug"
           type="text"
           defaultValue={texteInitial(v, 'slug')}
+          aria-invalid={slugEnErreur || undefined}
+          aria-describedby={slugEnErreur ? 'produit-slug-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
         <p className="text-small text-bark-soft">Minuscules, chiffres et tirets uniquement.</p>
-        <ChampErreurs messages={etat.erreurs.slug} />
+        <ChampErreurs id="produit-slug-erreur" messages={etat.erreurs.slug} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -96,9 +113,11 @@ export function FormulaireProduit({
           name="description"
           rows={4}
           defaultValue={texteInitial(v, 'description')}
+          aria-invalid={descriptionEnErreur || undefined}
+          aria-describedby={descriptionEnErreur ? 'produit-description-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <ChampErreurs messages={etat.erreurs.description} />
+        <ChampErreurs id="produit-description-erreur" messages={etat.erreurs.description} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -109,6 +128,8 @@ export function FormulaireProduit({
           id="produit-categoryId"
           name="categoryId"
           defaultValue={categorieParDefaut}
+          aria-invalid={categoryIdEnErreur || undefined}
+          aria-describedby={categoryIdEnErreur ? 'produit-categoryId-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         >
           {categories.length === 0 ? <option value="">Aucune catégorie disponible</option> : null}
@@ -118,7 +139,7 @@ export function FormulaireProduit({
             </option>
           ))}
         </select>
-        <ChampErreurs messages={etat.erreurs.categoryId} />
+        <ChampErreurs id="produit-categoryId-erreur" messages={etat.erreurs.categoryId} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -130,9 +151,11 @@ export function FormulaireProduit({
           name="prixBase"
           type="number"
           defaultValue={texteInitial(v, 'prixBase')}
+          aria-invalid={prixBaseEnErreur || undefined}
+          aria-describedby={prixBaseEnErreur ? 'produit-prixBase-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
-        <ChampErreurs messages={etat.erreurs.prixBase} />
+        <ChampErreurs id="produit-prixBase-erreur" messages={etat.erreurs.prixBase} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -144,9 +167,31 @@ export function FormulaireProduit({
           name="prixAchat"
           type="number"
           defaultValue={prixAchatParDefaut}
+          aria-invalid={prixAchatEnErreur || undefined}
+          aria-describedby={prixAchatEnErreur ? 'produit-prixAchat-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
-        <ChampErreurs messages={etat.erreurs.prixAchat} />
+        <ChampErreurs id="produit-prixAchat-erreur" messages={etat.erreurs.prixAchat} />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="produit-ordre" className="text-small text-bark-soft">
+          Ordre d&apos;affichage
+        </label>
+        <input
+          id="produit-ordre"
+          name="ordre"
+          type="number"
+          defaultValue={ordreParDefaut}
+          aria-invalid={ordreEnErreur || undefined}
+          aria-describedby={ordreEnErreur ? 'produit-ordre-erreur' : undefined}
+          className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
+        />
+        <p className="text-small text-bark-soft">
+          Détermine la position du produit dans la vitrine ; les valeurs les plus basses
+          apparaissent en premier.
+        </p>
+        <ChampErreurs id="produit-ordre-erreur" messages={etat.erreurs.ordre} />
       </div>
 
       <div className="flex items-center gap-2">

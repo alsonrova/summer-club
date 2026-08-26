@@ -1,5 +1,5 @@
 import sharp from 'sharp'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 
@@ -73,4 +73,18 @@ export async function traiterImage(buffer: Buffer, nomBase: string) {
   }
 
   return { chemin: `/uploads/${nomFichier}`, largeurs: [...LARGEURS] }
+}
+
+// Contrepartie de traiterImage() : efface du disque les six fichiers (trois largeurs, deux
+// formats) qu'elle a produits pour un `chemin` donné (la valeur stockée dans Media.chemin,
+// ex. `/uploads/xyz-abcdef12`). `force: true` (via rm) rend l'appel idempotent — un fichier
+// déjà absent ne fait pas échouer la suppression de la ligne Media qui le référençait.
+export async function effacerFichiersMedia(chemin: string): Promise<void> {
+  const racinePublic = path.join(process.cwd(), 'public')
+  const fichiers = LARGEURS.flatMap((largeur) =>
+    (['avif', 'webp'] as const).map((extension) =>
+      path.join(racinePublic, `${chemin}-${largeur}.${extension}`),
+    ),
+  )
+  await Promise.all(fichiers.map((fichier) => rm(fichier, { force: true })))
 }

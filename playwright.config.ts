@@ -13,15 +13,16 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   retries: 0,
-  // Plafonné plutôt que laissé au nombre de cœurs (4 sur cette machine) : src/server/auth.ts
-  // documente que la limitation de débit de Better Auth sur /sign-in/email retombe sur un
-  // seul compartiment partagé par TOUS les appelants (`no-trusted-ip|...`) tant que
-  // `advanced.ipAddress` n'est pas configuré (prévu à la tâche 22, avec le reverse proxy).
-  // Constaté en pratique sur cette tâche : au-delà de 2 connexions admin réellement
-  // simultanées, des tests par ailleurs corrects échouent par « Trop de tentatives », pas par
-  // un vrai défaut de l'écran testé. Deux workers restent sous ce seuil ; à retirer une fois
-  // la tâche 22 livrée.
-  workers: 2,
+  // Le plafond à 2 workers (voir l'historique git de cette ligne) soignait le symptôme,
+  // pas la cause : chaque fichier e2e ayant besoin d'une session administrateur se
+  // connectait lui-même via l'écran de connexion, saturant le compartiment de limitation
+  // de débit partagé de /sign-in/email (voir src/server/auth.ts, `rateLimit` — un seul
+  // compartiment pour tous les appelants tant que `advanced.ipAddress` n'est pas
+  // configuré, prévu à la tâche 22). Le projet `setup` ci-dessous se connecte UNE seule
+  // fois pour toute la suite (e2e/auth.setup.ts) ; les specs qui n'ont pas explicitement
+  // besoin de rejouer le parcours de connexion réutilisent cet état via `storageState`
+  // (voir e2e/admin-produits.spec.ts) au lieu de soumettre le formulaire à nouveau.
+  // Workers repassés au nombre de cœurs par défaut : la cause du plafond a disparu.
   webServer: {
     // Serveur de production : `next dev` ne repond pas sur cette machine (il demarre
     // sans jamais servir), et tester le build reellement deploye vaut mieux de toute
@@ -36,8 +37,13 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+    {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
     },
   ],
 })

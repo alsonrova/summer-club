@@ -23,6 +23,11 @@ export type LigneProduitListe = {
   prixBase: number
   prixAchat: number
   actif: boolean
+  // Pas affiché en colonne (productsResource.columns ne le liste pas) : présent ici
+  // uniquement pour que ce type reste structurellement compatible avec `ProductInput`
+  // (productSchema, désormais porteur de `ordre` — voir resources/products.ts), que
+  // <AdminTable> exige de sa prop `lignes`.
+  ordre: number
 }
 
 // Sous-ensemble du delegate Prisma dont cette fonction a besoin — même esprit que
@@ -33,7 +38,7 @@ export type DelegateListeProduits = {
   count: (args: { where: Prisma.ProductWhereInput }) => Promise<number>
   findMany: (args: {
     where: Prisma.ProductWhereInput
-    orderBy: Prisma.ProductOrderByWithRelationInput
+    orderBy: Prisma.ProductOrderByWithRelationInput[]
     skip: number
     take: number
     include: { category: true }
@@ -55,9 +60,15 @@ export async function listerProduitsPagines(
   const totalPages = Math.max(1, Math.ceil(total / PRODUITS_PAR_PAGE))
   const page = Math.min(Math.max(1, Math.trunc(params.page) || 1), totalPages)
 
+  // `ordre` vaut 0 par défaut pour tout produit créé depuis l'interface (voir
+  // resources/products.ts) : trier sur ce seul critère laisse une clé intégralement
+  // constante entre plusieurs produits, et PostgreSQL ne garantit alors aucun ordre stable
+  // d'une requête à l'autre — skip/take peut renvoyer deux fois la même ligne sur deux
+  // pages, et en oublier une autre. `id` (unique) en second critère rend le tri
+  // déterministe sans changer l'ordre voulu par la propriétaire tant que `ordre` diffère.
   const produits = await delegate.findMany({
     where,
-    orderBy: { ordre: 'asc' },
+    orderBy: [{ ordre: 'asc' }, { id: 'asc' }],
     skip: (page - 1) * PRODUITS_PAR_PAGE,
     take: PRODUITS_PAR_PAGE,
     include: { category: true },
@@ -72,6 +83,7 @@ export async function listerProduitsPagines(
     prixBase: p.prixBase,
     prixAchat: p.prixAchat,
     actif: p.actif,
+    ordre: p.ordre,
   }))
 
   return { lignes, page, totalPages }
