@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type TestInfo } from '@playwright/test'
 import { PrismaClient } from '@prisma/client'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -12,23 +12,40 @@ import sharp from 'sharp'
 // de limitation de débit partagé de /sign-in/email (voir src/server/auth.ts).
 test.use({ storageState: path.join(__dirname, '.auth', 'admin.json') })
 
-// Les trois tests de ce fichier créent chacun un produit puis interagissent, dans la
-// foulée de la redirection qui suit, avec une Server Action liée (`.bind(null, id)`) à ce
-// produit précis. Constaté empiriquement (Correctif 6/7 de la revue de la tâche 11, après
-// avoir retiré le plafond global à 2 workers) : exécutés en vraie concurrence sous `next
-// start` avec `output: 'standalone'` (voir l'avertissement « next start does not work
-// with output: standalone configuration », déjà présent avant cette tâche — hors
-// périmètre de ce correctif), ce motif précis (créer→rediriger→agir aussitôt sur l'id)
-// devient intermittent : tantôt un 404 après la redirection, tantôt un P2025 (produit
-// introuvable) dans une action liée à cet id pourtant bien créé. Isolé (un seul worker),
-// ou en série comme ici, chacun de ces trois tests passe systématiquement. Le mode série
-// ne réintroduit pas le plafond global retiré par le Correctif 6 : les autres fichiers
-// e2e (admin-auth.spec.ts) continuent de s'exécuter en parallèle normal.
-test.describe.configure({ mode: 'serial' })
+// L'intermittence de ce fichier (un 404 après la redirection vers la fiche, un P2025 dans
+// creerDeclinaison sur un identifiant pourtant fraîchement créé) venait de son nettoyage,
+// pas du serveur : `test.afterAll` s'exécute UNE FOIS PAR WORKER (documenté — voir
+// node_modules/playwright/types/test.d.ts, « Declares an afterAll hook that is executed
+// once per worker after all tests »), et ce hook supprimait LES DEUX produits de test quel
+// que soit le test que ce worker avait réellement joué. Sous `fullyParallel: true`, le
+// worker du test le plus rapide — celui qui refuse un prix négatif, qui ne crée rien —
+// finissait le premier et supprimait les produits pendant que les autres workers s'en
+// servaient. Chaque test possède désormais SON propre slug, dérivé de son titre, et ne
+// nettoie que ce qu'il a lui-même créé : plus aucun worker ne touche aux données d'un
+// autre, et la suite s'exécute en parallélisme normal.
 
 const prisma = new PrismaClient()
-const SLUG_TEST = 'bracelet-soleil'
-const SLUG_TEST_PARCOURS = 'collier-etoile-e2e'
+
+// Slug propre à chaque test, dérivé de son identité (Playwright passe `TestInfo` aux hooks
+// comme au corps du test — voir node_modules/playwright/types/test.d.ts) : deux tests ne
+// peuvent plus se disputer la même ligne, et le nettoyage d'un test ne peut plus atteindre
+// le produit d'un autre. `repeatEachIndex` fait partie de cette identité : sans lui,
+// `--repeat-each=N` ferait tourner N copies du même test en parallèle sur le même slug —
+// exactement le partage de données que ce correctif supprime. Il n'apparaît qu'au-delà de
+// la première répétition, pour garder des slugs lisibles en base lors d'une exécution
+// ordinaire.
+function slugPourTest(testInfo: TestInfo): string {
+  const identite = testInfo.title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '')
+  const repetition = testInfo.repeatEachIndex > 0 ? `-r${testInfo.repeatEachIndex}` : ''
+  return `e2e-${identite}${repetition}`
+}
 
 // Dupliqué plutôt qu'importé de src/server/media.ts : même choix que
 // tests/server/media.test.ts (fichierPour/LARGEURS_TEST), pour ne pas faire dépendre ce
@@ -50,6 +67,11 @@ async function effacerFichiersMediaTest(chemin: string) {
 // pas), puis le produit lui-même (cascade Prisma sur Variant/Media), puis les lignes de
 // journal d'audit qui le référencent — sans quoi elles resteraient orphelines après coup
 // (Correctif 8 de la revue de la tâche 11 : « résidus d'audit »).
+//
+// Tolère intégralement l'absence : `findUnique` puis `delete` n'est pas atomique, et rien
+// n'interdit à deux passes de nettoyage (celle d'avant le test, celle d'après) de se
+// croiser. `deleteMany` supprime zéro ligne sans broncher là où `delete` lèverait P2025,
+// et `rm(force: true)` ignore un fichier déjà effacé.
 async function nettoyerProduitDeTest(slug: string) {
   const produit = await prisma.product.findUnique({
     where: { slug },
@@ -60,24 +82,34 @@ async function nettoyerProduitDeTest(slug: string) {
   await Promise.all(produit.media.map((media) => effacerFichiersMediaTest(media.chemin)))
 
   const entiteIds = [produit.id, ...produit.variants.map((v) => v.id), ...produit.media.map((m) => m.id)]
-  await prisma.product.delete({ where: { id: produit.id } })
+  await prisma.product.deleteMany({ where: { id: produit.id } })
   await prisma.auditLog.deleteMany({ where: { entiteId: { in: entiteIds } } })
 }
 
+// Avant : rattrape une exécution précédente tuée sans laisser tourner son `afterEach`
+// (Ctrl-C, crash du worker), sans quoi la contrainte d'unicité du slug ferait échouer la
+// création au lieu de rejouer le scénario. Après : nettoie ce que ce test vient de créer.
+// Les deux ne touchent QUE le slug de ce test.
+test.beforeEach(async ({}, testInfo) => {
+  await nettoyerProduitDeTest(slugPourTest(testInfo))
+})
+
+test.afterEach(async ({}, testInfo) => {
+  await nettoyerProduitDeTest(slugPourTest(testInfo))
+})
+
+// Une connexion Prisma par worker : celle-ci, en revanche, est bien une ressource du
+// worker et se ferme légitimement une fois par worker.
 test.afterAll(async () => {
-  // Nettoyage : sans cela, une seconde exécution échouerait sur la contrainte d'unicité du
-  // slug plutôt que de re-vérifier le scénario.
-  await nettoyerProduitDeTest(SLUG_TEST)
-  await nettoyerProduitDeTest(SLUG_TEST_PARCOURS)
   await prisma.$disconnect()
 })
 
-test('création d\'un produit', async ({ page }) => {
+test('création d\'un produit', async ({ page }, testInfo) => {
   await page.goto('/admin/produits')
   await page.getByRole('link', { name: 'Nouveau produit' }).click()
 
   await page.getByLabel('Nom').fill('Bracelet Soleil')
-  await page.getByLabel('Slug').fill(SLUG_TEST)
+  await page.getByLabel('Slug').fill(slugPourTest(testInfo))
   await page.getByLabel('Description').fill('Acier inoxydable plaqué or 18k.')
   // "Prix" est aussi une sous-chaîne de "Prix d'achat" : correspondance exacte requise pour
   // ne viser que le bon champ.
@@ -105,10 +137,10 @@ test('le formulaire refuse un prix négatif', async ({ page }) => {
 // créé depuis l'interface n'avait ni stock ni prix vendable.
 test('création d\'un produit avec déclinaison et photo (critère d\'acceptation n°7)', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto('/admin/produits/nouveau')
   await page.getByLabel('Nom').fill('Collier Étoile')
-  await page.getByLabel('Slug').fill(SLUG_TEST_PARCOURS)
+  await page.getByLabel('Slug').fill(slugPourTest(testInfo))
   await page.getByLabel('Description').fill('Collier en argent massif, pendentif étoile.')
   await page.getByLabel('Prix', { exact: true }).fill('45000')
   await page.getByRole('button', { name: 'Enregistrer' }).click()
@@ -116,13 +148,17 @@ test('création d\'un produit avec déclinaison et photo (critère d\'acceptatio
 
   // Déclinaison : libellé, SKU, écart de prix (peut être négatif), stock.
   await page.getByLabel('Libellé').fill('Taille unique')
-  await page.getByLabel('SKU').fill('COL-ETOILE-U')
+  // SKU dérivé lui aussi de l'identité du test : la contrainte d'unicité sur `sku` est
+  // GLOBALE (voir prisma/schema.prisma), pas limitée au produit — une valeur littérale
+  // partagée redeviendrait une donnée commune entre deux exécutions concurrentes.
+  const sku = slugPourTest(testInfo).toUpperCase()
+  await page.getByLabel('SKU').fill(sku)
   await page.getByLabel('Écart de prix').fill('-2000')
   await page.getByLabel('Stock').fill('7')
   await page.getByRole('button', { name: 'Ajouter la déclinaison' }).click()
 
   await expect(page.getByText('Taille unique')).toBeVisible()
-  await expect(page.getByText('COL-ETOILE-U')).toBeVisible()
+  await expect(page.getByText(sku)).toBeVisible()
   // 45 000 - 2 000 = 43 000 Ar. formatAriary (src/domain/money.ts) separe les groupes par
   // une espace insecable (U+00A0), pas une espace ordinaire : \s dans la regex couvre les
   // deux plutot que de deviner laquelle le rendu produit.

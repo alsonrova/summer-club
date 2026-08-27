@@ -143,6 +143,13 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
   })
 
   it("ne duplique et n'oublie aucune ligne entre deux pages quand `ordre` est identique pour tous les produits", async () => {
+    // L'espion est ce qui donne sa valeur protectrice à ce test : sans lui, il passerait
+    // à l'identique avec un `orderBy: { ordre: 'asc' }` seul, PostgreSQL renvoyant en
+    // pratique un ordre stable tant que rien ne le perturbe — un retour en arrière sur le
+    // second critère de tri ne serait donc pas détecté. Assertion sur la clé de tri
+    // réellement transmise à Prisma, pas seulement sur les lignes obtenues.
+    const espionFindMany = vi.spyOn(prisma.product, 'findMany')
+
     const page1 = await listerProduitsPagines(prisma.product, {
       page: 1,
       filtres: { categoryId: categoryIdOrdreConstant },
@@ -151,6 +158,11 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
       page: 2,
       filtres: { categoryId: categoryIdOrdreConstant },
     })
+
+    expect(espionFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: [{ ordre: 'asc' }, { id: 'asc' }] }),
+    )
+    espionFindMany.mockRestore()
 
     expect(page1.lignes).toHaveLength(PRODUITS_PAR_PAGE)
     expect(page2.lignes).toHaveLength(5)

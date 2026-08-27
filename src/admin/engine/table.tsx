@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import type { Route } from 'next'
 import type { ChampAdmin, ResourceConfig } from '../resource'
 
 function formaterValeur(valeur: unknown, kind: ChampAdmin['kind']): string {
@@ -121,14 +123,21 @@ export function AdminTable<T extends Record<string, unknown>>({
                         className={`px-3 py-2 text-bark${estNombre ? ' tabular-nums' : ''}`}
                       >
                         {estColonneLien ? (
-                          // <a> ordinaire, pas <Link> : typedRoutes (next.config.ts) ne
-                          // type `href` que pour des routes littérales connues au moment de
-                          // la compilation, pas pour une URL construite dynamiquement à
-                          // partir de l'identifiant de la ligne — même raison que
-                          // construireUrl ci-dessus pour la pagination.
-                          <a href={lien.vers(ligne)} className="underline hover:no-underline">
+                          // <Link>, pas <a> : un <a> ordinaire recharge toute la page
+                          // (nouvelle requête, perte de l'état client) là où la navigation
+                          // de Next.js ne remplace que la partie changée. typedRoutes
+                          // (next.config.ts) ne type `href` que pour des routes littérales
+                          // connues à la compilation ; pour une URL construite à partir de
+                          // l'identifiant de la ligne, la documentation prescrit
+                          // explicitement le cast `as Route` (voir
+                          // node_modules/next/dist/docs/01-app/03-api-reference/05-config/
+                          // 02-typescript.md, « Statically Typed Links »).
+                          <Link
+                            href={lien.vers(ligne) as Route}
+                            className="underline hover:no-underline"
+                          >
                             {texte}
-                          </a>
+                          </Link>
                         ) : (
                           texte
                         )}

@@ -35,10 +35,22 @@ afterAll(async () => {
   )
   await Promise.all(fichiers.map((f) => rm(f, { force: true })))
 
-  // Assertion automatisée : aucun résidu ne doit subsister dans le
-  // dossier de destination, au-delà du .gitkeep versionné.
+  // Assertion automatisée : aucun résidu dans public/uploads SOUS LES
+  // PRÉFIXES que ce fichier de test s'est attribués (`nomBase` +
+  // suffixe aléatoire retourné par traiterImage). Deux propriétés :
+  // — elle reste plus forte que « les six fichiers nettoyés ci-dessus
+  //   ont disparu », qui serait tautologique après un rm : elle
+  //   attrape une largeur ou une extension écrite en plus de celles
+  //   que ce test connaît ;
+  // — elle ne dit rien du reste du dossier. L'assertion précédente
+  //   (« il ne reste que .gitkeep ») portait sur un état global que ce
+  //   fichier ne possède pas, et échouait par pure coïncidence de
+  //   calendrier dès qu'un autre fichier de test y écrivait au même
+  //   moment — ce qui avait fait sérialiser toute la suite (voir
+  //   vitest.config.ts).
+  const prefixes = cheminsUtilises.map((chemin) => `${path.basename(chemin)}-`)
   const entrees = await readdir(DOSSIER_UPLOADS)
-  expect(entrees.sort()).toEqual(['.gitkeep'])
+  expect(entrees.filter((entree) => prefixes.some((p) => entree.startsWith(p)))).toEqual([])
 })
 
 describe('traiterImage', () => {

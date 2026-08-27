@@ -3,6 +3,7 @@ import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 import { prisma } from '@/server/db'
+import { ErreurImageIllisible } from '@/server/media'
 import {
   creerProduit,
   modifierProduit,
@@ -91,7 +92,24 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.variant.update({ where: { id: variantId }, data: { stock: 5 } })
-  await prisma.auditLog.deleteMany({ where: { entite: { in: ['Variant', 'Media'] } } })
+
+  // Nettoyage du journal d'audit restreint aux entités créées par CE fichier : sa
+  // variante fixe, son produit fixe, et tout ce qui pend actuellement à ce produit.
+  // Le filtre précédent (`entite: { in: ['Variant', 'Media'] }`, sans `entiteId`) ne
+  // portait que sur le TYPE d'entité : il vidait le journal d'audit de la base entière
+  // pointée par DATABASE_URL — y compris les lignes qu'un autre fichier de test, exécuté
+  // en parallèle, venait d'écrire et s'apprêtait à relire.
+  const [declinaisons, medias] = await Promise.all([
+    prisma.variant.findMany({ where: { productId }, select: { id: true } }),
+    prisma.media.findMany({ where: { productId }, select: { id: true } }),
+  ])
+  await prisma.auditLog.deleteMany({
+    where: {
+      entiteId: {
+        in: [productId, variantId, ...declinaisons.map((v) => v.id), ...medias.map((m) => m.id)],
+      },
+    },
+  })
 })
 
 function formData(entries: Record<string, string>): FormData {
@@ -156,6 +174,42 @@ describe('televerserMedia', () => {
   it("refuse l'absence de fichier", async () => {
     const etat = await televerserMedia(productId, { erreur: null }, new FormData())
     expect(etat.erreur).toMatch(/Aucun fichier/)
+  })
+
+  it("retourne le message « image illisible » pour un fichier au type MIME accepté dont le contenu n'est pas une image", async () => {
+    // Le test voisin (application/pdf) est arrêté par validerFichierMedia et n'atteint
+    // jamais traiterImage : c'est un test de la garde d'entrée, pas du message d'erreur.
+    // Ici le type MIME est image/jpeg — donc accepté — mais le contenu n'en est pas une :
+    // la validation laisse passer, sharp échoue, et c'est le seul chemin qui atteint
+    // réellement le message français rendu à la propriétaire.
+    const journal = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const avant = await prisma.media.count({ where: { productId } })
+
+    const fichier = new File([Buffer.from("ceci est du texte, pas une image")], 'faux.jpg', {
+      type: 'image/jpeg',
+    })
+    const fd = new FormData()
+    fd.set('fichier', fichier)
+
+    const etat = await televerserMedia(productId, { erreur: null }, fd)
+    // Retourné, pas levé : l'action ne doit pas planter sur une entrée que l'utilisateur
+    // peut corriger lui-même.
+    expect(etat.erreur).toMatch(/n'a pas pu être lue/)
+
+    const apres = await prisma.media.count({ where: { productId } })
+    expect(apres).toBe(avant)
+
+    // L'erreur réelle (celle de sharp) reste journalisée côté serveur : sans elle, un
+    // disque plein et un fichier corrompu se ressembleraient dans les journaux.
+    expect(journal).toHaveBeenCalledTimes(1)
+    const appel = journal.mock.calls[0]
+    expect(String(appel?.[0])).toMatch(/televerserMedia/)
+    const contexte = appel?.[1] as { productId: string; erreur: unknown }
+    expect(contexte.productId).toBe(productId)
+    expect(contexte.erreur).toBeInstanceOf(ErreurImageIllisible)
+    expect((contexte.erreur as ErreurImageIllisible).cause).toBeInstanceOf(Error)
+
+    journal.mockRestore()
   })
 })
 
@@ -444,8 +498,6 @@ describe('creerDeclinaison', () => {
 })
 
 describe('televerserMedia (chemin nominal)', () => {
-  const DOSSIER_UPLOADS = path.join(process.cwd(), 'public', 'uploads')
-
   function fichierPour(chemin: string, largeur: number, extension: 'avif' | 'webp') {
     return path.join(process.cwd(), 'public', `${chemin}-${largeur}.${extension}`)
   }
@@ -470,6 +522,10 @@ describe('televerserMedia (chemin nominal)', () => {
       orderBy: { position: 'desc' },
     })
     expect(media.chemin).toMatch(/^\/uploads\//)
+    // Jamais d'alt vide à l'ajout : la valeur de départ est dérivée du nom du produit,
+    // sans quoi la photo naîtrait dans un état que modifierAltMedia refuse de reproduire
+    // (et partirait en vitrine sans texte alternatif).
+    expect(media.alt).toBe('Produit de test admin')
 
     for (const largeur of [400, 800, 1200] as const) {
       await expect(stat(fichierPour(media.chemin, largeur, 'avif'))).resolves.toBeTruthy()
@@ -496,8 +552,16 @@ describe('televerserMedia (chemin nominal)', () => {
     const apresCompte = await prisma.media.count({ where: { productId } })
     expect(apresCompte).toBe(avantCompte)
 
-    const entrees = await readdir(DOSSIER_UPLOADS)
-    expect(entrees.sort()).toEqual(['.gitkeep'])
+    // Aucun résidu sous le préfixe que CE test s'est attribué (le nom de fichier retourné
+    // par traiterImage) : attrape une largeur ou une extension que televerserMedia aurait
+    // écrite et que supprimerMedia ne nettoierait pas. Aucune assertion, en revanche, sur
+    // le contenu entier de public/uploads : ce dossier est une ressource globale que ce
+    // fichier ne possède pas, et l'exiger vide (« il ne reste que .gitkeep ») entrait en
+    // collision avec tests/server/media.test.ts, qui y écrit ses propres fichiers au même
+    // moment — d'où la sérialisation de toute la suite Vitest, désormais retirée.
+    const prefixe = `${path.basename(media.chemin)}-`
+    const entrees = await readdir(path.join(process.cwd(), 'public', 'uploads'))
+    expect(entrees.filter((entree) => entree.startsWith(prefixe))).toEqual([])
 
     // televerserMedia ('ajout_media') et supprimerMedia ('supprimer_media') ont chacune
     // écrit leur propre ligne de journal pour ce media.id : les deux doivent disparaître,

@@ -1,5 +1,5 @@
 import sharp from 'sharp'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 
@@ -31,6 +31,45 @@ export function validerFichierMedia(fichier: { type: string; size: number }): st
   return null
 }
 
+// Erreur dédiée au seul cas « le contenu envoyé n'est pas une image décodable » : type MIME
+// usurpé (un PDF renommé en .jpg), fichier tronqué, format que libvips ne sait pas lire.
+// Elle existe pour que televerserMedia puisse distinguer ce cas — le seul auquel le message
+// « cette image n'a pas pu être lue » s'applique — d'une panne d'écriture (disque plein,
+// droits refusés sur public/uploads), qui n'est pas la faute du fichier envoyé et ne doit
+// pas être imputée à la propriétaire. `cause` conserve l'erreur sharp d'origine pour la
+// journalisation côté serveur.
+export class ErreurImageIllisible extends Error {
+  constructor(cause: unknown) {
+    super("Le contenu du fichier n'est pas une image décodable.", { cause })
+    this.name = 'ErreurImageIllisible'
+  }
+}
+
+// Encodage seul, sans aucune écriture : c'est le seul endroit où un échec est imputable au
+// CONTENU du fichier. `sharp().toFile()` mêlait au contraire décodage, encodage et écriture
+// dans un même appel qui lève une `Error` nue dans les trois cas — impossible alors de
+// distinguer, chez l'appelant, un fichier illisible d'un disque plein.
+async function encoderVariante(buffer: Buffer, largeur: number, hauteur: number) {
+  try {
+    // Le ré-encodage systématique neutralise tout contenu piégé
+    // dissimulé dans le fichier d'origine.
+    // Pas de .normalise() : cette opération étire le contraste par
+    // image prise isolément, ce qui rend hétérogènes des photos prises
+    // dans les mêmes conditions et risque de brûler les reflets
+    // spéculaires du métal et des pierres — contre-productif pour un
+    // catalogue dont l'homogénéité fait la qualité perçue.
+    const base = sharp(buffer).rotate().resize(largeur, hauteur, {
+      fit: 'cover', position: 'attention',
+    })
+    return {
+      avif: await base.clone().avif({ quality: 62 }).toBuffer(),
+      webp: await base.clone().webp({ quality: 78 }).toBuffer(),
+    }
+  } catch (cause) {
+    throw new ErreurImageIllisible(cause)
+  }
+}
+
 export async function traiterImage(buffer: Buffer, nomBase: string) {
   // `traiterImage` est la défense du pipeline : elle n'accorde aucune
   // confiance à son appelant. On réduit `nomBase` à son composant de
@@ -55,21 +94,13 @@ export async function traiterImage(buffer: Buffer, nomBase: string) {
 
   for (const largeur of LARGEURS) {
     const hauteur = Math.round((largeur * 5) / 4)
-    // Le ré-encodage systématique neutralise tout contenu piégé
-    // dissimulé dans le fichier d'origine.
-    // Pas de .normalise() : cette opération étire le contraste par
-    // image prise isolément, ce qui rend hétérogènes des photos prises
-    // dans les mêmes conditions et risque de brûler les reflets
-    // spéculaires du métal et des pierres — contre-productif pour un
-    // catalogue dont l'homogénéité fait la qualité perçue.
-    const base = sharp(buffer).rotate().resize(largeur, hauteur, {
-      fit: 'cover', position: 'attention',
-    })
+    const { avif, webp } = await encoderVariante(buffer, largeur, hauteur)
 
-    await base.clone().avif({ quality: 62 }).toFile(
-      path.join(DOSSIER, `${nomFichier}-${largeur}.avif`))
-    await base.clone().webp({ quality: 78 }).toFile(
-      path.join(DOSSIER, `${nomFichier}-${largeur}.webp`))
+    // L'écriture est séparée de l'encodage : ce qui échoue ici (ENOSPC, EACCES, EROFS…)
+    // vient du système de fichiers, pas du fichier envoyé, et remonte tel quel — jamais
+    // déguisé en « image illisible ».
+    await writeFile(path.join(DOSSIER, `${nomFichier}-${largeur}.avif`), avif)
+    await writeFile(path.join(DOSSIER, `${nomFichier}-${largeur}.webp`), webp)
   }
 
   return { chemin: `/uploads/${nomFichier}`, largeurs: [...LARGEURS] }

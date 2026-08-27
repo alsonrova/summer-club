@@ -5,7 +5,12 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/server/db'
 import { requireAdmin } from '@/server/auth'
 import { enregistrerAudit } from '@/server/audit'
-import { traiterImage, validerFichierMedia, effacerFichiersMedia } from '@/server/media'
+import {
+  traiterImage,
+  validerFichierMedia,
+  effacerFichiersMedia,
+  ErreurImageIllisible,
+} from '@/server/media'
 import { estViolationUnicite } from '@/server/prisma-erreurs'
 import { validerFormData, formDataVersObjet } from '@/admin/engine/actions'
 import { productsResource } from '@/admin/resources/products'
@@ -263,6 +268,14 @@ export async function televerserMedia(
     return { erreur: erreurValidation }
   }
 
+  // Nom du produit lu avant tout traitement : il sert de texte alternatif de départ (voir
+  // plus bas), et un identifiant de produit inexistant est ainsi refusé avant d'écrire six
+  // fichiers que plus aucune ligne ne référencerait.
+  const produit = await prisma.product.findUniqueOrThrow({
+    where: { id: productId },
+    select: { nom: true },
+  })
+
   const buffer = Buffer.from(await fichier.arrayBuffer())
   // traiterImage assainit le nom et y ajoute elle-même un suffixe aléatoire d'unicité :
   // inutile d'horodater ici, et surtout ne jamais lui passer le nom envoyé par le
@@ -276,16 +289,47 @@ export async function televerserMedia(
   let chemin: string
   try {
     ;({ chemin } = await traiterImage(buffer, productId))
-  } catch {
+  } catch (erreur) {
+    // Journalisé dans tous les cas, avec l'erreur réelle : sans cette trace, un disque
+    // plein ou des droits refusés sur public/uploads seraient indiscernables côté serveur
+    // d'un fichier corrompu, donc indiagnosticables.
+    console.error('[televerserMedia] échec du traitement de l’image', { productId, erreur })
+
+    // Seul le vrai échec de décodage (ErreurImageIllisible, levée par le seul encodage —
+    // voir src/server/media.ts) mérite d'être imputé au fichier envoyé.
+    if (erreur instanceof ErreurImageIllisible) {
+      return {
+        erreur:
+          "Cette image n'a pas pu être lue. Vérifiez qu'il s'agit bien d'une photo JPEG, PNG, WebP ou AVIF.",
+      }
+    }
+    // Tout le reste (écriture disque impossible, dossier inaccessible) est une panne du
+    // serveur : le dire, plutôt que de laisser croire que la photo est en cause.
     return {
       erreur:
-        "Cette image n'a pas pu être lue. Vérifiez qu'il s'agit bien d'une photo JPEG, PNG, WebP ou AVIF.",
+        "Le téléversement a échoué pour une raison technique. Réessayez ; si le problème persiste, prévenez votre développeur.",
     }
   }
 
   const compte = await prisma.media.count({ where: { productId } })
   const media = await prisma.media.create({
-    data: { productId, chemin, alt: '', position: compte, isPrimary: compte === 0 },
+    data: {
+      productId,
+      chemin,
+      // Texte alternatif de départ dérivé du nom du produit, jamais la chaîne vide :
+      // modifierAltMedia refuse un alt vide, une photo fraîchement téléversée se
+      // retrouvait donc dans un état que l'éditeur interdit de reproduire, et partait en
+      // vitrine sans texte alternatif (accessibilité, référencement). Rendre le champ
+      // obligatoire au téléversement aurait été l'autre option : écartée parce qu'elle
+      // impose une saisie au milieu du geste courant « j'ajoute mes cinq photos, je les
+      // décris ensuite », alors qu'une valeur de départ correcte — et toujours
+      // modifiable — garantit le même invariant sans friction. Le nom seul, sans préfixe
+      // « Photo de » : l'élément <img> annonce déjà qu'il s'agit d'une image, le répéter
+      // dans l'alt est une redondance que les lecteurs d'écran font entendre deux fois.
+      alt: produit.nom,
+      position: compte,
+      isPrimary: compte === 0,
+    },
   })
 
   await enregistrerAudit({
