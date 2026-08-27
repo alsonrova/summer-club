@@ -388,6 +388,57 @@ describe('creerProduit (chemin nominal)', () => {
   })
 })
 
+// Couvre le .trim() de productSchema (src/admin/resources/products.ts) : sans lui, un nom
+// entouré ou fait uniquement d'espaces passait la validation et produisait, une fois copié
+// tel quel dans le texte alternatif de la photo par défaut, un alt que modifierAltMedia
+// refuse ensuite (vide ou fait uniquement d'espaces) — l'incohérence que le correctif ferme.
+describe('creerProduit — normalisation du nom (.trim())', () => {
+  it('normalise un nom entouré d’espaces avant de l’écrire en base', async () => {
+    const slug = `${PREFIXE}nom-entoure-espaces`
+    const donnees = formData({
+      nom: '  Bracelet Espaces  ',
+      slug,
+      description: 'Bracelet créé uniquement pour vérifier le trim() du nom.',
+      categoryId,
+      prixBase: '10000',
+      prixAchat: '0',
+      actif: 'on',
+      ordre: '0',
+    })
+
+    await expect(
+      creerProduit({ succes: false, erreurs: {}, valeursInitiales: {} }, donnees),
+    ).rejects.toThrow(/NEXT_REDIRECT/)
+
+    const produit = await prisma.product.findUniqueOrThrow({ where: { slug } })
+    expect(produit.nom).toBe('Bracelet Espaces')
+
+    await prisma.product.delete({ where: { id: produit.id } })
+    await prisma.auditLog.deleteMany({ where: { entiteId: produit.id } })
+  })
+
+  it('refuse un nom uniquement composé d’espaces', async () => {
+    const slug = `${PREFIXE}nom-espaces-seuls`
+    const donnees = formData({
+      nom: '   ',
+      slug,
+      description: 'Ce produit ne doit jamais être créé : nom fait uniquement d’espaces.',
+      categoryId,
+      prixBase: '10000',
+      prixAchat: '0',
+      actif: 'on',
+      ordre: '0',
+    })
+
+    const etat = await creerProduit({ succes: false, erreurs: {}, valeursInitiales: {} }, donnees)
+    expect(etat.succes).toBe(false)
+    expect(etat.erreurs.nom?.[0]).toBe('Le nom est requis')
+
+    const compte = await prisma.product.count({ where: { slug } })
+    expect(compte).toBe(0)
+  })
+})
+
 describe('modifierProduit (chemin nominal)', () => {
   it('met à jour le produit et écrit un journal symétrique (mêmes clés avant/après)', async () => {
     const produit = await prisma.product.create({

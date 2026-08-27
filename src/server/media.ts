@@ -86,11 +86,13 @@ export async function traiterImage(buffer: Buffer, nomBase: string) {
   await mkdir(DOSSIER, { recursive: true })
 
   // Le nom réellement utilisé sur disque est décidé ici, pas par
-  // l'appelant : un suffixe aléatoire garantit l'unicité même si deux
-  // téléversements concurrents partagent le même nomBase. Les writeFile
-  // ci-dessous écrasent sans prévenir et rien ne les sérialise : sans ce
-  // suffixe, le second téléversement corromprait les fichiers du premier,
-  // déjà référencés par une ligne Media.
+  // l'appelant : nomBase (l'id produit) est le même pour tous les
+  // téléversements d'un même produit, donc déterministe — sans suffixe,
+  // deux téléversements successifs du même produit produiraient
+  // systématiquement le même nom de base, concurrence ou pas. Les
+  // writeFile ci-dessous écrasent sans prévenir : sans ce suffixe, le
+  // second téléversement corromprait les fichiers du premier, déjà
+  // référencés par une ligne Media.
   const suffixe = randomBytes(8).toString('hex')
   const nomFichier = `${nomAssaini}-${suffixe}`
 

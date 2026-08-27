@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { prisma } from '@/server/db'
 import { listerProduitsPagines, PRODUITS_PAR_PAGE } from '@/app/admin/produits/query'
 
@@ -42,6 +42,14 @@ afterAll(async () => {
   await prisma.$disconnect()
 })
 
+// Restauration systématique, et non en dernière instruction d'un test : `vitest.config.ts`
+// n'active pas `restoreMocks`, et un `mockRestore()` placé en fin de test (ou avant les
+// dernières assertions) ne s'exécute pas si une assertion échoue avant lui — l'espion
+// resterait alors actif sur `prisma.product` pour les tests suivants du même fichier.
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe('listerProduitsPagines', () => {
   it('interroge la base avec skip/take plutôt que de charger tout le catalogue', async () => {
     const espionFindMany = vi.spyOn(prisma.product, 'findMany')
@@ -58,9 +66,6 @@ describe('listerProduitsPagines', () => {
     )
     expect(resultat.lignes).toHaveLength(PRODUITS_PAR_PAGE)
     expect(resultat.totalPages).toBe(2)
-
-    espionFindMany.mockRestore()
-    espionCount.mockRestore()
   })
 
   it('renvoie la seconde page avec le reste des lignes, pas les mêmes', async () => {
@@ -162,7 +167,6 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
     expect(espionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: [{ ordre: 'asc' }, { id: 'asc' }] }),
     )
-    espionFindMany.mockRestore()
 
     expect(page1.lignes).toHaveLength(PRODUITS_PAR_PAGE)
     expect(page2.lignes).toHaveLength(5)
