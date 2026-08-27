@@ -8,7 +8,11 @@ import { defineResource } from '@/admin/resource'
 const ENTIER_POSTGRES_MAX = 2147483647
 
 export const productSchema = z.object({
-  nom: z.string().min(2, 'Le nom est requis'),
+  // .trim() avant .min(2) : le texte alternatif de départ d'une photo est dérivé du nom du
+  // produit (voir televerserMedia), et modifierAltMedia refuse un alt vide ou fait
+  // d'espaces. Sans ce trim, un nom de deux espaces passait la validation et fabriquait
+  // exactement l'état interdit qu'on prétend fermer.
+  nom: z.string().trim().min(2, 'Le nom est requis'),
   slug: z.string().regex(/^[a-z0-9-]+$/, 'Minuscules, chiffres et tirets uniquement'),
   description: z.string().min(10, 'Décrivez le produit en une phrase au moins'),
   categoryId: z.string().min(1, 'Choisissez une catégorie'),

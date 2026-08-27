@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
@@ -39,6 +39,27 @@ vi.mock('next/navigation', () => ({
     throw new Error(`NEXT_REDIRECT:${url}`)
   }),
 }))
+// Interrupteur permettant à un test d'armer un échec d'écriture disque (voir le test de la
+// panne technique dans le describe televerserMedia). `vi.hoisted` est nécessaire : les
+// fabriques passées à vi.mock sont hissées au-dessus des déclarations du module.
+const controleEcriture = vi.hoisted(() => ({
+  erreur: null as (Error & { code?: string }) | null,
+}))
+// Doublure PARTIELLE : tout node:fs/promises reste réel, seul writeFile peut être armé pour
+// échouer. On mocke le système de fichiers plutôt que traiterImage afin que le vrai pipeline
+// s'exécute — sharp encode réellement l'image, seule l'écriture casse. C'est exactement la
+// situation que televerserMedia doit savoir distinguer d'un fichier illisible.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const reel = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...reel,
+    writeFile: async (...args: Parameters<typeof reel.writeFile>) => {
+      if (controleEcriture.erreur) throw controleEcriture.erreur
+      // writeFile est surchargée : on relaie les arguments tels quels.
+      return (reel.writeFile as (...a: unknown[]) => Promise<void>)(...args)
+    },
+  }
+})
 
 // Fixture dédiée à ce fichier plutôt que le produit/variante du seed (collier-vahine /
 // VAH-45) : tests/server/orders.test.ts mute cette même variante en parallèle (vitest
@@ -110,6 +131,18 @@ beforeEach(async () => {
       },
     },
   })
+})
+
+// Restauration systématique, et non en dernière instruction d'un test : `vitest.config.ts`
+// n'active ni `restoreMocks` ni `unstubEnvs`, et un `journal.mockRestore()` placé en fin de
+// test ne s'exécute pas si une assertion échoue avant lui — console.error resterait alors
+// muselée pour tous les fichiers suivants du même worker. Idem pour l'échec d'écriture armé
+// ci-dessus : il ne doit jamais fuir vers le test suivant.
+afterEach(() => {
+  controleEcriture.erreur = null
+  // N'affecte que les espions créés par vi.spyOn (vérifié dans @vitest/spy : seuls eux
+  // enregistrent un `restore`) — les doublures vi.fn() de vi.mock ci-dessus sont intactes.
+  vi.restoreAllMocks()
 })
 
 function formData(entries: Record<string, string>): FormData {
@@ -208,8 +241,45 @@ describe('televerserMedia', () => {
     expect(contexte.productId).toBe(productId)
     expect(contexte.erreur).toBeInstanceOf(ErreurImageIllisible)
     expect((contexte.erreur as ErreurImageIllisible).cause).toBeInstanceOf(Error)
+  })
 
-    journal.mockRestore()
+  it("retourne le message de panne technique, et non « image illisible », quand c'est l'écriture disque qui échoue", async () => {
+    // Test jumeau du précédent, et le seul à couvrir la branche FAUSSE du discriminant
+    // `erreur instanceof ErreurImageIllisible`. Sans lui, supprimer ce discriminant pour
+    // répondre « image illisible » à n'importe quel échec — c'est-à-dire réintroduire
+    // exactement la confusion que le correctif a fermée — laisserait la suite entièrement
+    // verte. Ici l'image est une VRAIE image : sharp l'encode sans broncher, c'est
+    // l'écriture sur disque qui échoue, avec une erreur nue portant un code système.
+    const journal = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const avant = await prisma.media.count({ where: { productId } })
+
+    const image = await sharp({
+      create: { width: 400, height: 500, channels: 3, background: '#EDE5DA' },
+    })
+      .jpeg()
+      .toBuffer()
+    const fd = new FormData()
+    fd.set('fichier', new File([image], 'photo.jpg', { type: 'image/jpeg' }))
+
+    const panne = Object.assign(new Error('ENOSPC: no space left on device, write'), {
+      code: 'ENOSPC',
+    })
+    // Désarmé par l'afterEach de ce fichier, y compris si une assertion échoue plus bas.
+    controleEcriture.erreur = panne
+
+    const etat = await televerserMedia(productId, { erreur: null }, fd)
+
+    expect(etat.erreur).toMatch(/raison technique/)
+    expect(etat.erreur).not.toMatch(/n'a pas pu être lue/)
+
+    // Rien n'est créé en base, et le journal serveur porte l'erreur réelle — celle qui
+    // permet de diagnostiquer un disque plein — et non une ErreurImageIllisible.
+    expect(await prisma.media.count({ where: { productId } })).toBe(avant)
+    expect(journal).toHaveBeenCalledTimes(1)
+    const contexte = journal.mock.calls[0]?.[1] as { productId: string; erreur: unknown }
+    expect(contexte.productId).toBe(productId)
+    expect(contexte.erreur).toBe(panne)
+    expect(contexte.erreur).not.toBeInstanceOf(ErreurImageIllisible)
   })
 })
 

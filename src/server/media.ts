@@ -87,8 +87,10 @@ export async function traiterImage(buffer: Buffer, nomBase: string) {
 
   // Le nom réellement utilisé sur disque est décidé ici, pas par
   // l'appelant : un suffixe aléatoire garantit l'unicité même si deux
-  // téléversements concurrents partagent le même nomBase, ce que
-  // sharp().toFile() n'écrit pas de façon atomique.
+  // téléversements concurrents partagent le même nomBase. Les writeFile
+  // ci-dessous écrasent sans prévenir et rien ne les sérialise : sans ce
+  // suffixe, le second téléversement corromprait les fichiers du premier,
+  // déjà référencés par une ligne Media.
   const suffixe = randomBytes(8).toString('hex')
   const nomFichier = `${nomAssaini}-${suffixe}`
 

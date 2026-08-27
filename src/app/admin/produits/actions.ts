@@ -269,8 +269,12 @@ export async function televerserMedia(
   }
 
   // Nom du produit lu avant tout traitement : il sert de texte alternatif de départ (voir
-  // plus bas), et un identifiant de produit inexistant est ainsi refusé avant d'écrire six
-  // fichiers que plus aucune ligne ne référencerait.
+  // plus bas). Sur un productId inexistant, findUniqueOrThrow ne retourne pas une erreur —
+  // elle LÈVE (Prisma P2025), et l'action s'interrompt sans être rattrapée. Ce n'est pas une
+  // entorse à la conception « erreurs retournées, pas levées » de ce fichier : celle-ci vise
+  // les fautes de saisie que la propriétaire peut corriger, pas un identifiant absent de
+  // l'interface, donc forgé. L'intérêt de placer cette lecture ici est de sortir avant
+  // d'écrire six fichiers que plus aucune ligne ne référencerait.
   const produit = await prisma.product.findUniqueOrThrow({
     where: { id: productId },
     select: { nom: true },
