@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
 import { creerCommande, RuptureStockError } from '@/server/orders'
 import { appliquerStatut, TransitionInterditeError } from '@/server/order-status-service'
@@ -86,6 +87,13 @@ beforeEach(async () => {
 })
 
 afterEach(purgerMesCommandes)
+
+// `vitest.config.ts` n'active pas `restoreMocks` : un espion posé par un test resterait
+// posé pour les suivants si son `mockRestore()` n'était pas atteint. Filet, en plus du
+// `finally` du seul test qui en pose un.
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 afterAll(async () => {
   await purgerMesCommandes()
@@ -286,6 +294,59 @@ describe('appliquerStatut — journal d\'audit', () => {
     expect(traces[0]!.action).toBe('changement_statut')
     expect(traces[0]!.avant).toEqual({ statut: 'en_attente_confirmation' })
     expect(traces[0]!.apres).toEqual({ statut: 'confirmee' })
+  })
+
+  it("écrit la trace AVEC le client de transaction, donc l'annule avec elle", async () => {
+    const c = await creerCommande({
+      lignes: [{ variantId, quantite: 2 }], canal: 'whatsapp', client,
+      zoneId: null, estMembre: false,
+    })
+
+    // Le seul moment où `tx` se distingue du client global est un ROLLBACK POSTÉRIEUR à
+    // l'écriture de la trace : écrite avec le client global, elle serait partie sur une
+    // autre connexion et aurait SURVÉCU à l'annulation — le journal affirmerait alors un
+    // changement de statut que la base n'a jamais enregistré. On laisse donc le corps
+    // d'appliquerStatut aller jusqu'au bout, puis on avorte la transaction depuis
+    // l'extérieur, sans toucher au code testé.
+    //
+    // C'est ce test-là qui échouerait si quelqu'un repassait `enregistrerAudit` au client
+    // global. Le test voisin (« n'écrit aucune trace quand la transition est refusée ») ne
+    // le ferait pas : sur ce chemin, la fonction lève AVANT l'écriture d'audit, qui n'est
+    // jamais atteinte.
+    class EchecApresEcriture extends Error {}
+    const transactionReelle = prisma.$transaction.bind(prisma) as (
+      corps: (tx: Prisma.TransactionClient) => Promise<unknown>,
+      options?: unknown,
+    ) => Promise<unknown>
+    const espion = vi.spyOn(prisma, '$transaction')
+    espion.mockImplementation(((
+      corps: (tx: Prisma.TransactionClient) => Promise<unknown>,
+      options?: unknown,
+    ) =>
+      transactionReelle(async (tx) => {
+        await corps(tx)
+        throw new EchecApresEcriture()
+      }, options)) as never)
+
+    try {
+      await expect(
+        appliquerStatut(c.id, 'confirmee', 'proprietaire@summerclub.mg'),
+      ).rejects.toBeInstanceOf(EchecApresEcriture)
+    } finally {
+      // Restauré même si l'assertion ci-dessus échoue.
+      espion.mockRestore()
+    }
+
+    // Assertion bornée à MA commande : le journal d'audit est une table globale.
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Order', entiteId: c.id } }),
+    ).toBe(0)
+    // Contrôle du contrôle : c'est bien la transaction ENTIÈRE qui a été annulée, sinon
+    // l'absence de trace ne prouverait rien.
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
+      'en_attente_confirmation',
+    )
+    expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })
 
   it('n\'écrit aucune trace quand la transition est refusée', async () => {

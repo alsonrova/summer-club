@@ -4,6 +4,31 @@ export const AVIS_PAR_PAGE = 20
 
 export const STATUTS_AVIS = ['en_attente', 'publie', 'rejete'] as const satisfies readonly StatutAvis[]
 
+/**
+ * Les deux statuts qu'une décision de modération peut écrire. `en_attente` n'en est pas
+ * une : c'est l'état d'ENTRÉE de la file, pas une décision qu'on y prend. Déclaré
+ * `satisfies readonly StatutAvis[]` pour qu'un renommage dans l'énumération Prisma casse
+ * ici, à la compilation, plutôt qu'à l'exécution.
+ */
+export const STATUTS_MODERATION = ['publie', 'rejete'] as const satisfies readonly StatutAvis[]
+
+export type StatutModeration = (typeof STATUTS_MODERATION)[number]
+
+/**
+ * Vrai si la valeur est l'un des trois statuts d'avis — pour valider une valeur venue du
+ * client. Pendant de `estStatut` côté commandes (src/domain/order-status.ts) : une Server
+ * Action exportée est une route publique, protégée par `requireAdmin()` mais pas typée à
+ * l'exécution.
+ */
+export function estStatutAvis(valeur: unknown): valeur is StatutAvis {
+  return typeof valeur === 'string' && (STATUTS_AVIS as readonly string[]).includes(valeur)
+}
+
+/** Vrai si la valeur est une décision de modération recevable (`publie` ou `rejete`). */
+export function estStatutModeration(valeur: unknown): valeur is StatutModeration {
+  return estStatutAvis(valeur) && (STATUTS_MODERATION as readonly string[]).includes(valeur)
+}
+
 export const LIBELLES_STATUT_AVIS = {
   en_attente: 'En attente',
   publie: 'Publié',

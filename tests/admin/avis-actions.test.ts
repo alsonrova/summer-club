@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll, vi } from 'vitest'
 import { prisma } from '@/server/db'
-import { ProduitIntrouvableError } from '@/server/reviews'
+import {
+  AvisNonPublieError,
+  ProduitIntrouvableError,
+  StatutAvisInvalideError,
+} from '@/server/reviews'
+import { etatActionAvisInitial } from '@/app/admin/avis/etats'
 
 // Mêmes doublures que tests/admin/produits-actions.test.ts : requireAdmin() lit une session
 // via next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni
@@ -12,7 +17,13 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-const { importerTemoignage, epinglerAvis, modererAvis } = await import('@/app/admin/avis/actions')
+const {
+  importerTemoignage,
+  epinglerAvis,
+  epinglerAvisDepuisFormulaire,
+  modererAvis,
+  modererAvisDepuisFormulaire,
+} = await import('@/app/admin/avis/actions')
 
 const SLUG_CATEGORIE = 'test-avis-categorie'
 const SLUG_PRODUIT = 'test-avis-produit'
@@ -192,6 +203,94 @@ describe('epinglerAvis', () => {
     expect(traces).toHaveLength(1)
     expect(traces[0]!.avant).toEqual({ epingle: false })
     expect(traces[0]!.apres).toEqual({ epingle: true })
+  })
+})
+
+describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le composant", () => {
+  // <ActionsAvis> n'affiche le bouton d'épinglage que pour un avis publié, mais une Server
+  // Action exportée reste un point d'entrée POST à part entière : le garde-fou du composant
+  // client ne protège rien. Ces tests appellent donc l'action directement, exactement comme
+  // le ferait un onglet resté sur un rendu périmé.
+  it("refuse d'épingler un avis en attente, sans écrire ni épinglage ni trace", async () => {
+    const avis = await creerAvisDeTest({ statut: 'en_attente' })
+
+    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(AvisNonPublieError)
+
+    const apres = await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })
+    expect(apres.epingle).toBe(false)
+    // Un refus n'est pas un événement : le journal ne doit raconter que ce qui a eu lieu.
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
+    ).toBe(0)
+  })
+
+  it("refuse d'épingler un avis rejeté entre-temps par un autre onglet", async () => {
+    // Scénario réel : deux onglets ouverts sur la liste des avis publiés. L'onglet B rejette
+    // l'avis ; l'onglet A, resté sur l'ancien rendu, clique « Épingler ».
+    const avis = await creerAvisDeTest({ statut: 'publie' })
+    await modererAvis(avis.id, 'rejete')
+
+    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(AvisNonPublieError)
+    expect(
+      (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).epingle,
+    ).toBe(false)
+  })
+
+  it('laisse toujours dépunaiser, quel que soit le statut', async () => {
+    // Dépunaiser ramène vers l'état cohérent. L'interdire enfermerait un avis épinglé hors
+    // vitrine — précisément l'état que l'invariant existe pour empêcher.
+    const avis = await creerAvisDeTest({ statut: 'rejete', epingle: true })
+    expect((await epinglerAvis(avis.id, false)).epingle).toBe(false)
+  })
+
+  it("traduit le refus en français plutôt que de le laisser remonter en erreur 500", async () => {
+    const avis = await creerAvisDeTest({ statut: 'en_attente' })
+
+    const etat = await epinglerAvisDepuisFormulaire(
+      avis.id, true, etatActionAvisInitial, new FormData(),
+    )
+
+    expect(etat.erreur).toMatch(/publié/)
+    expect(etat.erreur).not.toMatch(/Error|prisma|Invariant/i)
+  })
+})
+
+describe('modererAvis — statut venu du client', () => {
+  it("refuse un statut forgé avec un message français, avant l'énumération PostgreSQL", async () => {
+    const avis = await creerAvisDeTest({ statut: 'en_attente' })
+
+    await expect(
+      modererAvis(avis.id, 'supprime' as never),
+    ).rejects.toBeInstanceOf(StatutAvisInvalideError)
+    await expect(
+      modererAvis(avis.id, 'supprime' as never),
+    ).rejects.toThrow("Statut d'avis inconnu : supprime")
+
+    expect(
+      (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).statut,
+    ).toBe('en_attente')
+  })
+
+  it("refuse « en_attente » : modérer, c'est décider, pas remettre en file", async () => {
+    const avis = await creerAvisDeTest({ statut: 'publie' })
+
+    await expect(
+      modererAvis(avis.id, 'en_attente' as never),
+    ).rejects.toBeInstanceOf(StatutAvisInvalideError)
+    expect(
+      (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).statut,
+    ).toBe('publie')
+  })
+
+  it("traduit le refus en français dans l'adaptateur de formulaire", async () => {
+    const avis = await creerAvisDeTest({ statut: 'en_attente' })
+
+    const etat = await modererAvisDepuisFormulaire(
+      avis.id, 'supprime' as never, etatActionAvisInitial, new FormData(),
+    )
+
+    expect(etat.erreur).toMatch(/modération/i)
+    expect(etat.erreur).not.toMatch(/prisma|invalid value|enum/i)
   })
 })
 

@@ -9,6 +9,7 @@ import {
   modererAvisDepuisFormulaire,
 } from './actions'
 import {
+  estStatutAvis,
   listerAvisPagines,
   LIBELLES_SOURCE_AVIS,
   LIBELLES_STATUT_AVIS,
@@ -23,9 +24,7 @@ function versPageValide(valeur: string | undefined): number {
 }
 
 function versStatutAvis(valeur: string | undefined): StatutAvis | undefined {
-  return (STATUTS_AVIS as readonly string[]).includes(valeur ?? '')
-    ? (valeur as StatutAvis)
-    : undefined
+  return estStatutAvis(valeur) ? valeur : undefined
 }
 
 function urlListe(statut: string, page?: number): Route {

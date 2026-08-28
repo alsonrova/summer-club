@@ -5,8 +5,13 @@ import { z } from 'zod'
 import { prisma } from '@/server/db'
 import { requireAdmin } from '@/server/auth'
 import { enregistrerAudit } from '@/server/audit'
-import { ProduitIntrouvableError } from '@/server/reviews'
+import {
+  AvisNonPublieError,
+  ProduitIntrouvableError,
+  StatutAvisInvalideError,
+} from '@/server/reviews'
 import type { ErreursValidation } from '@/admin/engine/actions'
+import { estStatutModeration, type StatutModeration } from './query'
 import type { EtatActionAvis, EtatFormulaireTemoignage } from './etats'
 
 // Convention de sécurité (voir src/server/auth.ts) : chaque Server Action appelle
@@ -66,11 +71,30 @@ export async function importerTemoignage(donnees: unknown) {
   return avis
 }
 
-/** Bascule la mise en avant d'un avis sur la page d'accueil. */
+/**
+ * Bascule la mise en avant d'un avis sur la page d'accueil.
+ *
+ * L'invariant « un avis non publié ne s'épingle pas » est appliqué ICI, et pas seulement
+ * dans <ActionsAvis> qui masque le bouton : cette fonction est exportée d'un fichier
+ * `'use server'`, c'est donc un point d'entrée POST à part entière, et un garde-fou posé
+ * dans un composant client ne protège rien. Le scénario n'a rien de théorique — deux
+ * onglets ouverts sur la liste des avis publiés, l'onglet B rejette un avis, l'onglet A
+ * resté sur l'ancien rendu clique « Épingler ». Épinglé sans être en vitrine, l'avis
+ * n'apparaîtrait nulle part.
+ *
+ * Le DÉPUNAISAGE (`epingle` faux) reste toujours permis, quel que soit le statut : il
+ * ramène vers l'état cohérent — c'est d'ailleurs ce que fait `modererAvis` en rejetant.
+ * L'interdire enfermerait un avis déjà épinglé hors vitrine.
+ */
 export async function epinglerAvis(id: string, epingle: boolean) {
   const session = await requireAdmin()
 
   const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
+
+  if (epingle && avant.statut !== 'publie') {
+    throw new AvisNonPublieError(avant.statut)
+  }
+
   const avis = await prisma.review.update({ where: { id }, data: { epingle } })
 
   await enregistrerAudit({
@@ -92,8 +116,18 @@ export async function epinglerAvis(id: string, epingle: boolean) {
  * Un avis rejeté est dépunaisé au passage — laisser `epingle` à vrai sur un avis retiré de
  * la vitrine créerait un état incohérent que la page d'accueil devrait rattraper seule.
  */
-export async function modererAvis(id: string, statut: 'publie' | 'rejete') {
+export async function modererAvis(id: string, statut: StatutModeration) {
   const session = await requireAdmin()
+
+  // `statut` arrive du client : même parti pris que `changerStatut` côté commandes
+  // (src/app/admin/commandes/actions.ts). Sans ce refus, une valeur forgée traverse
+  // l'action et remonte en `PrismaClientValidationError` brute depuis l'énumération
+  // PostgreSQL — « Invalid value for argument `statut`. Expected StatutAvis. » — jusque
+  // sous les yeux de l'administratrice. `en_attente` est refusé lui aussi : c'est l'état
+  // d'entrée de la file, pas une décision de modération.
+  if (!estStatutModeration(statut)) {
+    throw new StatutAvisInvalideError(String(statut))
+  }
 
   const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
   const avis = await prisma.review.update({
@@ -185,17 +219,43 @@ export async function epinglerAvisDepuisFormulaire(
   _formData: FormData,
 ): Promise<EtatActionAvis> {
   await requireAdmin()
-  await epinglerAvis(id, epingle)
+
+  try {
+    await epinglerAvis(id, epingle)
+  } catch (erreur) {
+    // Seul cas attendu ici : l'avis a changé de statut depuis le rendu de la page (un autre
+    // onglet, la propriétaire elle-même). C'est une situation normale, qui doit se lire en
+    // français sous le bouton — pas une panne. Tout le reste remonte, y compris la
+    // redirection de requireAdmin(), qui s'implémente par un throw.
+    if (erreur instanceof AvisNonPublieError) {
+      return {
+        erreur:
+          "Cet avis n'est pas publié : seul un avis en vitrine peut être épinglé sur la "
+          + "page d'accueil. Rechargez la page.",
+      }
+    }
+    throw erreur
+  }
+
   return { erreur: null }
 }
 
 export async function modererAvisDepuisFormulaire(
   id: string,
-  statut: 'publie' | 'rejete',
+  statut: StatutModeration,
   _etatPrecedent: EtatActionAvis,
   _formData: FormData,
 ): Promise<EtatActionAvis> {
   await requireAdmin()
-  await modererAvis(id, statut)
+
+  try {
+    await modererAvis(id, statut)
+  } catch (erreur) {
+    if (erreur instanceof StatutAvisInvalideError) {
+      return { erreur: 'Cette décision de modération est inconnue. Rechargez la page.' }
+    }
+    throw erreur
+  }
+
   return { erreur: null }
 }

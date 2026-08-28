@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
 import { prisma } from '@/server/db'
 import {
   creerCommande,
@@ -26,29 +26,50 @@ const CLIENTE = 'Test'
 
 const client = { nom: CLIENTE, tel: '0320000000' }
 
+// Seule promotion créée par ce fichier, et clé de propriété de son nettoyage : un
+// `promotion.deleteMany()` sans filtre viderait la table entière, y compris les lignes
+// d'un autre fichier de test s'exécutant en parallèle (vitest.config.ts).
+const NOM_PROMOTION = 'Promo test -10%'
+
 /** Comptage borné aux commandes de ce fichier. */
 function compterMesCommandes() {
   return prisma.order.count({ where: { clientNom: CLIENTE } })
 }
 
-beforeEach(async () => {
-  // Supprime uniquement les commandes de ce fichier (les lignes partent en cascade,
-  // voir prisma/schema.prisma) : plus de `deleteMany()` sans filtre sur la table entière.
+/**
+ * Rend au jeu de données de seed (prisma/seed.ts) les valeurs que ce fichier lui emprunte.
+ *
+ * `collier-vahine` / `VAH-45` sont des lignes de SEED : ce fichier les mute (stock, prix de
+ * base, deltaPrix) sans les posséder. Il est le seul à le faire aujourd'hui, mais nettoyer
+ * uniquement au DÉBUT de chaque test — ce qu'il faisait — laisse forcément derrière lui
+ * l'état du dernier test exécuté : une commande, sa ligne, un stock à 4 au lieu de 5 et un
+ * prix de base à 99999. D'où le même nettoyage AVANT et APRÈS.
+ */
+async function rendreLesDonneesDeSeed() {
   await prisma.order.deleteMany({ where: { clientNom: CLIENTE } })
-  // Idempotent : remet à zéro tout état que les tests ci-dessous modifient
-  // en base, pour que la suite puisse repartir d'une base laissée dans
-  // n'importe quel état par une exécution interrompue (timeout vitest,
-  // Ctrl-C, crash du worker) sans intervention manuelle.
-  await prisma.promotion.deleteMany()
+  await prisma.promotion.deleteMany({ where: { nom: NOM_PROMOTION } })
   await prisma.product.update({
     where: { slug: 'collier-vahine' }, data: { actif: true, prixBase: 45000 },
   })
   await prisma.variant.update({
-    where: { sku: 'VAH-45' }, data: { deltaPrix: 0 },
+    where: { sku: 'VAH-45' }, data: { stock: 5, deltaPrix: 0 },
   })
-})
+}
 
-afterAll(() => prisma.$disconnect())
+// Idempotent : remet à zéro tout état que les tests ci-dessous modifient en base, pour que
+// la suite puisse repartir d'une base laissée dans n'importe quel état par une exécution
+// interrompue (timeout vitest, Ctrl-C, crash du worker) sans intervention manuelle. Les
+// commandes de ce fichier partent avec leurs lignes en cascade (prisma/schema.prisma).
+beforeEach(rendreLesDonneesDeSeed)
+
+// Et APRÈS, pour ne rien laisser derrière soi — y compris après le dernier test du fichier,
+// que le `beforeEach` seul ne rattrapait jamais.
+afterEach(rendreLesDonneesDeSeed)
+
+afterAll(async () => {
+  await rendreLesDonneesDeSeed()
+  await prisma.$disconnect()
+})
 
 describe('creerCommande', () => {
   it('crée la commande et décrémente le stock', async () => {
@@ -278,7 +299,7 @@ describe('creerCommande — prix figé', () => {
     })
     await prisma.promotion.create({
       data: {
-        nom: 'Promo test -10%', type: 'percent', valeur: 10,
+        nom: NOM_PROMOTION, type: 'percent', valeur: 10,
         portee: 'produit', cibleId: variant.productId, actif: true,
       },
     })
