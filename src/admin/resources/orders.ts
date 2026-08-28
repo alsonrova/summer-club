@@ -8,6 +8,20 @@ import { STATUTS } from '@/domain/order-status'
 // filtre silencieusement incomplet.
 export const CANAUX = ['orange_money', 'whatsapp', 'livraison'] as const satisfies readonly Canal[]
 
+/**
+ * Vrai si la valeur est l'un des trois canaux — pour valider une valeur venue du client
+ * (aujourd'hui la querystring du filtre de liste).
+ *
+ * Écrit comme `estStatut` (src/domain/order-status.ts) et `estStatutAvis`
+ * (src/app/admin/avis/query.ts) : un GARDE DE TYPE, pas un `includes` suivi d'un `as`. La
+ * différence n'est pas cosmétique — avec l'assertion, le compilateur ne vérifie plus rien et
+ * une divergence entre le test et le type affirmé passe inaperçue. Ce projet n'a désormais
+ * qu'une seule façon de valider une valeur d'énumération.
+ */
+export function estCanal(valeur: unknown): valeur is Canal {
+  return typeof valeur === 'string' && (CANAUX as readonly string[]).includes(valeur)
+}
+
 export const LIBELLES_STATUT = {
   en_attente_confirmation: 'En attente de confirmation',
   en_attente_paiement: 'En attente de paiement',

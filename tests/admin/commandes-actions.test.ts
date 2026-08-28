@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
-import { creerCommande } from '@/server/orders'
+import { CommandeError, creerCommande } from '@/server/orders'
 import { cheminsARevalider } from '@/server/order-status-service'
 import { etatChangementStatutInitial } from '@/app/admin/commandes/etats'
 
@@ -225,13 +226,19 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
     // Une commande inexistante n'est pas une situation normale que la propriétaire devrait
     // lire sous le bouton : c'est un défaut. L'avaler ici la masquerait — au même titre
     // que la redirection de requireAdmin(), qui s'implémente par un throw.
-    await expect(
-      changerStatutDepuisFormulaire(
-        'commande-totalement-inexistante',
-        'annulee',
-        etatChangementStatutInitial,
-        new FormData(),
-      ),
-    ).rejects.toThrow()
+    const erreur = await changerStatutDepuisFormulaire(
+      'commande-totalement-inexistante',
+      'annulee',
+      etatChangementStatutInitial,
+      new FormData(),
+    ).then(() => null, (e: unknown) => e)
+
+    // On NOMME l'erreur attendue. Un `rejects.toThrow()` sans argument passerait pour
+    // n'importe quel rejet — RuptureStockError et TransitionInterditeError compris, c'est-à-dire
+    // précisément les deux erreurs que cette action est censée TRADUIRE au lieu de les laisser
+    // remonter : le test ne distinguerait donc pas le comportement voulu de son contraire.
+    expect(erreur).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+    expect((erreur as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
+    expect(erreur).not.toBeInstanceOf(CommandeError)
   })
 })

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll, vi } from 'vitest'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
 import {
+  AvisError,
   AvisNonPublieError,
+  EpinglageInvalideError,
   ProduitIntrouvableError,
   StatutAvisInvalideError,
 } from '@/server/reviews'
@@ -255,6 +258,57 @@ describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le co
   })
 })
 
+describe("epinglerAvis — valeur d'épinglage venue du client", () => {
+  // Jumeau du garde posé sur le statut de `modererAvis` : `epinglerAvis` est exportée du
+  // même fichier `'use server'`, c'est donc le même genre de point d'entrée POST, et son
+  // paramètre booléen arrive du client sans être typé à l'exécution.
+  it("refuse une valeur non booléenne avec un message français, avant l'appel à Prisma", async () => {
+    const avis = await creerAvisDeTest({ statut: 'publie' })
+
+    await expect(
+      epinglerAvis(avis.id, 'oui' as never),
+    ).rejects.toBeInstanceOf(EpinglageInvalideError)
+    await expect(
+      epinglerAvis(avis.id, 'oui' as never),
+    ).rejects.toThrow("Valeur d'épinglage invalide : oui")
+
+    // Sans le garde, `'oui'` est truthy : l'invariant « publié » le laisse passer, et c'est
+    // `prisma.review.update` qui échoue, en PrismaClientValidationError brute — une 500 sous
+    // les yeux de l'administratrice.
+    const apres = await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })
+    expect(apres.epingle).toBe(false)
+    // Un refus n'est pas un événement : le journal ne doit raconter que ce qui a eu lieu.
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
+    ).toBe(0)
+  })
+
+  it("refuse aussi une valeur absente, que le dépunaisage aurait acceptée en silence", async () => {
+    // `undefined` est falsy : il franchit l'invariant « seul un avis publié s'épingle » par
+    // la porte du dépunaisage, toujours ouverte. Seul un contrôle de TYPE l'arrête.
+    const avis = await creerAvisDeTest({ statut: 'publie', epingle: true })
+
+    await expect(
+      epinglerAvis(avis.id, undefined as never),
+    ).rejects.toBeInstanceOf(EpinglageInvalideError)
+
+    expect(
+      (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).epingle,
+    ).toBe(true)
+  })
+
+  it("traduit le refus en français dans l'adaptateur de formulaire", async () => {
+    const avis = await creerAvisDeTest({ statut: 'publie' })
+
+    const etat = await epinglerAvisDepuisFormulaire(
+      avis.id, 'oui' as never, etatActionAvisInitial, new FormData(),
+    )
+
+    expect(etat.erreur).toMatch(/épinglage/i)
+    expect(etat.erreur).not.toMatch(/prisma|invalid value|boolean|Epinglage/i)
+  })
+})
+
 describe('modererAvis — statut venu du client', () => {
   it("refuse un statut forgé avec un message français, avant l'énumération PostgreSQL", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
@@ -310,5 +364,125 @@ describe('modererAvis', () => {
   it("ne change pas la source d'un avis vérifié qu'on modère", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente', source: 'verifie' })
     expect((await modererAvis(avis.id, 'publie')).source).toBe('verifie')
+  })
+})
+
+describe("epinglerAvis — une bascule sans effet n'est pas un événement", () => {
+  // Un pas AU-DELÀ des deux garde-fous de <ActionsAvis> traités ci-dessous, et pour la même
+  // raison : le bouton d'épinglage est lié à `!avis.epingle`, donc deux onglets affichant
+  // tous deux un avis non épinglé envoient tous deux `true`. Le second n'épingle rien — mais
+  // sans ce garde il écrivait quand même une trace « epingle: true → true ».
+  it("ne réécrit ni ne journalise un épinglage déjà en place", async () => {
+    const avis = await creerAvisDeTest({ statut: 'publie', epingle: true })
+
+    expect((await epinglerAvis(avis.id, true)).epingle).toBe(true)
+
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
+    ).toBe(0)
+  })
+
+  it('ne journalise pas non plus un dépunaisage sur un avis qui ne l’est pas', async () => {
+    const avis = await creerAvisDeTest({ statut: 'rejete', epingle: false })
+
+    expect((await epinglerAvis(avis.id, false)).epingle).toBe(false)
+
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
+    ).toBe(0)
+  })
+
+  it("refuse toujours un avis non publié, même déjà épinglé : cet état-là est incohérent", async () => {
+    // Verrouille l'ORDRE des deux contrôles. Si l'idempotence passait avant l'invariant, un
+    // avis épinglé hors vitrine — précisément l'état que l'invariant existe pour empêcher —
+    // se verrait confirmer son épinglage en silence.
+    const avis = await creerAvisDeTest({ statut: 'en_attente', epingle: true })
+
+    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(AvisNonPublieError)
+  })
+})
+
+describe("modererAvis — une décision sans effet n'est pas un événement", () => {
+  // <ActionsAvis> n'affiche pas « Publier » sur un avis déjà publié, ni « Rejeter » sur un
+  // avis déjà rejeté. Ces deux garde-fous vivaient uniquement dans le composant client :
+  // un onglet resté sur un rendu périmé les contournait, et le journal d'audit enregistrait
+  // alors un changement qui n'avait pas eu lieu (avant == après).
+  it("ne réécrit ni ne journalise la publication d'un avis déjà publié", async () => {
+    const avis = await creerAvisDeTest({ statut: 'publie' })
+
+    const apres = await modererAvis(avis.id, 'publie')
+
+    expect(apres.statut).toBe('publie')
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
+    ).toBe(0)
+  })
+
+  it("ne réécrit ni ne journalise le rejet d'un avis déjà rejeté", async () => {
+    const avis = await creerAvisDeTest({ statut: 'rejete' })
+
+    const apres = await modererAvis(avis.id, 'rejete')
+
+    expect(apres.statut).toBe('rejete')
+    expect(
+      await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
+    ).toBe(0)
+  })
+
+  it("dépingle malgré tout un avis rejeté resté épinglé : cet état-là n'est pas le bon", async () => {
+    // Verrouille la forme du garde : comparer le seul statut suffirait à faire passer les
+    // deux tests précédents, mais laisserait un avis rejeté épinglé — précisément l'état
+    // incohérent que le dépunaisage au rejet existe pour empêcher.
+    const avis = await creerAvisDeTest({ statut: 'rejete', epingle: true })
+
+    const apres = await modererAvis(avis.id, 'rejete')
+
+    expect(apres.epingle).toBe(false)
+    // Là, un changement a bien eu lieu : il se journalise.
+    expect(
+      await prisma.auditLog.count({
+        where: { entite: 'Review', entiteId: avis.id, action: 'moderer_avis' },
+      }),
+    ).toBe(1)
+  })
+})
+
+describe("actions d'avis — identifiant venu du client", () => {
+  // Même parti pris que côté commandes (tests/admin/commandes-actions.test.ts, « laisse
+  // remonter une panne technique ») et que `televerserMedia` côté produits : un identifiant
+  // absent de l'interface est forgé, donc un DÉFAUT — pas une situation normale que la
+  // propriétaire devrait lire sous le bouton. On ne le valide pas à part : `findUniqueOrThrow`
+  // lève P2025, et les adaptateurs de formulaire laissent cette erreur remonter au lieu de
+  // la déguiser en message métier.
+  it("laisse remonter un identifiant forgé en erreur Prisma, sans le déguiser en message métier", async () => {
+    const erreurEpinglage = await epinglerAvisDepuisFormulaire(
+      'avis-totalement-inexistant', true, etatActionAvisInitial, new FormData(),
+    ).then(() => null, (e: unknown) => e)
+
+    expect(erreurEpinglage).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+    expect((erreurEpinglage as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
+    // Surtout pas une erreur métier : c'est ce qui protège aussi la redirection de
+    // requireAdmin(), qui s'implémente par un throw et ne doit jamais être avalée.
+    expect(erreurEpinglage).not.toBeInstanceOf(AvisError)
+
+    const erreurModeration = await modererAvisDepuisFormulaire(
+      'avis-totalement-inexistant', 'publie', etatActionAvisInitial, new FormData(),
+    ).then(() => null, (e: unknown) => e)
+
+    expect(erreurModeration).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+    expect((erreurModeration as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
+    expect(erreurModeration).not.toBeInstanceOf(AvisError)
+  })
+
+  it("ne journalise rien pour un identifiant forgé", async () => {
+    await expect(
+      modererAvis('avis-totalement-inexistant', 'publie'),
+    ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+
+    expect(
+      await prisma.auditLog.count({
+        where: { entite: 'Review', entiteId: 'avis-totalement-inexistant' },
+      }),
+    ).toBe(0)
   })
 })

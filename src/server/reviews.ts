@@ -51,3 +51,24 @@ export class StatutAvisInvalideError extends AvisError {
     super(`Statut d'avis inconnu : ${valeur}`)
   }
 }
+
+/**
+ * Valeur d'épinglage forgée, refusée avant d'atteindre la colonne booléenne.
+ *
+ * Jumeau exact de `StatutAvisInvalideError` : `epinglerAvis` est exportée du même fichier
+ * `'use server'` que `modererAvis`, c'est donc le même genre de point d'entrée POST, et son
+ * paramètre n'est pas plus typé à l'exécution que ne l'était le statut. Sans ce refus, la
+ * valeur traverse l'action et remonte en `PrismaClientValidationError` brute — « Argument
+ * `epingle`: Invalid value provided. Expected Boolean or BoolFieldUpdateOperationsInput,
+ * provided String. », relevée telle quelle sous mutation — c'est-à-dire en 500.
+ *
+ * Le contrôle porte sur le TYPE, pas sur la véracité : `'oui'` est truthy et franchirait
+ * l'invariant « seul un avis publié s'épingle » comme un vrai `true`, tandis qu'`undefined`
+ * le franchirait par la porte du dépunaisage, toujours ouverte. Ni l'un ni l'autre ne serait
+ * arrêté par un test de valeur.
+ */
+export class EpinglageInvalideError extends AvisError {
+  constructor(public readonly valeur: string) {
+    super(`Valeur d'épinglage invalide : ${valeur}`)
+  }
+}

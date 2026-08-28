@@ -7,6 +7,7 @@ import { requireAdmin } from '@/server/auth'
 import { enregistrerAudit } from '@/server/audit'
 import {
   AvisNonPublieError,
+  EpinglageInvalideError,
   ProduitIntrouvableError,
   StatutAvisInvalideError,
 } from '@/server/reviews'
@@ -16,6 +17,26 @@ import type { EtatActionAvis, EtatFormulaireTemoignage } from './etats'
 
 // Convention de sécurité (voir src/server/auth.ts) : chaque Server Action appelle
 // requireAdmin() elle-même, en première instruction.
+
+// Convention sur les IDENTIFIANTS, alignée sur ce qui existe déjà côté commandes et côté
+// produits — et donc DÉLIBÉRÉMENT pas une troisième façon de faire.
+//
+// Les quatre appels Prisma d'`epinglerAvis` et de `modererAvis` (`findUniqueOrThrow` puis
+// `update`, dans chacune) reçoivent `id` du client sans le valider à part. Ce n'est pas un
+// oubli : un identifiant d'avis est un `cuid` qui n'existe nulle part dans l'interface
+// autrement que copié d'une ligne réellement affichée. Un identifiant absent de l'interface
+// est donc forgé — c'est un DÉFAUT, pas une faute de saisie que la propriétaire pourrait
+// corriger. `findUniqueOrThrow` lève alors P2025, l'action s'interrompt, et les adaptateurs
+// de formulaire ci-dessous laissent cette erreur REMONTER au lieu de la traduire : c'est le
+// même parti pris que `televerserMedia` (src/app/admin/produits/actions.ts, « un identifiant
+// absent de l'interface, donc forgé ») et que `changerStatut` côté commandes, dont le test
+// « laisse remonter une panne technique au lieu de la déguiser en message métier » fixe la
+// règle. Un `z.cuid()` de plus n'ajouterait rien : il refuserait les mêmes appels, un cran
+// plus tôt, avec un message que personne ne doit jamais lire.
+//
+// Les valeurs d'ÉNUMÉRATION et le booléen d'épinglage, eux, sont validés : ils peuvent
+// atteindre la base et y produire une erreur brute (voir les gardes ci-dessous), alors qu'un
+// identifiant inconnu n'y produit qu'un « enregistrement introuvable » sans ambiguïté.
 
 const temoignageSchema = z.object({
   productId: z.string().nullable(),
@@ -85,14 +106,37 @@ export async function importerTemoignage(donnees: unknown) {
  * Le DÉPUNAISAGE (`epingle` faux) reste toujours permis, quel que soit le statut : il
  * ramène vers l'état cohérent — c'est d'ailleurs ce que fait `modererAvis` en rejetant.
  * L'interdire enfermerait un avis déjà épinglé hors vitrine.
+ *
+ * IDEMPOTENTE, comme `modererAvis` : voir le garde en fin de fonction.
  */
 export async function epinglerAvis(id: string, epingle: boolean) {
   const session = await requireAdmin()
+
+  // `epingle` arrive du client, exactement comme `statut` dans `modererAvis` juste en
+  // dessous : même genre de point d'entrée POST, même absence de typage à l'exécution, donc
+  // même garde — en première instruction utile, avant même la lecture. Sans lui, `'oui'`
+  // (truthy) franchit l'invariant « seul un avis publié s'épingle » comme un vrai `true`,
+  // `undefined` (falsy) le franchit par la porte du dépunaisage, et c'est `prisma.review
+  // .update` qui échoue, en `PrismaClientValidationError` brute sous les yeux de
+  // l'administratrice.
+  if (typeof epingle !== 'boolean') {
+    throw new EpinglageInvalideError(String(epingle))
+  }
 
   const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
 
   if (epingle && avant.statut !== 'publie') {
     throw new AvisNonPublieError(avant.statut)
+  }
+
+  // IDEMPOTENTE, comme `modererAvis` : une bascule qui ne bascule rien n'écrit rien et ne
+  // journalise rien. Le bouton étant lié à `!avis.epingle`, deux onglets affichant tous deux
+  // un avis non épinglé envoient tous deux `true` — le second n'épinglait rien mais inscrivait
+  // quand même « epingle: true → true » au journal, c'est-à-dire un changement qui n'a pas eu
+  // lieu. APRÈS l'invariant, jamais avant : un avis épinglé hors vitrine est justement l'état
+  // que l'invariant existe pour empêcher, on ne le confirme pas en silence.
+  if (avant.epingle === epingle) {
+    return avant
   }
 
   const avis = await prisma.review.update({ where: { id }, data: { epingle } })
@@ -115,6 +159,17 @@ export async function epinglerAvis(id: string, epingle: boolean) {
  *
  * Un avis rejeté est dépunaisé au passage — laisser `epingle` à vrai sur un avis retiré de
  * la vitrine créerait un état incohérent que la page d'accueil devrait rattraper seule.
+ *
+ * IDEMPOTENTE : une décision qui ne change rien n'écrit rien et ne journalise rien. C'est
+ * l'équivalent serveur des deux garde-fous de <ActionsAvis>, qui n'offre pas « Publier » sur
+ * un avis déjà publié ni « Rejeter » sur un avis déjà rejeté. Ils ne vivaient jusqu'ici que
+ * dans le composant client, donc nulle part : un onglet resté sur un rendu périmé les
+ * contourne, et le journal d'audit — seule mémoire de ce qui est arrivé à un avis —
+ * enregistrait alors un changement qui n'avait pas eu lieu, `avant` et `apres` identiques.
+ *
+ * La comparaison porte sur l'ÉTAT VISÉ ENTIER, pas sur le seul statut : un avis rejeté resté
+ * épinglé (état que le dépunaisage au rejet existe justement pour empêcher) doit encore
+ * pouvoir être ramené à la cohérence par un second rejet.
  */
 export async function modererAvis(id: string, statut: StatutModeration) {
   const session = await requireAdmin()
@@ -130,9 +185,17 @@ export async function modererAvis(id: string, statut: StatutModeration) {
   }
 
   const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
+
+  // L'état visé, calculé une fois : il sert à décider s'il y a quelque chose à faire, puis à
+  // le faire. Deux expressions séparées finiraient par diverger.
+  const epingleCible = statut === 'rejete' ? false : avant.epingle
+  if (avant.statut === statut && avant.epingle === epingleCible) {
+    return avant
+  }
+
   const avis = await prisma.review.update({
     where: { id },
-    data: { statut, ...(statut === 'rejete' ? { epingle: false } : {}) },
+    data: { statut, epingle: epingleCible },
   })
 
   await enregistrerAudit({
@@ -233,6 +296,11 @@ export async function epinglerAvisDepuisFormulaire(
           "Cet avis n'est pas publié : seul un avis en vitrine peut être épinglé sur la "
           + "page d'accueil. Rechargez la page.",
       }
+    }
+    // Même traduction que celle du statut forgé côté modération : ni valeur brute, ni nom de
+    // classe d'erreur sous les yeux de la propriétaire.
+    if (erreur instanceof EpinglageInvalideError) {
+      return { erreur: "Cette action d'épinglage est inconnue. Rechargez la page." }
     }
     throw erreur
   }

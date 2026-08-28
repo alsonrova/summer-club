@@ -6,22 +6,17 @@ import {
   CANAUX,
   LIBELLES_CANAL,
   LIBELLES_STATUT,
+  estCanal,
   libelleCanal,
   libelleStatut,
 } from '@/admin/resources/orders'
 import { formatAriary } from '@/domain/money'
 import { STATUTS, estStatut } from '@/domain/order-status'
-import { listerCommandesPaginees, type Canal } from './query'
+import { listerCommandesPaginees } from './query'
 
 function versPageValide(valeur: string | undefined): number {
   const n = Number(valeur)
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1
-}
-
-// La querystring est écrite par le visiteur : un statut ou un canal inconnu est ignoré
-// plutôt que transmis à Prisma, qui répondrait par une erreur d'énumération PostgreSQL.
-function versCanal(valeur: string | undefined): Canal | undefined {
-  return (CANAUX as readonly string[]).includes(valeur ?? '') ? (valeur as Canal) : undefined
 }
 
 function texteCourt(valeur: unknown): string {
@@ -46,8 +41,11 @@ export default async function CommandesPage({
   const canalBrut = typeof sp.canal === 'string' ? sp.canal : undefined
   const referenceBrut = typeof sp.reference === 'string' ? sp.reference : undefined
 
+  // La querystring est écrite par le visiteur : un statut ou un canal inconnu est ignoré
+  // plutôt que transmis à Prisma, qui répondrait par une erreur d'énumération PostgreSQL.
+  // Les deux passent par le même genre de garde de type, jamais par un `as`.
   const statut = estStatut(statutBrut) ? statutBrut : undefined
-  const canal = versCanal(canalBrut)
+  const canal = estCanal(canalBrut) ? canalBrut : undefined
   const reference = texteCourt(referenceBrut) || undefined
   const page = versPageValide(typeof sp.page === 'string' ? sp.page : undefined)
 
