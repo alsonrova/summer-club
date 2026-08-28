@@ -36,6 +36,7 @@ export function AdminTable<T extends Record<string, unknown>>({
   totalPages,
   filtres = {},
   formatColonnes = {},
+  optionsFiltres = {},
   lien,
 }: {
   resource: ResourceConfig<T>
@@ -49,6 +50,12 @@ export function AdminTable<T extends Record<string, unknown>>({
   // modélise pas. Optionnel et rétrocompatible : une ressource qui ne le fournit pas
   // conserve exactement le rendu précédent.
   formatColonnes?: Partial<Record<keyof T, (valeur: unknown) => string>>
+  // Remplace le champ texte d'un filtre par une liste déroulante libellée. Nécessaire dès
+  // qu'un filtre porte sur une énumération : demander à la propriétaire de taper
+  // « en_attente_confirmation » à la main n'est pas une interface, c'est un piège à fautes
+  // de frappe qui ne renvoie jamais rien. Optionnel et rétrocompatible : un filtre absent
+  // de cet objet conserve exactement le champ texte précédent.
+  optionsFiltres?: Record<string, { valeur: string; libelle: string }[]>
   // Rend une colonne cliquable vers la fiche de la ligne (ex. la fiche produit) — sans quoi
   // AdminTable ne pose aucun lien et la seule façon d'atteindre une fiche existante est de
   // taper l'URL à la main. Optionnel et rétrocompatible : une ressource qui ne le fournit
@@ -61,17 +68,35 @@ export function AdminTable<T extends Record<string, unknown>>({
     <div>
       {resource.filters.length > 0 ? (
         <form method="get" action={cheminBase} className="mb-4 flex flex-wrap items-end gap-3">
-          {resource.filters.map((nom) => (
-            <label key={nom} className="flex flex-col text-small text-bark-soft">
-              {champsParNom.get(nom)?.label ?? nom}
-              <input
-                type="text"
-                name={nom}
-                defaultValue={filtres[nom] ?? ''}
-                className="rounded border border-taupe/40 bg-shell px-2 py-1 text-bark"
-              />
-            </label>
-          ))}
+          {resource.filters.map((nom) => {
+            const options = optionsFiltres[nom]
+            return (
+              <label key={nom} className="flex flex-col text-small text-bark-soft">
+                {champsParNom.get(nom)?.label ?? nom}
+                {options ? (
+                  <select
+                    name={nom}
+                    defaultValue={filtres[nom] ?? ''}
+                    className="rounded border border-taupe/40 bg-shell px-2 py-1 text-bark"
+                  >
+                    <option value="">Tous</option>
+                    {options.map((option) => (
+                      <option key={option.valeur} value={option.valeur}>
+                        {option.libelle}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    name={nom}
+                    defaultValue={filtres[nom] ?? ''}
+                    className="rounded border border-taupe/40 bg-shell px-2 py-1 text-bark"
+                  />
+                )}
+              </label>
+            )
+          })}
           <button
             type="submit"
             className="rounded border border-taupe/40 bg-shell px-3 py-1 text-bark-soft hover:text-bark"

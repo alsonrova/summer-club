@@ -1,7 +1,22 @@
-export type Statut =
-  | 'en_attente_confirmation' | 'en_attente_paiement' | 'confirmee'
-  | 'en_preparation' | 'expediee' | 'prete_retrait' | 'livree'
-  | 'annulee' | 'echec_paiement'
+/**
+ * Les neuf statuts, dans l'ordre du cycle de vie d'une commande. Déclarés comme un tuple
+ * `as const` — et non comme une union de types seule — pour qu'ils existent aussi À
+ * L'EXÉCUTION : l'administration a besoin de la liste réelle pour peupler un filtre et
+ * pour rejeter une valeur forgée avant qu'elle n'atteigne l'énumération PostgreSQL. Le
+ * type `Statut` en est dérivé, ce qui interdit à la liste et à l'union de diverger.
+ */
+export const STATUTS = [
+  'en_attente_confirmation', 'en_attente_paiement', 'confirmee',
+  'en_preparation', 'expediee', 'prete_retrait', 'livree',
+  'annulee', 'echec_paiement',
+] as const
+
+export type Statut = (typeof STATUTS)[number]
+
+/** Vrai si la chaîne est l'un des neuf statuts — pour valider une valeur venue du client. */
+export function estStatut(valeur: unknown): valeur is Statut {
+  return typeof valeur === 'string' && (STATUTS as readonly string[]).includes(valeur)
+}
 
 const TRANSITIONS: Record<Statut, Statut[]> = {
   en_attente_confirmation: ['confirmee', 'annulee'],
@@ -31,6 +46,17 @@ export const STOCK_ENGAGE: readonly Statut[] = [
   'confirmee', 'en_preparation', 'expediee', 'prete_retrait', 'livree',
   'en_attente_paiement',
 ]
+
+/**
+ * Statuts atteignables depuis `de`, dans l'ordre de déclaration de TRANSITIONS.
+ *
+ * Existe pour que l'interface d'administration n'offre QUE des transitions réellement
+ * autorisées : un bouton qui mène à une erreur est un défaut d'interface. Renvoie une
+ * copie, pour qu'un appelant ne puisse pas modifier la table de transitions à distance.
+ */
+export function transitionsDepuis(de: Statut): Statut[] {
+  return [...TRANSITIONS[de]]
+}
 
 export function transitionAutorisee(de: Statut, vers: Statut): boolean {
   return TRANSITIONS[de].includes(vers)

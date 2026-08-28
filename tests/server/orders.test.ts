@@ -16,11 +16,25 @@ async function variantTest(stock: number) {
   return v.id
 }
 
-const client = { nom: 'Test', tel: '0320000000' }
+// Toutes les commandes créées ici portent ce nom de cliente, et aucun autre fichier de
+// test ne l'emploie : il sert de clé de propriété pour le nettoyage et pour les comptages
+// ci-dessous. Sans cette borne, ce fichier vidait la table Order entière et comptait les
+// commandes de tout le monde — deux façons d'agir sur un état global qu'il ne possède pas,
+// alors que vitest exécute les fichiers en parallèle (voir tests/server/statut.test.ts,
+// qui a rendu la collision mesurable).
+const CLIENTE = 'Test'
+
+const client = { nom: CLIENTE, tel: '0320000000' }
+
+/** Comptage borné aux commandes de ce fichier. */
+function compterMesCommandes() {
+  return prisma.order.count({ where: { clientNom: CLIENTE } })
+}
 
 beforeEach(async () => {
-  await prisma.orderItem.deleteMany()
-  await prisma.order.deleteMany()
+  // Supprime uniquement les commandes de ce fichier (les lignes partent en cascade,
+  // voir prisma/schema.prisma) : plus de `deleteMany()` sans filtre sur la table entière.
+  await prisma.order.deleteMany({ where: { clientNom: CLIENTE } })
   // Idempotent : remet à zéro tout état que les tests ci-dessous modifient
   // en base, pour que la suite puisse repartir d'une base laissée dans
   // n'importe quel état par une exécution interrompue (timeout vitest,
@@ -74,7 +88,7 @@ describe('creerCommande', () => {
       lignes: [{ variantId, quantite: 3 }], canal: 'livraison',
       client, zoneId: null, estMembre: false,
     }).catch(() => {})
-    expect(await prisma.order.count()).toBe(0)
+    expect(await compterMesCommandes()).toBe(0)
   })
 
   it('ne survend jamais sous accès concurrent', async () => {
@@ -131,7 +145,7 @@ describe('creerCommande — validation des entrées', () => {
     })).rejects.toBeInstanceOf(QuantiteInvalideError)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(5)
-    expect(await prisma.order.count()).toBe(0)
+    expect(await compterMesCommandes()).toBe(0)
   })
 
   it('refuse une quantité nulle, non entière, ou supérieure à la borne du panier (20)', async () => {
@@ -154,7 +168,7 @@ describe('creerCommande — agrégation des quantités par déclinaison', () => 
     })).rejects.toBeInstanceOf(RuptureStockError)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(1)
-    expect(await prisma.order.count()).toBe(0)
+    expect(await compterMesCommandes()).toBe(0)
   })
 
   it('écrit une seule ligne de commande avec la quantité agrégée quand le stock suffit', async () => {
@@ -178,7 +192,7 @@ describe('creerCommande — agrégation des quantités par déclinaison', () => 
     })).rejects.toBeInstanceOf(QuantiteInvalideError)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(50)
-    expect(await prisma.order.count()).toBe(0)
+    expect(await compterMesCommandes()).toBe(0)
   })
 })
 
@@ -217,7 +231,7 @@ describe('creerCommande — produits et zones désactivés', () => {
       lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
       client, zoneId: null, estMembre: false,
     })).rejects.toBeInstanceOf(ProduitIndisponibleError)
-    expect(await prisma.order.count()).toBe(0)
+    expect(await compterMesCommandes()).toBe(0)
   })
 
   it('refuse une commande vers une zone de livraison désactivée', async () => {
@@ -230,7 +244,7 @@ describe('creerCommande — produits et zones désactivés', () => {
         lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
         client, zoneId: zone.id, estMembre: false,
       })).rejects.toBeInstanceOf(ZoneInvalideError)
-      expect(await prisma.order.count()).toBe(0)
+      expect(await compterMesCommandes()).toBe(0)
     } finally {
       await prisma.deliveryZone.delete({ where: { id: zone.id } })
     }
