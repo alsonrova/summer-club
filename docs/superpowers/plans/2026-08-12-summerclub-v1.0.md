@@ -1,5 +1,16 @@
 # Summer Club V1.0 — Plan d'implémentation
 
+> ⚠️ **Les identifiants du code d'exemple de ce plan précèdent la règle de l'anglais.**
+> `docs/CONVENTIONS.md` § 1 fixe désormais la frontière : identifiants en anglais, tout ce
+> que lit un être humain en français. Les noms français qui figurent dans les extraits de ce
+> plan (types, fonctions, champs, colonnes) seront alignés lors du travail de renommage, qui
+> est **une tâche à part entière**. Ne renommez rien en passant, et ne prenez pas ces
+> extraits comme modèle de nommage pour du code neuf. Les libellés d'interface, eux, restent
+> en français : c'est la règle, pas une dette.
+
+> **Pour les agents :** lisez d'abord `docs/CONVENTIONS.md` — il fait autorité et l'emporte
+> sur ce plan en cas de contradiction.
+
 > **Pour les agents :** SOUS-SKILL REQUISE — utiliser `superpowers:subagent-driven-development` (recommandé) ou `superpowers:executing-plans` pour exécuter ce plan tâche par tâche. Les étapes utilisent la syntaxe case à cocher (`- [ ]`).
 
 **Goal :** livrer une boutique en ligne fonctionnelle pour Summer Club — landing, catalogue, panier, commande par trois canaux, suivi — plus le socle d'administration minimal permettant à la propriétaire de gérer catalogue, stock et commandes sans intervention technique.

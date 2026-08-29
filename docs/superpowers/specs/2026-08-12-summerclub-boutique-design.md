@@ -1,5 +1,13 @@
 # Summer Club — Boutique en ligne · Spécification de conception
 
+> ⚠️ **Les identifiants du code d'exemple de ce document précèdent la règle de l'anglais.**
+> `docs/CONVENTIONS.md` § 1 fixe désormais la frontière : identifiants en anglais, tout ce
+> que lit un être humain en français. Les noms français qui figurent dans les extraits
+> ci-dessous (types, fonctions, champs) seront alignés lors du travail de renommage, qui est
+> **une tâche à part entière**. Ne renommez rien en passant, et ne prenez pas ces extraits
+> comme modèle de nommage pour du code neuf. Les libellés d'interface, eux, restent en
+> français : c'est la règle, pas une dette.
+
 - **Date** : 2026-08-12
 - **Statut** : validée en brainstorming, en attente de relecture
 - **Portée de ce document** : sous-système 1 (vitrine + boutique) et socle du sous-système 2 (back-office)

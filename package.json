@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "journal": "node tools/agent-journal/cli.mjs",
+    "journal:add": "node tools/agent-journal/cli.mjs add",
+    "journal:list": "node tools/agent-journal/cli.mjs list",
+    "journal:render": "node tools/agent-journal/cli.mjs render"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
