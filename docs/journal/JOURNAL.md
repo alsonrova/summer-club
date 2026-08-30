@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**56 entrées** · 13 tâches · Développeur 34 · Auditeur qualité et sécurité 17 · Coordinateur 5
+**57 entrées** · 13 tâches · Développeur 35 · Auditeur qualité et sécurité 17 · Coordinateur 5
 
 ## Vue d'ensemble
 
@@ -67,6 +67,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-08-30 | conventions | Développeur | livré | — |
 | 2026-08-30 | conventions | Développeur | consigné | — |
 | 2026-08-30 | 12 | Développeur | livré | — |
+| 2026-08-30 | conventions | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -608,3 +609,15 @@ Complète l'entrée précédente par une mesure faite après elle. Six exécutio
 - **Modèle** : claude-opus-5
 - **Fichiers** : `docs/passation/2026-08-29-v1.0-taches-1-a-12.md`
 - **Réserve** : Le lien de causalité entre la charge machine et le dépassement du délai est déduit des durées mesurées, pas prouvé par une exécution instrumentée.
+
+### 2026-08-30 · Développeur — livré
+
+Ferme les trois blocages releves en revue sur docs/RENOMMAGE.md. Blocage 1 (perimetre) : la regle porte desormais explicitement sur tout identifiant du code, expose ou non (CONVENTIONS.md paragraphe 1) ; section 3.6 ajoutee a RENOMMAGE.md avec la commande qui liste les identifiants internes non exportes de src/, son resultat date (42), et leur nom cible, verifie fichier par fichier contre le code reel. Blocage 2 (etape 6 non verte) : identifie que des que prisma generate regenere les types apres le renommage du schema, tout acces aux champs et valeurs deja renommes cesse de compiler d'un coup dans src/domain, src/server, src/admin et src/app deja termines aux etapes 1 a 4 ; aucun etat intermediaire vert n'existe entre schema renomme et code consommateur mis a jour. Corrige en fusionnant les etapes 6 et 7 en un seul palier verifie une seule fois a la fin ; l'ancienne etape 8 (Better Auth) devient l'etape 7. Blocage 3 (mauvais repertoire) : epinglerAvis, modererAvis et importerTemoignage etaient inscrites sous 3.2 (src/server/) alors qu'elles vivent dans src/app/admin/avis/actions.ts (3.4) — tombant entre l'etape 2 et l'etape 4 de l'ordre d'execution sans jamais etre traitees ; deplacees, et tous les autres chemins de la table verifies contre le code reel (7 enumerations, 55 champs Prisma section 2, 138 identifiants exportes section 3.1 a 3.4, 27 fichiers section 4, references fichier:ligne des sections 6.1 a 6.3) : tous corrects. Six noms tranches par le proprietaire inscrits, marques de doute retires, sans collision detectee : livraison en cash_on_delivery, ordre en displayOrder sur Product/Category/DeliveryZone (evite la collision avec Media.position), annulee en cancelled partout, texte en body, nomFige/prixUnitaireFige en nameSnapshot/unitPriceSnapshot, delai en leadTime. Aucun renommage de code effectue, aucun code touche : seuls docs/CONVENTIONS.md et docs/RENOMMAGE.md ont change.
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : — → npm test (apres intervention, arbre de code inchange) : Test Files 23 passed (23) ; Tests 243 passed (243). Premiere execution a froid : 5 tests en echec sur 7 fichiers par timeout (voir reserve) ; reexecution a chaud : 243/243, deux fois de suite pour confirmer.
+- **Fichiers** : `docs/CONVENTIONS.md`, `docs/RENOMMAGE.md`
+- **Réserve** : tests-before laisse vide : aucune mesure de npm test prise avant le debut de l'intervention (seule la documentation a change, aucun fichier de code touche, donc aucune regression possible cote code) — un chiffre non mesure se laisse vide plutot que d'etre invente.
+- **Réserve** : Premiere execution de npm test apres les modifications : 5 tests en echec sur 7 fichiers, timeouts dans tests/server/media.test.ts et tests/server/orders.test.ts. C'est le symptome deja diagnostique dans ce depot (demarrage a froid, tests/admin/produits-query.test.ts et ses beforeAll sequentiels), pas une regression de ce travail documentaire. Reexecution a chaud : 243/243. Aucun contournement pose (pas de retry, pas de serialisation, pas de delai).
+- **Réserve** : La fusion des etapes 6 et 7 (plutot que de donner a l'etape 6 seule un critere de vert distinct de tsc/npm test) est un arbitrage documente et explique dans RENOMMAGE.md section 7, pas une demonstration formelle qu'aucune autre decoupe ne fonctionnerait.
+- **Réserve** : npx --no-install tsc --noEmit : aucune sortie, donc aucune erreur — sortie vide confirmee, non recopiee d'un exemple. public/uploads/ verifie : seul .gitkeep present, avant et apres npm test. Les six commandes de comptage publiees (27 fichiers, 304 occurrences, 138 identifiants exportes, 42 identifiants internes, 60 selecteurs e2e, 4 migrations en base) ont ete rejouees et donnent exactement les chiffres ecrits dans les documents.

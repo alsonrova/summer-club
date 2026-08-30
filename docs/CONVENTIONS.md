@@ -224,11 +224,22 @@ document a longtemps écrit « le fichier `etats.ts` » au singulier, il y en a 
 **Ce qui n'est PAS dans ce lot : les segments de route en français.** Ils sont conformes,
 pas en retard. `admin/produits` ne deviendra jamais `admin/products`.
 
+**Le périmètre n'est pas limité aux identifiants exportés.** Une quarantaine de constantes,
+fonctions et types de premier niveau, non exportés, portent aussi des noms français —
+`DOSSIER`, `capitaliser`, `estApplicable`, `ChampSaisie`… Un nom interne est aussi illisible
+pour un lecteur anglophone qu'un nom exporté, et la distinction serait arbitraire :
+**la règle porte sur tout identifiant du code, exporté ou non.** La commande qui les recense,
+son résultat daté et leur nom cible sont dans `docs/RENOMMAGE.md` § 3.6.
+
+Les variables locales à l'intérieur d'une fonction relèvent du même principe mais ne se
+prêtent pas à une table : trop nombreuses, et propres à chaque fonction. Elles se renomment
+au fil de la lecture des fichiers concernés, sans table dédiée.
+
 **Le nom cible de chaque identifiant est déjà écrit** — énumérations et valeurs, colonnes
-Prisma, 138 identifiants exportés, les 27 fichiers, ce qui ne change pas, les pièges et
-l'ordre d'exécution : **`docs/RENOMMAGE.md`**. Le renommage doit être mécanique ; s'il
-demande un arbitrage de vocabulaire, c'est que cette table est incomplète — complétez-la
-plutôt que de trancher dans le code.
+Prisma, 138 identifiants exportés, 42 identifiants internes non exportés, les 27 fichiers, ce
+qui ne change pas, les pièges et l'ordre d'exécution : **`docs/RENOMMAGE.md`**. Le renommage
+doit être mécanique ; s'il demande un arbitrage de vocabulaire, c'est que cette table est
+incomplète — complétez-la plutôt que de trancher dans le code.
 
 ## 2. Architecture : quatre couches, une seule direction
 

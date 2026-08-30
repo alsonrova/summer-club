@@ -59,13 +59,12 @@ d'un compte écrit une valeur que le type refuse.
 | --- | --- |
 | `orange_money` | `orange_money` *(inchangée — nom propre)* |
 | `whatsapp` | `whatsapp` *(inchangée — nom propre)* |
-| `livraison` | `delivery` ⚠ |
+| `livraison` | `cash_on_delivery` |
 
-⚠ `livraison` désigne ici un **canal de prise de commande**, aux côtés de deux prestataires.
-`delivery` est le terme naturel, mais il fait de ce canal un mode de *livraison* alors que
-les deux autres sont des *moyens de contact ou de paiement* — l'énumération mélange déjà deux
-notions, le renommage ne l'aggrave pas mais ne la corrige pas non plus. Alternative si le
-propriétaire préfère nommer le mode de remise : `on_delivery`. **Ne pas trancher seul.**
+**Tranché par le propriétaire.** `delivery` décrivait le mode d'acheminement ; ce que cette
+valeur nomme est un mode de **paiement** — payer à la remise — aux côtés de deux moyens de
+paiement/contact (`orange_money`, `whatsapp`). Le nom doit dire ce qu'il est :
+`cash_on_delivery`.
 
 Colonne portante : `Order.canal`.
 
@@ -82,12 +81,13 @@ Cible déjà inscrite dans `docs/CONVENTIONS.md` § 1 (`OrderStatus.pending_paym
 | `expediee` | `shipped` |
 | `prete_retrait` | `ready_for_pickup` |
 | `livree` | `delivered` |
-| `annulee` | `cancelled` ⚠ |
+| `annulee` | `cancelled` |
 | `echec_paiement` | `payment_failed` |
 
-⚠ `cancelled` (deux L, orthographe britannique) plutôt que `canceled` : le reste du dépôt n'a
-pas d'usage établi, mais `cancelled` est la forme dominante dans les schémas de commerce
-électronique. À trancher une fois, puis à ne plus rediscuter.
+**Tranché par le propriétaire.** `cancelled` (deux L, orthographe britannique), pas
+`canceled` : c'est la forme dominante dans les schémas de commerce électronique. Appliqué
+partout sans exception — schéma, `src/domain/order-status.ts` (table des transitions),
+`src/admin/resources/orders.ts` (`LIBELLES_STATUT`, `LIBELLES_TRANSITION`), tests et fixtures.
 
 Colonne portante : `Order.statut`, valeur par défaut `en_attente_confirmation`.
 
@@ -157,12 +157,12 @@ grep -nE '^\s+[a-z][A-Za-z0-9]*\s' prisma/schema.prisma
 | `User` | `nom` | `name` | ⚠ voir § 6.5 — Better Auth mappe déjà `name` → `nom` |
 | `User` | `tel` | `phone` | |
 | `Category` | `nom` | `name` | |
-| `Category` | `ordre` | `position` ⚠ | cohérent avec `Media.position`, déjà anglais |
+| `Category` | `ordre` | `displayOrder` | |
 | `Product` | `nom` | `name` | |
 | `Product` | `prixBase` | `basePrice` | |
 | `Product` | `prixAchat` | `costPrice` ⚠ | prix d'achat ; `purchasePrice` possible |
 | `Product` | `actif` | `active` | |
-| `Product` | `ordre` | `position` ⚠ | |
+| `Product` | `ordre` | `displayOrder` | |
 | `Variant` | `libelle` | `label` | |
 | `Variant` | `deltaPrix` | `priceDelta` | |
 | `Variant` | `seuilAlerte` | `lowStockThreshold` ⚠ | `alertThreshold` plus littéral, moins parlant |
@@ -176,8 +176,8 @@ grep -nE '^\s+[a-z][A-Za-z0-9]*\s' prisma/schema.prisma
 | `Order` | `sousTotal` | `subtotal` | |
 | `Order` | `fraisLivraison` | `shippingFee` | |
 | `Order` | `remise` | `discount` | |
-| `OrderItem` | `nomFige` | `nameSnapshot` ⚠ | « figé » = capturé à la commande ; `capturedName` possible |
-| `OrderItem` | `prixUnitaireFige` | `unitPriceSnapshot` ⚠ | idem |
+| `OrderItem` | `nomFige` | `nameSnapshot` | tranché par le propriétaire : ces deux champs figent l'état au moment de la commande, « snapshot » le dit, « figé » se traduisait mal |
+| `OrderItem` | `prixUnitaireFige` | `unitPriceSnapshot` | idem, par symétrie |
 | `OrderItem` | `quantite` | `quantity` | |
 | `Payment` | `montant` | `amount` | |
 | `Payment` | `statut` | `status` | chaîne libre, pas une énumération |
@@ -196,15 +196,15 @@ grep -nE '^\s+[a-z][A-Za-z0-9]*\s' prisma/schema.prisma
 | `Promotion` | `priorite` | `priority` | |
 | `Promotion` | `actif` | `active` | |
 | `Review` | `note` | `rating` | terme standard ; `score` moins usuel en commerce |
-| `Review` | `texte` | `body` ⚠ | `text` plus littéral ; `body` évite la collision avec le type |
+| `Review` | `texte` | `body` | tranché par le propriétaire ; `text` plus littéral, `body` évite la collision avec le type |
 | `Review` | `auteur` | `author` | |
 | `Review` | `statut` | `status` | |
 | `Review` | `epingle` | `pinned` | |
 | `DeliveryZone` | `nom` | `name` | |
 | `DeliveryZone` | `tarif` | `fee` | cohérent avec `Order.shippingFee` |
-| `DeliveryZone` | `delai` | `leadTime` ⚠ | chaîne libre (« 2-3 jours ») ; `eta` possible |
+| `DeliveryZone` | `delai` | `leadTime` | tranché par le propriétaire ; chaîne libre (« 2-3 jours ») |
 | `DeliveryZone` | `actif` | `active` | |
-| `DeliveryZone` | `ordre` | `position` ⚠ | |
+| `DeliveryZone` | `ordre` | `displayOrder` | |
 | `Setting` | `cle` | `key` | clé primaire |
 | `Setting` | `valeur` | `value` | |
 | `AuditLog` | `acteur` | `actor` | |
@@ -213,9 +213,12 @@ grep -nE '^\s+[a-z][A-Za-z0-9]*\s' prisma/schema.prisma
 | `AuditLog` | `avant` | `before` | ⚠ voir § 6.2 — colonne `Json`, contenu non migré |
 | `AuditLog` | `apres` | `after` | ⚠ idem |
 
-⚠ **`ordre` → `position` (trois modèles).** Alternative : `sortOrder`. `position` a été
-retenu parce que `Media.position` existe déjà et est anglais : garder deux noms pour la même
-notion serait pire que le choix lui-même. À trancher une fois pour les trois.
+**Tranché par le propriétaire : `ordre` → `displayOrder` (trois modèles — `Product`,
+`Category`, `DeliveryZone`).** `position` aurait prêté à confusion avec le champ
+`Media.position`, qui existe déjà et désigne autre chose (le rang d'une photo dans la galerie
+d'un produit, pas l'ordre d'affichage d'une fiche produit, d'une catégorie ou d'une zone) :
+même racine sémantique, portée différente. Vérifié : aucun des trois modèles ne porte déjà de
+champ `displayOrder` ni `position` — pas de collision.
 
 **Champs déjà conformes, à ne pas toucher** : `id`, `slug`, `email`, `emailVerified`,
 `image`, `description`, `metaTitle`, `metaDescription`, `sku`, `stock`, `reference`, `total`,
@@ -224,7 +227,7 @@ tous les champs de `Session`/`Account`/`Verification` imposés par Better Auth.
 
 ---
 
-## 3. Fonctions, types et composants exportés
+## 3. Fonctions, types et composants — exportés (§ 3.1 à 3.5) et internes (§ 3.6)
 
 Liste établie par commande, pas de mémoire :
 
@@ -240,6 +243,10 @@ renommer.** Les 20 conformes, à ne pas toucher : `AdminForm`, `AdminTable`,
 `config`, `defineResource`, `formatAriary`, `orderSchema`, `ordersResource`, `prisma`,
 `productSchema`, `productsResource`, `proxy`, `requireAdmin`, `variantSchema`,
 `variantsResource`.
+
+§ 3.1 à 3.4 couvrent ces 138 identifiants exportés, par répertoire. § 3.6 fait de même pour
+les 42 identifiants internes non exportés (`CONVENTIONS.md` § 1) — même principe, table
+séparée parce que la commande qui les recense est différente.
 
 ### 3.1 `src/domain/`
 
@@ -286,9 +293,6 @@ stockées : sûres à changer, mais elles apparaissent dans les tests.
 | `creerCommande` | `createOrder` |
 | `appliquerStatut` | `applyStatus` |
 | `cheminsARevalider` | `pathsToRevalidate` |
-| `epinglerAvis` | `pinReview` |
-| `modererAvis` | `moderateReview` |
-| `importerTemoignage` | `importTestimonial` |
 | `enregistrerAudit` | `recordAudit` |
 | `ClientAudit` | `AuditClient` |
 | `traiterImage` | `processImage` |
@@ -302,6 +306,14 @@ stockées : sûres à changer, mais elles apparaissent dans les tests.
 transportée. Renommer la classe change ce que voit un `catch` qui comparerait `err.name` —
 vérifier qu'aucun ne le fait avant de renommer (aujourd'hui les `catch` utilisent
 `instanceof`, ce qui est sûr).
+
+**Correction du 2026-08-30 :** cette section plaçait `epinglerAvis`, `modererAvis` et
+`importerTemoignage` ici, sous `src/server/`. Vérification faite contre le code réel, les
+trois vivent dans `src/app/admin/avis/actions.ts`, à côté de leurs variantes
+`…DepuisFormulaire` — elles sont donc en § 3.4, pas ici. L'erreur n'était pas cosmétique :
+l'ordre d'exécution (§ 7) traite `src/server/` à l'étape 2 et `src/app/` à l'étape 4 ; filées
+sous § 3.2, ces trois fonctions n'auraient été renommées à aucune des deux — l'étape 2 les
+aurait cherchées en vain, l'étape 4 ne les aurait pas cherchées du tout.
 
 ### 3.3 `src/admin/`
 
@@ -361,8 +373,11 @@ en français (ce sont des libellés d'interface) ; seule la clé de l'option cha
 | `definirPhotoPrincipale` | `setPrimaryPhoto` |
 | `changerStatut` | `changeStatus` |
 | `changerStatutDepuisFormulaire` | `changeStatusFromForm` |
+| `epinglerAvis` | `pinReview` |
 | `epinglerAvisDepuisFormulaire` | `pinReviewFromForm` |
+| `modererAvis` | `moderateReview` |
 | `modererAvisDepuisFormulaire` | `moderateReviewFromForm` |
+| `importerTemoignage` | `importTestimonial` |
 | `importerTemoignageDepuisFormulaire` | `importTestimonialFromForm` |
 | `EtatActionSimple` / `etatActionSimpleInitial` | `SimpleActionState` / `initialSimpleActionState` |
 | `EtatActionAvis` / `etatActionAvisInitial` | `ReviewActionState` / `initialReviewActionState` |
@@ -387,6 +402,96 @@ en français (ce sont des libellés d'interface) ; seule la clé de l'option cha
 `repoRoot`, `countLabel`, `defaultJournalPath`, `defaultSummaryPath`, `SCHEMA_VERSION`,
 `ROLES`, `SEVERITIES`, `SOURCES`, `VERDICTS` sont déjà conformes. Vérifié par la même
 commande, adaptée à `tools/`.
+
+### 3.6 Identifiants internes non exportés (`src/`)
+
+**`CONVENTIONS.md` § 1 le dit maintenant explicitement : la règle ne s'arrête pas aux
+identifiants exportés.** Une constante de module, une fonction ou un type de premier niveau
+qui n'est jamais exporté reste aussi français, et aussi illisible pour un lecteur anglophone,
+qu'un identifiant exporté. Cette section les recense et leur donne un nom cible, exactement
+comme le § 3 précédent le fait pour les 138 identifiants exportés. Les **variables locales à
+l'intérieur d'une fonction** n'y figurent pas : trop nombreuses pour une table, elles se
+renomment au fil de la lecture de chaque fichier concerné (`CONVENTIONS.md` § 1).
+
+Commande — déclarations de premier niveau qui ne commencent pas par `export`, puis filtre sur
+le vocabulaire français réellement rencontré ici :
+
+```bash
+grep -rhoE '^(async function|function|const|type|class|interface) [A-Za-z0-9_]+' \
+  src/ --include='*.ts' --include='*.tsx' \
+| sed -E 's/^(async function|function|const|type|class|interface) //' | sort -u \
+| grep -iE 'avis|bouton|champ|categorie|dossier|entier|erreur|fuseau|largeur|ligne|nombre|canal|statut|quantite|interne|analyser|capitalis|construire|heure|echapp|encoder|variante|formater|valeur|omettre|systeme|prix|apres|revalider|courant|rotation|trace|temoignage|texte|liste|soumis|filtre|actif|defaut|^est[A-Z]|^vers[A-Z]'
+```
+
+*(Même principe que le filtre de noms de fichiers de `CONVENTIONS.md` § 1 : le vocabulaire
+est celui réellement rencontré dans ce dépôt, pas une liste exhaustive de mots français ; un
+identifiant interne français nouveau s'y ajoute.)*
+
+**Résultat de cette commande le 2026-08-30 : 42 identifiants.** Mesure datée, pas un état
+permanent : relancez-la. Vérifié un par un contre le code réel (fichier, signature, usage) —
+sept identifiants au vocabulaire français ou ambigu en ont délibérément été écartés parce
+qu'ils sont déjà conformes : `ActionMedia`, `ActionTransition`, `Media` (type local de
+`media-carte.tsx`, distinct du modèle Prisma), `NBSP`, `SchemaAdmin`, `TRANSITIONS`,
+`authClient`, `getSessionAdmin`, `globalForPrisma` — l'anglais et le français y partagent une
+orthographe identique ou proche, ce ne sont pas des mots français.
+
+| Actuel | Cible | Fichier(s) |
+| --- | --- | --- |
+| `FUSEAU` | `TIMEZONE` | `src/domain/pricing.ts` |
+| `heureLocale` | `localTime` | `src/domain/pricing.ts` |
+| `estApplicable` | `isApplicable` | `src/domain/pricing.ts` |
+| `prixApres` | `priceAfter` | `src/domain/pricing.ts` |
+| `DOSSIER` | `UPLOAD_DIR` | `src/server/media.ts` |
+| `LARGEURS` | `WIDTHS` | `src/server/media.ts` |
+| `encoderVariante` | `encodeVariant` | `src/server/media.ts` |
+| `QUANTITE_MAX` | `MAX_QUANTITY` | `src/server/orders.ts` |
+| `secretCourantDeLaRotation` | `currentRotationSecret` | `src/server/auth.ts` |
+| `CHAMPS_SYSTEME_PAR_DEFAUT` | `DEFAULT_SYSTEM_FIELDS` | `src/admin/resource.ts` |
+| `ZodDefInterne` | `InternalZodDef` | `src/admin/resource.ts` |
+| `capitaliser` | `capitalize` | `src/admin/resource.ts` |
+| `analyserChamp` | `analyzeField` | `src/admin/resource.ts` |
+| `ChampSaisie` | `InputField` | `src/admin/engine/form.tsx` |
+| `valeurTexte` | `textValue` | `src/admin/engine/form.tsx` |
+| `construireUrl` | `buildUrl` | `src/admin/engine/table.tsx` |
+| `formaterValeur` | `formatValue` | `src/admin/engine/table.tsx` |
+| `omettreChampsSysteme` | `omitSystemFields` | `src/admin/engine/actions.ts` |
+| `NOMBRE_BIEN_FORME` | `WELL_FORMED_NUMBER` | `src/admin/engine/csv.ts` |
+| `echapper` | `escapeCsvValue` | `src/admin/engine/csv.ts` |
+| `ENTIER_POSTGRES_MAX` | `POSTGRES_INT_MAX` | `src/admin/resources/products.ts`, `src/admin/resources/variants.ts`, `src/app/admin/produits/actions.ts` — trois déclarations locales indépendantes, même nom |
+| `ENTIER_POSTGRES_MIN` | `POSTGRES_INT_MIN` | `src/admin/resources/variants.ts` |
+| `ActionAvis` | `ReviewAction` | `src/app/admin/avis/actions-avis.tsx` |
+| `BoutonAction` | `ActionButton` | `src/app/admin/avis/actions-avis.tsx` |
+| `BoutonTransition` | `TransitionButton` | `src/app/admin/commandes/[id]/boutons-statut.tsx` |
+| `Erreurs` | `FieldErrors` | `src/app/admin/avis/formulaire-temoignage.tsx` |
+| `revaliderAvis` | `revalidateReviewPaths` | `src/app/admin/avis/actions.ts` |
+| `temoignageSchema` | `testimonialSchema` | `src/app/admin/avis/actions.ts` |
+| `valeursSoumises` | `submittedValues` | `src/app/admin/avis/actions.ts` |
+| `urlListe` | `listUrl` | `src/app/admin/avis/page.tsx` |
+| `versStatutAvis` | `toReviewStatus` | `src/app/admin/avis/page.tsx` |
+| `versPageValide` | `toValidPage` | `src/app/admin/avis/page.tsx`, `src/app/admin/commandes/page.tsx`, `src/app/admin/produits/page.tsx` — trois déclarations locales indépendantes |
+| `Categorie` | `CategoryOption` | `src/app/admin/produits/formulaire-produit.tsx` — ⚠ pas `Category` : collision de nom avec le modèle Prisma `Category`, alors que cette forme locale n'a que deux champs |
+| `ChampErreurs` | `FieldErrors` | `src/app/admin/produits/formulaire-produit.tsx`, `src/app/admin/produits/[id]/formulaire-declinaison.tsx` |
+| `texteInitial` | `initialText` | `src/app/admin/produits/formulaire-produit.tsx`, `src/app/admin/produits/[id]/formulaire-declinaison.tsx` |
+| `versFiltreActif` | `toActiveFilter` | `src/app/admin/produits/page.tsx` |
+| `Ligne` | `DetailRow` | `src/app/admin/commandes/[id]/page.tsx` |
+| `dateHeure` | `formatDateTime` | `src/app/admin/commandes/[id]/page.tsx` |
+| `statutDeTrace` | `statusFromTrace` | `src/app/admin/commandes/[id]/page.tsx` |
+| `OPTIONS_CANAL` | `CHANNEL_OPTIONS` | `src/app/admin/commandes/page.tsx` |
+| `OPTIONS_STATUT` | `STATUS_OPTIONS` | `src/app/admin/commandes/page.tsx` |
+| `texteCourt` | `truncateText` | `src/app/admin/commandes/page.tsx` |
+
+Vérifié : aucun de ces noms cibles n'entre en collision avec un identifiant déjà présent dans
+son propre fichier — sauf le cas `Categorie` ci-dessus, déjà tranché en `CategoryOption`.
+
+**Où elles se renomment dans l'ordre d'exécution (§ 7) :** chacune au même moment que le
+reste de son fichier — les quatre de `src/domain/` à l'étape 1, les cinq de `src/server/` à
+l'étape 2, les treize déclarations de `src/admin/` à l'étape 3, les vingt de `src/app/` à
+l'étape 4. Rien de nouveau à ajouter à l'ordre d'exécution pour elles : elles vivent dans les
+mêmes fichiers que les identifiants exportés déjà couverts à ces étapes. Cas particulier :
+`ENTIER_POSTGRES_MAX` est déclarée trois fois sous des noms identiques mais dans des fichiers
+indépendants — deux comptent pour `src/admin/` (étape 3), la troisième
+(`src/app/admin/produits/actions.ts`) compte pour `src/app/` (étape 4) : les 13 et les 20
+ci-dessus l'incluent chacun une fois, pour sa déclaration respective.
 
 ---
 
@@ -568,16 +673,28 @@ commit rend la revue impossible et le retour arrière coûteux.
 (`docker exec docker-db-1 pg_isready -U summerclub -d summerclub`), et **mesure de départ**
 par `npm test` — le chiffre à retrouver à la fin, à consigner au journal.
 
+**Pourquoi l'étape « schéma et base » ne peut pas être verte seule.** Une version antérieure
+de ce document séparait cette étape (renommer le schéma et migrer la base) de la suivante
+(réécrire les littéraux restants), chacune vérifiée par `tsc --noEmit` puis `npm test`. C'est
+inexécutable : dès que `npx prisma generate` régénère les types à partir du schéma renommé,
+**tout accès aux champs et valeurs qu'il touche cesse de compiler d'un coup** — y compris dans
+`src/domain/`, `src/server/`, `src/admin/` et `src/app/`, déjà « terminés » aux étapes 1 à 4.
+Ces étapes ne renommaient que les identifiants **exportés** (§ 3) et internes (§ 3.6) ; elles
+ne touchaient jamais un accès de champ comme `commande.statut` ou `avis.texte`, qui reste
+français jusqu'à ce que le schéma change. Il n'existe donc aucun état intermédiaire vert entre
+« le schéma a changé » et « tout ce qui le consomme a suivi » : les séparer promettait une
+étape verte qui ne peut pas exister. La correction : fusionner les deux en un seul palier
+(étape 6 ci-dessous), vérifié une seule fois, à la fin.
+
 | # | Étape | Vérification |
 | --- | --- | --- |
-| 1 | `src/domain/` seul : exports, types, constantes (§ 3.1). Aucune base, aucun schéma. | `npx --no-install tsc --noEmit` puis `npm test` |
-| 2 | `src/server/` : erreurs, services, audit, médias (§ 3.2). | idem |
-| 3 | `src/admin/` : moteur, ressources, libellés (§ 3.3). ⚠ `resource.name` → prévoir l'`UPDATE` de § 6.3 à l'étape 6. | idem |
-| 4 | `src/app/` et `src/components/` : actions, requêtes, composants (§ 3.4). | idem, **et** `npm run build` |
+| 1 | `src/domain/` seul : exports, types, constantes (§ 3.1, § 3.6). Aucune base, aucun schéma. | `npx --no-install tsc --noEmit` puis `npm test` |
+| 2 | `src/server/` : erreurs, services, audit, médias (§ 3.2, § 3.6). | idem |
+| 3 | `src/admin/` : moteur, ressources, libellés (§ 3.3, § 3.6). ⚠ `resource.name` → prévoir l'`UPDATE` de § 6.3 à l'étape 6. | idem |
+| 4 | `src/app/` et `src/components/` : actions, requêtes, composants (§ 3.4, § 3.6). | idem, **et** `npm run build` |
 | 5 | `git mv` des 27 fichiers (§ 4), imports mis à jour. | `npx --no-install tsc --noEmit` — un import oublié échoue ici |
-| 6 | **Le schéma et la base**, en une seule migration transactionnelle : les 7 types, leurs valeurs françaises, les colonnes (§ 1 et § 2), **plus** les `UPDATE` de § 6.2 et § 6.3. Générée en `--create-only`, relue, réécrite en `RENAME` si besoin. | relire le SQL **avant** d'appliquer ; puis `npx prisma generate`, `tsc --noEmit`, `npm test` |
-| 7 | Les littéraux restants : jeux d'essai, assertions, les deux `page.goto` de § 6.1. | `npm test`, puis `npm run build` **puis** `npx --no-install playwright test` |
-| 8 | La configuration Better Auth (§ 6.5) et le mapping `user.fields`. | connexion réelle en navigateur, pas seulement les tests |
+| 6 | **Le schéma, la base, et tout ce qui les consomme — un seul commit.** La migration transactionnelle (les 7 types, leurs valeurs françaises, les colonnes de § 1 et § 2, **plus** les `UPDATE` de § 6.2 et § 6.3 ; générée en `--create-only`, relue, réécrite en `RENAME` si besoin) **et**, dans le même commit, chaque accès aux champs et valeurs renommés à travers `src/domain/`, `src/server/`, `src/admin/`, `src/app/`, les littéraux restants des jeux d'essai et assertions, et les deux `page.goto` de § 6.1. | relire le SQL **avant** d'appliquer ; puis `npx prisma generate`, `npm test`, `npx --no-install tsc --noEmit`, `npm run build`, **puis** `npx --no-install playwright test` |
+| 7 | La configuration Better Auth (§ 6.5) et le mapping `user.fields`. | connexion réelle en navigateur, pas seulement les tests |
 
 **À la fin, les quatre commandes de `CONVENTIONS.md` § 7**, avec leurs sorties réelles :
 
