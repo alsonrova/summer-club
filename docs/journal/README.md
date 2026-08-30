@@ -30,9 +30,26 @@ avant d'être purgé. Un journal daté, versionné et non réécrit rend ces dé
 L'outil qui les manipule vit dans `tools/agent-journal/` : JavaScript en `.mjs`, modules
 natifs de Node uniquement, aucune dépendance.
 
-## Comment l'alimenter
+## Qui écrit, et qui remet
 
-À la fin de votre intervention, une entrée. Toujours.
+À la fin de votre intervention, une entrée. Toujours — mais ce n'est pas toujours vous qui
+la tapez.
+
+| Votre rôle | Ce que vous faites |
+| --- | --- |
+| Développeur, coordinateur | vous lancez la commande vous-même |
+| **Auditeur, testeur UX/UI** | **vous ne l'exécutez pas** : vous êtes en lecture seule |
+
+Les agents de vérification travaillent sans modifier aucun fichier (`docs/CONVENTIONS.md`
+§ 8) — et `entries.jsonl` est un fichier. Un vérificateur qui consignerait lui-même
+enfreindrait la règle qu'il est là pour faire respecter, et pourrait écrire sous les yeux
+d'un autre agent en train de lire le même arbre. **Vous rédigez donc votre entrée sous forme
+de ligne de commande complète, prête à coller, et vous la remettez au coordinateur dans votre
+rapport.** C'est lui qui l'inscrit, telle quelle.
+
+L'obligation ne bouge pas ; seule la main qui écrit change.
+
+## Comment l'alimenter
 
 ```bash
 npm run journal -- add \
@@ -95,7 +112,7 @@ pas une entrée passée, on en ajoute une qui la rectifie.** C'est le même prin
 journal d'audit de l'application (`src/server/audit.ts`) : une trace qu'on peut réécrire ne
 prouve rien.
 
-Deux garde-fous, tous deux couverts par `tests/tools/agent-journal.test.ts` :
+Quatre garde-fous, tous couverts par `tests/tools/agent-journal.test.ts` :
 
 - **Une ligne illisible fait échouer la lecture**, en citant son numéro. L'alternative — sauter
   la ligne et continuer — ferait disparaître une entrée sans un mot. C'est exactement ce qu'un
@@ -103,6 +120,14 @@ Deux garde-fous, tous deux couverts par `tests/tools/agent-journal.test.ts` :
 - **`add` refuse d'écrire derrière un fichier qui ne se termine pas par un saut de ligne.**
   C'est le signe d'une écriture précédente interrompue ; ajouter à la suite fusionnerait deux
   entrées en une ligne illisible, donc en perdrait deux.
+- **Une entrée d'un format plus récent fait échouer la lecture** au lieu d'être relue avec les
+  règles d'aujourd'hui. C'est tout ce qu'apporte le champ `schemaVersion`, et il ne promet rien
+  d'autre : aucune conversion d'un format vers un autre n'existe. Un outil qui rencontre une
+  version qu'il ne connaît pas le dit, plutôt que de comprendre l'entrée de travers en silence.
+- **`add` confirme l'écriture AVANT de compter.** Le total affiché relit tout le fichier ;
+  si le journal porte déjà une ligne abîmée, cette relecture échoue. Annoncer une erreur à ce
+  moment-là ferait ressaisir une entrée déjà écrite — donc un doublon. L'échec du total est
+  donc un **avertissement** séparé, qui dit explicitement que l'entrée est enregistrée.
 
 ## Pourquoi versionné, alors que `.superpowers/` ne l'est pas
 

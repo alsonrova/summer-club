@@ -104,10 +104,26 @@ function commandAdd(options) {
   })
   const file = options.journal ?? defaultJournalPath()
   appendEntry(entry, file)
-  const total = readEntries(file).length
-  process.stdout.write(
-    `Entrée ajoutée à ${file}\n${renderLine(entry)}\n${countLabel(total)} au total.\n`,
-  )
+
+  // L'écriture est faite : on la confirme AVANT toute relecture. Le total ci-dessous relit
+  // le fichier entier, et une ligne déjà abîmée — écrite par autre chose que cet outil —
+  // ferait échouer cette relecture. L'agent croirait alors que son entrée n'est pas passée,
+  // la ressaisirait, et le journal porterait un doublon.
+  process.stdout.write(`Entrée ajoutée à ${file}\n${renderLine(entry)}\n`)
+
+  // Le total est un agrément, pas le résultat de la commande : il se tente à part, et son
+  // échec s'annonce comme un avertissement, jamais comme un échec d'écriture.
+  try {
+    process.stdout.write(`${countLabel(readEntries(file).length)} au total.\n`)
+  } catch (error) {
+    if (!(error instanceof JournalError)) throw error
+    process.stderr.write(
+      'Avertissement : votre entrée est bien enregistrée, mais le total n\'a pas pu être ' +
+        `calculé — ${error.message}\n` +
+        'Réparez la ligne citée. Ne ressaisissez pas l\'entrée : elle est déjà dans le ' +
+        'fichier.\n',
+    )
+  }
 }
 
 function commandList(options) {

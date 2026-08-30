@@ -34,8 +34,10 @@ La règle est nette et la frontière ne bouge pas.
 | Quoi | Exemple réel |
 | --- | --- |
 | Noms de variables, de fonctions, de types | `defineResource`, `PromotionRule`, `DelegatePrisma<T>`, `ResourceConfig<T>` |
-| Noms de fichiers et de dossiers | `src/server/order-status-service.ts`, `src/domain/pricing.ts` |
-| Modèles, champs et énumérations de base | `Product.slug`, `Variant.stock`, `OrderItem`, `Media` |
+| Noms de fichiers et de dossiers **hors `src/app/`** | `src/server/order-status-service.ts`, `src/domain/pricing.ts`, `tools/agent-journal/store.mjs` |
+| Fichiers **sous `src/app/`**, qui ne paraissent dans aucune URL | `page.tsx`, `layout.tsx`, `route.ts`, `actions.ts`, `query.ts` |
+| Modèles et champs de base | `Product.slug`, `Variant.stock`, `OrderItem`, `Media` |
+| Noms de types d'énumération **et leurs valeurs** | `OrderStatus.pending_payment` (cible ; voir plus bas) |
 | Clés d'objets techniques et de configuration | `testsBefore`, `findings`, `schemaVersion` |
 
 **En français — tout ce qu'un être humain lit :**
@@ -43,6 +45,7 @@ La règle est nette et la frontière ne bouge pas.
 | Quoi | Exemple réel |
 | --- | --- |
 | Libellés d'interface | « Prix », « Catégorie », « Enregistrement… » |
+| **Segments de route sous `src/app/`** | `admin/produits`, `admin/commandes`, `admin/avis`, `connexion`, `acces-refuse` |
 | Messages d'erreur affichés | « Le nom est requis », « Statut inconnu » |
 | Messages de validation | `z.config(fr())` dans `src/admin/resource.ts` |
 | Commentaires de code | tout le dépôt |
@@ -53,13 +56,72 @@ Ce n'est pas une préférence esthétique : c'est une boutique malgache, la spé
 impose le français à l'interface, et **les tests de bout en bout ciblent ces libellés**
 (`getByRole('button', { name: 'Se connecter' })`). Traduire un libellé casse une suite.
 
+### Les URL sont du français, parce qu'un être humain les lit
+
+**Un nom de dossier sous `src/app/` n'est pas un nom de fichier : c'est un segment d'URL**,
+donc une adresse que la cliente voit dans sa barre, lit, recopie et prononce au téléphone.
+La règle générale tranche d'elle-même — ce qu'un être humain lit reste en français.
+
+Concrètement, sous `src/app/` :
+
+- **Les dossiers qui forment l'adresse sont en français** : les routes existantes sont
+  `admin/produits`, `admin/produits/nouveau`, `admin/commandes`, `admin/avis`, `connexion`,
+  `acces-refuse`, et la vitrine à venir ajoutera `boutique`, `panier`, `commande`, `suivi`.
+  Sans accent ni espace : une URL s'écrit en ASCII minuscule avec des traits d'union
+  (`acces-refuse`, pas `accès refusé`).
+- **Les fichiers techniques qui les composent gardent le nom que le cadre leur impose** :
+  `page.tsx`, `layout.tsx`, `route.ts`, `loading.tsx`, `error.tsx`. On ne les choisit pas.
+  Les fichiers voisins que nous choisissons, eux, suivent la règle anglaise dès lors qu'ils
+  ne paraissent dans aucune URL : `actions.ts`, `query.ts` sont des noms techniques, pas des
+  adresses. (`etats.ts` est un reste français ; il fait partie du lot à renommer.)
+- **Ce qui ne paraît pas dans l'URL suit la règle anglaise** : groupes de routes entre
+  parenthèses, et segments dynamiques entre crochets — `[id]`, `[...all]`. Attention
+  toutefois : renommer un groupe de routes ne change aucune adresse, mais renommer un
+  segment dynamique change le nom du paramètre que le code reçoit.
+- **`src/app/api/` n'est pas une adresse que la cliente lit** : `api/auth/[...all]` est
+  l'interface d'une bibliothèque, imposée par elle. Ces segments restent en anglais.
+
+**Partout ailleurs, la règle anglaise s'applique sans exception** : `src/domain/`,
+`src/server/`, `src/admin/`, `src/components/`, `src/styles/`, `tests/`, `tools/`, `e2e/`,
+`prisma/`. Aucun de ces chemins n'atteint jamais un navigateur.
+
+### Énumérations : le nom du type ET la valeur
+
+Une valeur d'énumération est le point où cette frontière glisse le plus, parce qu'elle est
+**deux choses à la fois** : un identifiant que la machine compare, et une donnée que la base
+stocke. La tentation est de la traiter comme du contenu. **Décision du propriétaire : c'est
+un identifiant. Le nom du type et ses valeurs passent en anglais lors du renommage, base
+comprise.**
+
+Ce qu'un être humain lit n'est jamais la valeur brute, c'est sa traduction affichée :
+`LIBELLES_STATUT` (`src/admin/resources/orders.ts`) rend déjà `en_preparation` par
+« En préparation », et `LIBELLES_TRANSITION` la rend par « Mettre en préparation » sur un
+bouton. Cette indirection existe déjà partout, elle est le bon endroit pour le français, et
+c'est elle qui rendra le renommage possible sans toucher à un seul libellé — donc sans
+casser un seul test de bout en bout.
+
+**État actuel des énumérations, à ne pas confondre avec la règle.** Le schéma en porte sept,
+aux noms français — `Role`, `Canal`, `StatutCommande`, `PortePromo`, `TypePromo`,
+`SourceAvis`, `StatutAvis` — avec des valeurs françaises (`en_attente_confirmation`,
+`prete_retrait`, `echec_paiement`, `verifie`, `publie`, `rejete`, `membre`…). Une seule fait
+exception, et c'est bien ce qui montre que la frontière avait glissé : `TypePromo` porte
+déjà `percent` et `fixed`. **Les sept sont dans le lot à renommer**, valeurs comprises, avec
+la migration Prisma qui va avec — la partie la plus délicate du renommage, puisqu'elle
+touche des données déjà écrites.
+
+### Ce qui reste à renommer
+
 **État actuel, à ne pas confondre avec la règle.** Une bonne partie du code existant porte
 des identifiants français ou mixtes — `appliquerStatut`, `listerProduitsPagines`, `STATUTS`,
 `champsSysteme`, `resolvePrix`, et les colonnes `nom`, `prixBase`, `deltaPrix`,
-`joursSemaine`. Ils précèdent cette règle. **Le renommage est un travail
+`joursSemaine`. S'y ajoutent les sept énumérations avec leurs valeurs, et le fichier
+`src/app/admin/produits/etats.ts`. Ils précèdent cette règle. **Le renommage est un travail
 séparé, gouverné par ce document — ne renommez rien en passant.** Un renommage opportuniste
 au milieu d'une tâche fonctionnelle rend la revue impossible et casse les tests de bout en
 bout sans que personne ne sache pourquoi. Le code neuf, lui, suit la règle dès maintenant.
+
+**Ce qui n'est PAS dans ce lot : les segments de route en français.** Ils sont conformes,
+pas en retard. `admin/produits` ne deviendra jamais `admin/products`.
 
 ## 2. Architecture : quatre couches, une seule direction
 
@@ -72,6 +134,24 @@ src/admin/    moteur d'administration piloté par schéma
 src/server/   accès aux données et services
 src/domain/   logique métier pure
 ```
+
+Trois emplacements ne sont pas des couches et n'entrent donc pas dans la règle de
+dépendance ci-dessous, mais ils existent et il faut savoir où ranger ce qu'on écrit :
+
+```
+src/components/  composants partagés par plusieurs écrans, hors du moteur d'administration
+src/styles/      tokens.css — la charte, importée par src/app/globals.css
+src/proxy.ts     garde optimiste au bord de la requête, avant la résolution de route
+```
+
+`src/components/` sert ce qu'aucune couche ne possède en propre : un composant utilisé par
+plusieurs écrans et qui n'appartient pas au moteur (`bouton-deconnexion.tsx`). Un composant
+qui n'est utilisé que par un écran reste à côté de cet écran, dans `src/app/` — le sortir
+« pour ranger » éloigne le code de son seul appelant.
+
+`src/proxy.ts` est de la **défense en profondeur, pas la défense** : il ne vérifie que la
+présence du cookie de session, ni sa validité ni le rôle. La protection réelle est
+`requireAdmin()` sur chaque point d'entrée (§ 4, règle 1).
 
 **Règle de dépendance : une couche ne connaît que celles en dessous d'elle.** `src/domain/`
 n'importe jamais `src/server/` ; `src/server/` n'importe jamais `src/app/`. Un import qui
@@ -244,6 +324,42 @@ dans ce dépôt.
    cas, la propriétaire reçoit une `PrismaClientUnknownRequestError` au lieu d'un message.
    Le contrôle métier passe avant.
 
+5. **Aucune donnée venue du client ne compose un chemin de fichier sans être réduite à une
+   forme que nous avons choisie.** `path.join` normalise les `..` — il ne les borne pas : il
+   calcule sagement le chemin qui sort du dossier cible et le rend sans se plaindre. Défaut
+   réel de la tâche 8 : le nom de fichier fourni au téléversement n'était pas assaini,
+   **traversée de chemin confirmée**. La forme à appliquer est un filtre par liste blanche,
+   pas un nettoyage : `traiterImage` (`src/server/media.ts`) réduit le nom à
+   `path.basename(...)` puis **refuse** tout ce qui ne correspond pas à `/^[A-Za-z0-9_-]+$/`.
+   Refuser, pas corriger — un nom qu'on répare en silence est un nom qu'on n'a pas compris.
+   Quand la valeur ne peut pas se réduire à un nom simple (sous-dossiers légitimes),
+   la liste blanche ne suffit plus : il faut alors résoudre le chemin et vérifier qu'il reste
+   sous le dossier cible. Enfin, **ce contrôle appartient à la fonction qui écrit, pas à son
+   appelant** : c'est elle qui connaît le dossier cible, et c'est le seul endroit qu'un futur
+   appelant ne peut pas oublier. (Même raisonnement pour le suffixe anti-collision, remonté
+   de l'appelant vers `traiterImage` à la même tâche.)
+
+6. **Ce qu'une bibliothèque ouvre par défaut est fermé explicitement, et la fermeture se
+   vérifie de l'extérieur, par une requête.** Monter une bibliothèque d'authentification,
+   c'est publier d'un coup un ensemble de routes que personne n'a écrites une par une.
+   Défaut réel de la tâche 9 : `POST /api/auth/sign-up/email` était joignable **sans
+   session** alors que l'inscription publique est interdite — un chemin d'écriture anonyme
+   vers la base. Corrigé par `disableSignUp: true`. Deux conséquences à tenir : énumérez ce
+   que la bibliothèque monte (dans `node_modules/`, pas de mémoire — § 0) et fermez ce qui
+   n'est pas voulu ; puis **prouvez-le par un appel réel non authentifié**, pas par une
+   relecture de la configuration. La même tâche a montré le symétrique : la protection
+   n'était pas acquise par défaut, un groupe de routes étant invisible dans l'URL, une page
+   posée au mauvais endroit aurait été publique **sans aucun symptôme**.
+
+7. **Un gabarit de secret ne doit jamais être une valeur qui passe les contrôles, et le
+   démarrage refuse un secret absent.** Défaut réel de la tâche 9 : `.env.example` proposait
+   un secret de 43 caractères qui satisfaisait toutes les vérifications de la bibliothèque —
+   un déploiement pouvait donc démarrer en production avec la **clé de signature publiée dans
+   le dépôt**, et rien ne l'aurait signalé. Un gabarit se laisse vide, ou porte une valeur
+   qu'un contrôle rejette ; et l'application refuse de démarrer plutôt que de se rabattre sur
+   un défaut. La règle vaut pour tout secret, pas seulement celui-là : clé de signature, jeton
+   d'API de paiement, mot de passe de base.
+
 ## 5. Argent et concurrence
 
 1. **Les montants sont des entiers d'Ariary. Jamais de flottant, jamais de centimes.**
@@ -325,6 +441,14 @@ contredisait. Un chiffre non mesuré se laisse en blanc.
 versionné AVEC le changement qu'il décrit ne peut pas contenir le SHA du commit qui le
 contient : il sera toujours en retard d'un cran. Écrivez « pour la tête exacte : `git log -1` ».
 
+**Même raisonnement pour tout compteur.** Le nombre de tests d'une passation est faux au
+moment même où le commit qui la porte ajoute des tests — la passation des tâches 1 à 12
+annonçait « 222 tests (22 fichiers) » dans le commit qui en portait 240 sur 23. Un chiffre
+n'a sa place dans un document versionné que **daté et présenté comme une mesure d'alors** ;
+pour la valeur courante, renvoyez à la commande qui la donne, exactement comme on renvoie à
+`git log -1` pour la tête. Le journal (§ 9), lui, est daté par nature : c'est le bon endroit
+pour un chiffre mesuré, parce qu'il n'y prétend jamais décrire le présent.
+
 ## 8. Rôles d'agents
 
 Quatre rôles. Un agent en tient un seul à la fois, et sait lequel.
@@ -354,6 +478,17 @@ trouvé :
   et vérifiez qu'elle existe aussi côté serveur. Scénario de référence : deux onglets ouverts.
 - **Le symétrique du cas déjà corrigé.** Une passe précédente a fermé `statut` et laissé
   `epingle`, dans le même fichier.
+- **Chemins de fichiers composés à partir d'une donnée du client.** Suivez chaque nom reçu
+  jusqu'au `writeFile`. `path.join` normalise les `..` sans borner le résultat : la traversée
+  de chemin de la tâche 8 est passée par là. Cherchez la liste blanche, et vérifiez qu'elle
+  **refuse** au lieu de réparer — et qu'elle est posée dans la fonction qui écrit, pas chez
+  son appelant.
+- **Points d'entrée montés par une bibliothèque, ouverts par défaut.** Ils ne s'écrivent
+  dans aucun fichier du dépôt : `POST /api/auth/sign-up/email` était joignable sans session
+  alors que l'inscription publique est interdite (tâche 9). Énumérez ce que la bibliothèque
+  monte en lisant `node_modules/`, puis **appelez la route sans session** — une lecture de la
+  configuration ne prouve rien. Même question pour la protection : une page rangée au mauvais
+  endroit peut être publique sans aucun symptôme visible dans l'URL.
 - **Tests qui s'arrêtent à leur garde d'entrée.** Un test qui vérifie qu'une action refuse un
   anonyme ne couvre pas ce que l'action fait ensuite. Lisez le corps du test, pas son nom.
 - **Affirmations fausses dans les rapports.** Recoupez chaque chiffre avec une exécution
@@ -368,11 +503,16 @@ trouvé :
 - **Isolation transactionnelle, verrous, ordre lecture/décision/écriture** (§ 5).
 - **Flottants sur des montants**, `Float` ou `Decimal` dans un schéma, division non arrondie.
 - **Secrets et gabarits** : `.env.example` a déjà proposé un secret de 43 caractères qui
-  passait tous les contrôles.
+  passait tous les contrôles de la bibliothèque — un déploiement pouvait donc démarrer en
+  production avec la clé de signature publiée dans le dépôt (tâche 9). Vérifiez les deux
+  moitiés : le gabarit ne doit pas être une valeur acceptable, **et** le démarrage doit
+  refuser un secret absent au lieu de se rabattre sur un défaut.
 
 **Produit** : une liste de constats classés Critique / Important / Mineur, chacun avec le
 fichier et la ligne, **le scénario concret qui le déclenche**, et ce qui prouve qu'il est réel.
-Un constat sans scénario reproductible est annoncé comme suspicion, pas comme défaut.
+Un constat sans scénario reproductible est annoncé comme suspicion, pas comme défaut. Plus
+**sa ligne `npm run journal -- add …` prête à exécuter**, qu'il n'exécute pas lui-même : il
+est en lecture seule.
 
 ### Testeur UX/UI
 
@@ -402,13 +542,21 @@ minimaux :
     utilise `--color-sage-deep` (`#5E6B55`).
 
 **Produit** : par écran, la largeur testée, ce qui a été cliqué, ce qui a été observé, et une
-capture quand le défaut est visuel.
+capture quand le défaut est visuel. Plus **sa ligne `npm run journal -- add …` prête à
+exécuter**, qu'il n'exécute pas lui-même : il est en lecture seule.
 
 ### Coordinateur
 
 Découpe le travail, dispatche, arbitre les constats contradictoires, et **tient le journal**
 (§ 9). Quand deux agents se contredisent, il tranche par une mesure, pas par autorité — et
 consigne la mesure.
+
+C'est lui qui **inscrit les entrées des agents en lecture seule**, à partir de la ligne de
+commande qu'ils lui remettent. Il les inscrit telles quelles : il n'a pas fait le travail, il
+n'est pas en position d'en réécrire le résumé ni d'en adoucir les réserves.
+
+**Produit** : les entrées de journal effectivement écrites (les siennes et celles qu'on lui a
+remises), et l'arbitrage motivé de chaque contradiction.
 
 ### Règle d'orchestration, apprise à nos dépens
 
@@ -421,10 +569,20 @@ de stock disparaître sous ses yeux et a conclu à un défaut critique inexistan
 vérification par mutation se fait seule et séquentiellement**, jamais pendant qu'un autre
 agent lit le même fichier.
 
+**Conséquence sur le journal : un agent en lecture seule ne consigne pas lui-même.** Le
+journal est un fichier ; l'y écrire serait une modification, donc une infraction à la règle
+ci-dessus. Il **remet son entrée au coordinateur sous la forme d'une ligne de commande prête
+à exécuter** — un `npm run journal -- add …` complet, dans son rapport — et c'est le
+coordinateur qui l'inscrit. La règle « toute intervention se consigne » (§ 9) tient donc
+toujours : ce qui change, c'est la main qui écrit, pas l'obligation.
+
 ## 9. Journal des agents
 
 Toute intervention d'un agent se consigne dans `docs/journal/entries.jsonl`, via l'outil
-`tools/agent-journal/` :
+`tools/agent-journal/`. **Qui écrit dépend du rôle** : le développeur et le coordinateur
+consignent eux-mêmes ; l'auditeur et le testeur UX/UI travaillent en lecture seule (§ 8) et
+**remettent leur entrée au coordinateur en ligne de commande prête à exécuter**, sans la
+lancer.
 
 ```
 npm run journal -- add --task 13 --role developer --summary "…" --verdict delivered

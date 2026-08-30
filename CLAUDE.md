@@ -6,6 +6,7 @@ habitude venue d'un autre projet.
 
 - Conventions : `docs/CONVENTIONS.md`
 - Journal des agents : `docs/journal/README.md` — consignez votre intervention en fin de tâche
+  (en lecture seule ? remettez la commande au coordinateur, ne l'exécutez pas)
 - Dernière passation : `docs/passation/` (le fichier le plus récent)
 - Spécification : `docs/superpowers/specs/` · Plan : `docs/superpowers/plans/`
 

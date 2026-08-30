@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**53 entrées** · 13 tâches · Développeur 31 · Auditeur qualité et sécurité 17 · Coordinateur 5
+**55 entrées** · 13 tâches · Développeur 33 · Auditeur qualité et sécurité 17 · Coordinateur 5
 
 ## Vue d'ensemble
 
@@ -64,6 +64,8 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-08-29 | 12 | Coordinateur | consigné | — |
 | 2026-08-29 | conventions | Coordinateur | livré | — |
 | 2026-08-29 | conventions | Développeur | livré | — |
+| 2026-08-30 | conventions | Développeur | livré | — |
+| 2026-08-30 | conventions | Développeur | consigné | — |
 
 ## Tâche 1
 
@@ -572,3 +574,23 @@ Outil de journal des agents construit dans tools/agent-journal/, hors de src/ : 
 - **Réserve** : Preuve par mutation faite seule et séquentiellement : parseJournal rendu silencieux sur une ligne illisible fait rougir un seul test (17 verts, 1 rouge) ; le garde de saut de ligne final retiré en fait rougir un autre, seul. Restaurés : 18/18.
 - **Réserve** : Les 51 entrées d'amorçage portent source=reconstructed : leur horodatage est celui d'un commit réel, pas l'heure à laquelle l'agent a travaillé. Les entrées d'audit, qui ne produisent aucun commit, sont calées sur le commit de correction qui en découle.
 - **Réserve** : L'outil ne vérifie pas qu'un SHA cité existe réellement dans le dépôt : il valide la forme, pas l'existence.
+
+### 2026-08-30 · Développeur — livré
+
+Traitement de la relecture des fondations : un constat critique et six importants. FRONTIERE DE LANGUE : les segments de route sous src/app/ sont désormais rangés du côté français, parce qu'un nom de dossier y est un segment d'URL, donc une adresse lue par un être humain ; les fichiers techniques qui les composent gardent le nom imposé par le cadre, et tout ce qui est hors de src/app/ suit la règle anglaise. ENUMERATIONS : le nom du type ET ses valeurs passent en anglais lors du renommage, base comprise ; les sept énumérations françaises actuelles sont inscrites dans le lot à renommer. LECTURE SEULE : la contradiction avec la tenue du journal est tranchée — un agent en lecture seule ne consigne pas lui-même, il remet son entrée au coordinateur en ligne de commande prête à exécuter ; README, rôles et passation alignés. SECURITE : trois règles ajoutées d'après les incidents des tâches 8 et 9 (nom de fichier client non assaini, path.join normalise les .. sans les borner ; inscription publique ouverte par défaut par la bibliothèque ; gabarit de secret qui passait tous les contrôles), avec les contrôles d'auditeur correspondants. OUTIL : add confirme l'écriture avant de compter et transforme l'échec du total en avertissement, pour ne plus faire ressaisir une entrée déjà écrite ; schemaVersion refuse un format plus récent au lieu de le relire avec les règles d'aujourd'hui ; le test d'échappement du tube, prouvé sans pouvoir par mutation, asserte maintenant la ligne entière du tableau. Identifiants de tests/tools/agent-journal.test.ts renommés en anglais. Compteur de tests de la passation remplacé par la commande qui le donne. Liste des couches complétée (components, styles, proxy).
+
+- **Modèle** : claude-opus-5
+- **Tests** : 240 Vitest (23 fichiers) → 243 Vitest (23 fichiers)
+- **Fichiers** : `docs/CONVENTIONS.md`, `docs/journal/README.md`, `docs/journal/JOURNAL.md`, `docs/journal/entries.jsonl`, `docs/passation/2026-08-29-v1.0-taches-1-a-12.md`, `CLAUDE.md`, `tools/agent-journal/cli.mjs`, `tools/agent-journal/journal.mjs`, `tests/tools/agent-journal.test.ts`
+- **Réserve** : Champ commit laissé vide à dessein : ce commit contient cette entrée, il ne peut donc pas citer son propre identifiant (CONVENTIONS § 7).
+- **Réserve** : Playwright n'a pas été relancé : aucun fichier de src/ ni de e2e/ n'a bougé. Je ne vérifie donc aucun chiffre de bout en bout.
+- **Réserve** : La règle sur les énumérations est écrite, pas appliquée : les sept énumérations et leurs valeurs françaises sont toujours en base. Le renommage et sa migration restent un travail séparé.
+- **Réserve** : Les deux incidents des tâches 8 et 9 n'ont pas été rejoués : les règles sont rédigées d'après .superpowers/sdd/progress.md et d'après le code actuel, qui porte déjà les correctifs (media.ts assainit, auth.ts pose disableSignUp, .env.example a un gabarit vide).
+
+### 2026-08-30 · Développeur — consigné
+
+Complète l'entrée précédente par une mesure faite après elle. Six exécutions complètes de npm test sur le même arbre : cinq vertes à 243 tests sur 23 fichiers, une rouge à 8 fichiers en échec d'un coup — le symptôme trompeur d'une régression — lancée juste après npm run build. Le conteneur PostgreSQL était pourtant accepting connections et à 44 h d'uptime : ce n'était donc pas la cause habituelle. Cause identifiée, NON corrigée parce que hors de cette tâche : le beforeAll de tests/admin/produits-query.test.ts crée 25 produits en 25 allers-retours séquentiels, sous le délai de garde par défaut de 10 s de Vitest. Mesuré : ce fichier seul met 16,17 s à froid, puis 8,46 s et 6,49 s à chaud, et passe 3 fois sur 3 isolé. La correction est de créer les 25 lignes en un seul createMany, PAS de relever le délai ni d'ajouter un retry. Aucun contournement posé. Consigné dans les réserves de la passation.
+
+- **Modèle** : claude-opus-5
+- **Fichiers** : `docs/passation/2026-08-29-v1.0-taches-1-a-12.md`
+- **Réserve** : Le lien de causalité entre la charge machine et le dépassement du délai est déduit des durées mesurées, pas prouvé par une exécution instrumentée.

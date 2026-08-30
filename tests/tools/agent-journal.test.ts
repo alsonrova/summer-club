@@ -11,39 +11,42 @@ import { fileURLToPath } from 'node:url'
 // vraie CLI dans un sous-processus, sur un fichier de journal jetable. Ce test vérifie
 // exactement ce que le journal promet — ne perdre aucune entrée, n'en écrire aucune de
 // fausse — plutôt que les détails internes de ses fonctions.
+//
+// Les identifiants sont en anglais et les libellés de test en français : c'est la règle du
+// dépôt (docs/CONVENTIONS.md § 1).
 const CLI = fileURLToPath(new URL('../../tools/agent-journal/cli.mjs', import.meta.url))
 
-let dossier: string
-let journal: string
+let directory: string
+let journalFile: string
 
-function lancer(...args: string[]): { code: number; sortie: string; erreur: string } {
-  const res = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' })
-  return { code: res.status ?? -1, sortie: res.stdout ?? '', erreur: res.stderr ?? '' }
+function run(...args: string[]): { code: number; stdout: string; stderr: string } {
+  const result = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' })
+  return { code: result.status ?? -1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
 }
 
-function ajouter(...args: string[]) {
-  return lancer('add', '--journal', journal, ...args)
+function add(...args: string[]) {
+  return run('add', '--journal', journalFile, ...args)
 }
 
 beforeEach(() => {
-  dossier = mkdtempSync(join(tmpdir(), 'summerclub-journal-'))
-  journal = join(dossier, 'entries.jsonl')
+  directory = mkdtempSync(join(tmpdir(), 'summerclub-journal-'))
+  journalFile = join(directory, 'entries.jsonl')
 })
 
 afterEach(() => {
-  rmSync(dossier, { recursive: true, force: true })
+  rmSync(directory, { recursive: true, force: true })
 })
 
 describe('agent-journal — ajout et relecture', () => {
   it('rend exactement ce qui a été écrit, champ par champ', () => {
     // Un résumé qui contient tout ce qui casserait un format naïf : guillemets, saut de
     // ligne, tube de tableau markdown, accents.
-    const resume = 'Ligne 1 avec "guillemets"\nLigne 2 | tube — accentué'
-    const ajout = ajouter(
+    const summary = 'Ligne 1 avec "guillemets"\nLigne 2 | tube — accentué'
+    const added = add(
       '--task', '12',
       '--role', 'auditor',
       '--model', 'un-modele',
-      '--summary', resume,
+      '--summary', summary,
       '--verdict', 'changes-requested',
       '--commit', 'bbaa4a9',
       '--tests-before', '185 Vitest / 13 Playwright',
@@ -56,19 +59,19 @@ describe('agent-journal — ajout et relecture', () => {
       '--caveat', 'une réserve ouverte',
       '--timestamp', '2026-08-29T02:22:10+03:00',
     )
-    expect(ajout.code).toBe(0)
+    expect(added.code).toBe(0)
 
-    const lu = lancer('list', '--journal', journal, '--json')
-    expect(lu.code).toBe(0)
-    const entrees = JSON.parse(lu.sortie) as unknown[]
-    expect(entrees).toHaveLength(1)
-    expect(entrees[0]).toEqual({
+    const listed = run('list', '--journal', journalFile, '--json')
+    expect(listed.code).toBe(0)
+    const entries = JSON.parse(listed.stdout) as unknown[]
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toEqual({
       schemaVersion: 1,
       timestamp: '2026-08-29T02:22:10+03:00',
       task: '12',
       role: 'auditor',
       model: 'un-modele',
-      summary: resume,
+      summary,
       files: ['src/server/order-status-service.ts', 'tests/server/statut.test.ts'],
       commit: 'bbaa4a9',
       testsBefore: '185 Vitest / 13 Playwright',
@@ -85,85 +88,85 @@ describe('agent-journal — ajout et relecture', () => {
   })
 
   it('ajoute à la fin sans toucher aux entrées déjà écrites', () => {
-    ajouter('--task', '1', '--role', 'developer', '--summary', 'première', '--verdict', 'delivered')
-    const apresPremiere = readFileSync(journal, 'utf8')
+    add('--task', '1', '--role', 'developer', '--summary', 'première', '--verdict', 'delivered')
+    const afterFirst = readFileSync(journalFile, 'utf8')
 
-    ajouter('--task', '2', '--role', 'auditor', '--summary', 'seconde', '--verdict', 'approved')
-    const apresSeconde = readFileSync(journal, 'utf8')
+    add('--task', '2', '--role', 'auditor', '--summary', 'seconde', '--verdict', 'approved')
+    const afterSecond = readFileSync(journalFile, 'utf8')
 
     // Append-only : le contenu d'avant est un préfixe exact du contenu d'après.
-    expect(apresSeconde.startsWith(apresPremiere)).toBe(true)
-    expect(apresSeconde.trimEnd().split('\n')).toHaveLength(2)
+    expect(afterSecond.startsWith(afterFirst)).toBe(true)
+    expect(afterSecond.trimEnd().split('\n')).toHaveLength(2)
 
-    const lu = lancer('list', '--journal', journal, '--json')
-    const entrees = JSON.parse(lu.sortie) as { summary: string }[]
-    expect(entrees.map((e) => e.summary)).toEqual(['première', 'seconde'])
+    const listed = run('list', '--journal', journalFile, '--json')
+    const entries = JSON.parse(listed.stdout) as { summary: string }[]
+    expect(entries.map((entry) => entry.summary)).toEqual(['première', 'seconde'])
   })
 
   it('écrit une entrée par ligne, même avec un résumé multiligne', () => {
-    ajouter('--task', '1', '--role', 'developer', '--summary', 'a\nb\nc', '--verdict', 'delivered')
-    ajouter('--task', '1', '--role', 'developer', '--summary', 'd', '--verdict', 'delivered')
-    expect(readFileSync(journal, 'utf8').trimEnd().split('\n')).toHaveLength(2)
+    add('--task', '1', '--role', 'developer', '--summary', 'a\nb\nc', '--verdict', 'delivered')
+    add('--task', '1', '--role', 'developer', '--summary', 'd', '--verdict', 'delivered')
+    expect(readFileSync(journalFile, 'utf8').trimEnd().split('\n')).toHaveLength(2)
   })
 })
 
 describe('agent-journal — refus des entrées fausses', () => {
   it('refuse un rôle inconnu et n\'écrit rien', () => {
-    const res = ajouter('--task', '1', '--role', 'stagiaire', '--summary', 'x', '--verdict', 'delivered')
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('stagiaire')
+    const result = add('--task', '1', '--role', 'stagiaire', '--summary', 'x', '--verdict', 'delivered')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('stagiaire')
     // Rien n'a été créé : un refus ne laisse pas de trace partielle.
-    expect(lancer('list', '--journal', journal).sortie).toContain('Aucune entrée')
+    expect(run('list', '--journal', journalFile).stdout).toContain('Aucune entrée')
   })
 
   it('refuse un verdict inconnu', () => {
-    const res = ajouter('--task', '1', '--role', 'developer', '--summary', 'x', '--verdict', 'peut-etre')
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('peut-etre')
+    const result = add('--task', '1', '--role', 'developer', '--summary', 'x', '--verdict', 'peut-etre')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('peut-etre')
   })
 
   it('refuse une entrée sans résumé', () => {
-    const res = ajouter('--task', '1', '--role', 'developer', '--verdict', 'delivered')
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('summary')
+    const result = add('--task', '1', '--role', 'developer', '--verdict', 'delivered')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('summary')
   })
 
   it('refuse un commit qui n\'en est pas un', () => {
-    const res = ajouter(
+    const result = add(
       '--task', '1', '--role', 'developer', '--summary', 'x',
       '--verdict', 'delivered', '--commit', 'HEAD~1',
     )
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('commit')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('commit')
   })
 
   it('refuse un horodatage illisible', () => {
-    const res = ajouter(
+    const result = add(
       '--task', '1', '--role', 'developer', '--summary', 'x',
       '--verdict', 'delivered', '--timestamp', 'hier',
     )
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('hier')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('hier')
   })
 })
 
 describe('agent-journal — un journal abîmé se voit', () => {
   it('échoue en citant la ligne illisible au lieu de la sauter en silence', () => {
-    ajouter('--task', '1', '--role', 'developer', '--summary', 'valide', '--verdict', 'delivered')
-    appendFileSync(journal, '{ceci n\'est pas du JSON}\n', 'utf8')
-    ajouter('--task', '2', '--role', 'developer', '--summary', 'après', '--verdict', 'delivered')
+    add('--task', '1', '--role', 'developer', '--summary', 'valide', '--verdict', 'delivered')
+    appendFileSync(journalFile, '{ceci n\'est pas du JSON}\n', 'utf8')
+    add('--task', '2', '--role', 'developer', '--summary', 'après', '--verdict', 'delivered')
 
-    const res = lancer('list', '--journal', journal)
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('Ligne 2')
+    const result = run('list', '--journal', journalFile)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('Ligne 2')
     // Le point de ce test : la sortie ne doit surtout pas être « 2 entrées » — ce serait
     // une entrée disparue sans un mot.
-    expect(res.sortie).not.toContain('valide')
+    expect(result.stdout).not.toContain('valide')
   })
 
   it('échoue sur une entrée syntaxiquement valide mais au rôle inventé', () => {
     writeFileSync(
-      journal,
+      journalFile,
       `${JSON.stringify({
         schemaVersion: 1,
         timestamp: '2026-08-29T00:00:00+03:00',
@@ -174,58 +177,108 @@ describe('agent-journal — un journal abîmé se voit', () => {
       })}\n`,
       'utf8',
     )
-    const res = lancer('list', '--journal', journal)
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('Ligne 1')
+    const result = run('list', '--journal', journalFile)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('Ligne 1')
+  })
+
+  it('confirme l\'écriture même quand une ligne déjà présente est illisible', () => {
+    // Le total affiché par « add » relit tout le fichier. Si le journal porte déjà une
+    // ligne abîmée, cette relecture lève — et l'agent voit une erreur alors que son entrée
+    // EST enregistrée. Il la ressaisit, et le journal double. L'écriture se confirme donc
+    // avant, et le total se tente après, en avertissement séparé.
+    add('--task', '1', '--role', 'developer', '--summary', 'avant la casse', '--verdict', 'delivered')
+    appendFileSync(journalFile, '{ceci n\'est pas du JSON}\n', 'utf8')
+
+    const result = add(
+      '--task', '2', '--role', 'developer', '--summary', 'après la casse', '--verdict', 'delivered',
+    )
+
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('Entrée ajoutée')
+    expect(result.stdout).toContain('après la casse')
+    // Le total n'a pas pu être calculé : un avertissement qui dit explicitement que
+    // l'entrée est enregistrée, pas un échec d'écriture.
+    expect(result.stdout).not.toContain('au total')
+    expect(result.stderr).toContain('Avertissement')
+    expect(result.stderr).toContain('est bien enregistrée')
+    expect(result.stderr).toContain('Ligne 2')
+
+    // Et elle est dans le fichier, une seule fois.
+    const lines = readFileSync(journalFile, 'utf8').trimEnd().split('\n')
+    expect(lines).toHaveLength(3)
+    expect(lines.filter((line) => line.includes('après la casse'))).toHaveLength(1)
+  })
+
+  it('refuse une entrée écrite par une version plus récente de l\'outil', () => {
+    // Sans ce garde, une entrée de format 2 serait relue avec les règles de la version 1,
+    // donc mal comprise en silence. Le champ schemaVersion n'aurait alors rien apporté.
+    writeFileSync(
+      journalFile,
+      `${JSON.stringify({
+        schemaVersion: 2,
+        timestamp: '2026-08-29T00:00:00+03:00',
+        task: '1',
+        role: 'developer',
+        summary: 'venue du futur',
+        verdict: 'delivered',
+      })}\n`,
+      'utf8',
+    )
+    const result = run('list', '--journal', journalFile)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('Ligne 1')
+    expect(result.stderr).toContain('schemaVersion')
+    expect(result.stdout).not.toContain('venue du futur')
   })
 
   it('refuse d\'ajouter à la suite d\'une écriture interrompue', () => {
     // Dernière ligne sans saut de ligne final : ajouter derrière fusionnerait les deux
     // entrées en une ligne illisible, donc en perdrait deux.
-    ajouter('--task', '1', '--role', 'developer', '--summary', 'valide', '--verdict', 'delivered')
-    const contenu = readFileSync(journal, 'utf8')
-    writeFileSync(journal, contenu.trimEnd(), 'utf8')
+    add('--task', '1', '--role', 'developer', '--summary', 'valide', '--verdict', 'delivered')
+    const content = readFileSync(journalFile, 'utf8')
+    writeFileSync(journalFile, content.trimEnd(), 'utf8')
 
-    const res = ajouter('--task', '2', '--role', 'developer', '--summary', 'suite', '--verdict', 'delivered')
-    expect(res.code).toBe(1)
-    expect(res.erreur).toContain('saut de ligne')
-    expect(readFileSync(journal, 'utf8')).toBe(contenu.trimEnd())
+    const result = add('--task', '2', '--role', 'developer', '--summary', 'suite', '--verdict', 'delivered')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('saut de ligne')
+    expect(readFileSync(journalFile, 'utf8')).toBe(content.trimEnd())
   })
 })
 
 describe('agent-journal — consultation et récapitulatif', () => {
   beforeEach(() => {
-    ajouter('--task', '11', '--role', 'developer', '--summary', 'écrans produits', '--verdict', 'delivered')
-    ajouter('--task', '11', '--role', 'auditor', '--summary', 'revue produits', '--verdict', 'changes-requested')
-    ajouter('--task', '12', '--role', 'developer', '--summary', 'écrans commandes', '--verdict', 'delivered')
+    add('--task', '11', '--role', 'developer', '--summary', 'écrans produits', '--verdict', 'delivered')
+    add('--task', '11', '--role', 'auditor', '--summary', 'revue produits', '--verdict', 'changes-requested')
+    add('--task', '12', '--role', 'developer', '--summary', 'écrans commandes', '--verdict', 'delivered')
   })
 
   it('filtre par tâche', () => {
-    const res = lancer('list', '--journal', journal, '--task', '11', '--json')
-    const entrees = JSON.parse(res.sortie) as { task: string }[]
-    expect(entrees).toHaveLength(2)
-    expect(entrees.every((e) => e.task === '11')).toBe(true)
+    const result = run('list', '--journal', journalFile, '--task', '11', '--json')
+    const entries = JSON.parse(result.stdout) as { task: string }[]
+    expect(entries).toHaveLength(2)
+    expect(entries.every((entry) => entry.task === '11')).toBe(true)
   })
 
   it('filtre par rôle', () => {
-    const res = lancer('list', '--journal', journal, '--role', 'developer', '--json')
-    const entrees = JSON.parse(res.sortie) as { role: string }[]
-    expect(entrees).toHaveLength(2)
-    expect(entrees.every((e) => e.role === 'developer')).toBe(true)
+    const result = run('list', '--journal', journalFile, '--role', 'developer', '--json')
+    const entries = JSON.parse(result.stdout) as { role: string }[]
+    expect(entries).toHaveLength(2)
+    expect(entries.every((entry) => entry.role === 'developer')).toBe(true)
   })
 
   it('croise les deux filtres', () => {
-    const res = lancer('list', '--journal', journal, '--task', '11', '--role', 'auditor', '--json')
-    const entrees = JSON.parse(res.sortie) as { summary: string }[]
-    expect(entrees.map((e) => e.summary)).toEqual(['revue produits'])
+    const result = run('list', '--journal', journalFile, '--task', '11', '--role', 'auditor', '--json')
+    const entries = JSON.parse(result.stdout) as { summary: string }[]
+    expect(entries.map((entry) => entry.summary)).toEqual(['revue produits'])
   })
 
   it('engendre un récapitulatif qui contient toutes les entrées', () => {
-    const sortie = join(dossier, 'JOURNAL.md')
-    const res = lancer('render', '--journal', journal, '--out', sortie)
-    expect(res.code).toBe(0)
+    const outPath = join(directory, 'JOURNAL.md')
+    const result = run('render', '--journal', journalFile, '--out', outPath)
+    expect(result.code).toBe(0)
 
-    const markdown = readFileSync(sortie, 'utf8')
+    const markdown = readFileSync(outPath, 'utf8')
     expect(markdown).toContain('écrans produits')
     expect(markdown).toContain('revue produits')
     expect(markdown).toContain('écrans commandes')
@@ -236,32 +289,58 @@ describe('agent-journal — consultation et récapitulatif', () => {
 
   it('engendre deux fois le même fichier pour les mêmes entrées', () => {
     // Un récapitulatif versionné qui changerait à chaque exécution rendrait son diff muet.
-    const premier = join(dossier, 'un.md')
-    const second = join(dossier, 'deux.md')
-    lancer('render', '--journal', journal, '--out', premier)
-    lancer('render', '--journal', journal, '--out', second)
-    expect(readFileSync(premier, 'utf8')).toBe(readFileSync(second, 'utf8'))
+    const first = join(directory, 'un.md')
+    const second = join(directory, 'deux.md')
+    run('render', '--journal', journalFile, '--out', first)
+    run('render', '--journal', journalFile, '--out', second)
+    expect(readFileSync(first, 'utf8')).toBe(readFileSync(second, 'utf8'))
   })
 
-  it('échappe le tube d\'un constat pour ne pas casser le tableau markdown', () => {
-    ajouter(
-      '--task', '13', '--role', 'ux-tester', '--summary', 'a | b',
+  // La cellule de tâche est la seule valeur libre qui entre dans le tableau de vue
+  // d'ensemble. Les deux tests qui suivent l'assèrent sur la ligne ENTIÈRE : un tube ou un
+  // saut de ligne non traité y ajouterait une colonne ou couperait la ligne en deux, et
+  // décalerait tout le tableau. Une assertion `toContain` sur l'en-tête ou sur le corps de
+  // l'entrée ne protégerait rien — elle passe même sans échappement.
+  function overviewRows(markdown: string): string[] {
+    return markdown.split('\n').filter((line) => line.startsWith('| 2026-08-29 |'))
+  }
+
+  it('échappe le tube d\'une tâche pour ne pas ajouter une colonne au tableau', () => {
+    add(
+      '--task', 'a | b', '--role', 'ux-tester', '--summary', 'résumé',
       '--verdict', 'noted', '--important', 'colonne | cassée',
+      '--timestamp', '2026-08-29T02:22:10+03:00',
     )
-    const sortie = join(dossier, 'JOURNAL.md')
-    lancer('render', '--journal', journal, '--out', sortie)
-    const markdown = readFileSync(sortie, 'utf8')
-    // Dans la ligne du tableau de vue d'ensemble, le tube de la tâche est échappé ;
-    // le corps de l'entrée, hors tableau, garde le texte tel quel.
-    expect(markdown).toContain('| Date | Tâche | Rôle | Verdict | Commit |')
+    const outPath = join(directory, 'JOURNAL.md')
+    run('render', '--journal', journalFile, '--out', outPath)
+    const markdown = readFileSync(outPath, 'utf8')
+
+    expect(overviewRows(markdown)).toEqual([
+      '| 2026-08-29 | a \\| b | Testeur UX/UI | consigné | — |',
+    ])
+    // Hors du tableau, le corps de l'entrée garde le texte tel quel : l'échappement est
+    // une contrainte du tableau, pas une réécriture du contenu.
     expect(markdown).toContain('colonne | cassée')
   })
 
+  it('aplatit le saut de ligne d\'une tâche pour ne pas couper la ligne du tableau', () => {
+    add(
+      '--task', 'a\nb', '--role', 'ux-tester', '--summary', 'résumé',
+      '--verdict', 'noted', '--timestamp', '2026-08-29T02:22:10+03:00',
+    )
+    const outPath = join(directory, 'JOURNAL.md')
+    run('render', '--journal', journalFile, '--out', outPath)
+
+    expect(overviewRows(readFileSync(outPath, 'utf8'))).toEqual([
+      '| 2026-08-29 | a b | Testeur UX/UI | consigné | — |',
+    ])
+  })
+
   it('rend un journal vide sans échouer', () => {
-    const vide = join(dossier, 'vide.jsonl')
-    const sortie = join(dossier, 'vide.md')
-    const res = lancer('render', '--journal', vide, '--out', sortie)
-    expect(res.code).toBe(0)
-    expect(readFileSync(sortie, 'utf8')).toContain('Aucune entrée')
+    const emptyJournal = join(directory, 'vide.jsonl')
+    const outPath = join(directory, 'vide.md')
+    const result = run('render', '--journal', emptyJournal, '--out', outPath)
+    expect(result.code).toBe(0)
+    expect(readFileSync(outPath, 'utf8')).toContain('Aucune entrée')
   })
 })

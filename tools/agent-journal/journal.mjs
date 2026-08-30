@@ -12,8 +12,16 @@
  * en français.
  */
 
-/** Version du format d'une entrée. Toute entrée écrite la porte, pour qu'un lecteur futur
- *  sache à quoi il a affaire sans deviner. */
+/**
+ * Version du format d'une entrée. Toute entrée écrite la porte, et la lecture REFUSE toute
+ * version supérieure à celle-ci.
+ *
+ * C'est là tout ce que ce champ apporte, et il ne faut pas lui en prêter davantage : il
+ * n'existe aucune conversion d'un format vers un autre. Sans ce refus, une entrée écrite
+ * par un outil plus récent serait relue avec les règles d'aujourd'hui — donc mal comprise,
+ * en silence. Avec lui, le lecteur sait qu'il ne sait pas, ce qui est le seul comportement
+ * acceptable pour un journal.
+ */
 export const SCHEMA_VERSION = 1
 
 /** Rôles d'agent reconnus (voir docs/CONVENTIONS.md § Rôles d'agents). */
@@ -181,6 +189,13 @@ export function normalizeEntry(input) {
   const schemaVersion = input.schemaVersion ?? SCHEMA_VERSION
   if (!Number.isInteger(schemaVersion) || schemaVersion < 1) {
     throw new JournalError('Le champ « schemaVersion » doit être un entier positif.')
+  }
+  if (schemaVersion > SCHEMA_VERSION) {
+    throw new JournalError(
+      `Cette entrée porte « schemaVersion » ${schemaVersion} ; cet outil ne connaît que le ` +
+        `format ${SCHEMA_VERSION}. Elle a été écrite par une version plus récente : mettez ` +
+        'l\'outil à jour plutôt que de la relire avec les règles d\'aujourd\'hui.',
+    )
   }
 
   return {
