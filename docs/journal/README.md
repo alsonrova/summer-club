@@ -59,8 +59,8 @@ npm run journal -- add \
   --summary "Vitrine : liste des produits, filtres par catégorie, pagination." \
   --files src/app/boutique/page.tsx --files src/app/boutique/query.ts \
   --commit a1b2c3d \
-  --tests-before "222 Vitest / 13 Playwright" \
-  --tests-after  "241 Vitest / 16 Playwright" \
+  --tests-before "<sortie réelle de npm test AVANT>" \
+  --tests-after  "<sortie réelle de npm test APRÈS>" \
   --verdict delivered \
   --caveat "Le tri par prix n'est pas couvert en bout en bout."
 
@@ -93,7 +93,7 @@ des trois commandes ci-dessus.
 | `model` | non | le modèle qui a produit le travail |
 | `commit` | non | 7 à 40 caractères hexadécimaux, refusé sinon |
 | `files` | non | fichiers touchés, une option `--files` par fichier |
-| `testsBefore` / `testsAfter` | non | chiffres **mesurés**, jamais estimés |
+| `testsBefore` / `testsAfter` | non | chiffres **mesurés**, jamais estimés ni recopiés d'un exemple |
 | `findings` | non | constats par sévérité : `critical`, `important`, `minor` |
 | `caveats` | non | ce qui reste incertain, ce qui n'a pas pu être vérifié |
 | `source` | non | `live` (défaut) ou `reconstructed` |
@@ -102,7 +102,9 @@ Les clés sont en anglais, les valeurs en français : c'est la règle du dépôt
 (`docs/CONVENTIONS.md`, § 1 — l'anglais s'arrête aux identifiants).
 
 **Un champ dont vous ne connaissez pas la valeur reste vide.** Ne remplissez jamais un chiffre
-au jugé. Un journal qui invente est pire qu'un journal incomplet : il donne à la session
+au jugé — et ne recopiez pas celui de l'exemple ci-dessus, écrit en gabarit précisément pour
+ne pas pouvoir l'être. `testsBefore` et `testsAfter` sont la **sortie réelle** de `npm test`
+(et de `npx --no-install playwright test`) lancés avant puis après votre intervention. Un journal qui invente est pire qu'un journal incomplet : il donne à la session
 suivante une confiance qu'elle n'a pas de raison d'avoir.
 
 ## Append-only

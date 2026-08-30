@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**55 entrées** · 13 tâches · Développeur 33 · Auditeur qualité et sécurité 17 · Coordinateur 5
+**56 entrées** · 13 tâches · Développeur 34 · Auditeur qualité et sécurité 17 · Coordinateur 5
 
 ## Vue d'ensemble
 
@@ -66,6 +66,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-08-29 | conventions | Développeur | livré | — |
 | 2026-08-30 | conventions | Développeur | livré | — |
 | 2026-08-30 | conventions | Développeur | consigné | — |
+| 2026-08-30 | 12 | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -550,6 +551,19 @@ Garde de type posé sur l'épinglage, décisions d'avis rendues idempotentes, co
 Erreur d'orchestration reconnue et corrigée en règle. Trois vérificateurs avaient été lancés en parallèle sur le MÊME arbre de travail, l'un d'eux autorisé à muter le code pour une preuve par mutation. Un autre a vu disparaître le garde-fou de stock sous ses yeux et a conclu à un défaut critique inexistant. Règle adoptée : les agents de vérification travaillent en LECTURE STRICTE, et une vérification par mutation se fait seule et séquentiellement.
 
 - _Entrée reconstituée a posteriori — horodatage calé sur un commit._
+
+### 2026-08-30 · Développeur — livré
+
+Correction de six constats de relecture sur docs/CONVENTIONS.md et creation de docs/RENOMMAGE.md. Critique : la promesse « renommage sans casser un seul test de bout en bout » etait fausse — les valeurs d'enumeration voyagent dans les URL de filtre du back-office (deux page.goto dans e2e/admin-avis.spec.ts, le formulaire GET d'AdminTable, urlListe cote avis) ; remplacee par le cout mesure. Compteurs figes retires (240 annonce contre 243 mesure) et remplaces par la commande. Regle de securite 5 reecrite sur le vrai vecteur de la tache 8 : le parametre de composition du chemin fourni par l'appelant, pas le nom de fichier du navigateur qui n'atteignait deja pas traiterImage. Lot a renommer donne par une commande (27 fichiers) au lieu d'une liste perimable. Regle des URL completee pour les groupes de routes, segments dynamiques et gestionnaires api/, avec les deux non-conformites du plan V1.0 signalees. Aucun code touche, aucun renommage effectue.
+
+- **Modèle** : claude-opus-5
+- **Tests** : 243 Vitest sur 23 fichiers → 243 Vitest sur 23 fichiers
+- **Fichiers** : `docs/CONVENTIONS.md`, `docs/RENOMMAGE.md`, `docs/journal/README.md`, `docs/passation/2026-08-29-v1.0-taches-1-a-12.md`, `CLAUDE.md`
+- **Réserve** : Constat 5 partiellement infonde : le document couvrait DEJA les groupes de routes, les segments dynamiques et api/. La section a ete completee (nos propres gestionnaires api/, exemples des taches 13-20) plutot que creee.
+- **Réserve** : Constat sur les enumerations deja anglaises : une seule des sept l'est entierement (TypePromo), pas deux. Canal et Role ont chacune des valeurs sans traduction (orange_money, whatsapp, admin). Les trois cas sont traites explicitement dans RENOMMAGE.md.
+- **Réserve** : Fichiers orphelins de public/uploads : le defaut de fond est verifie (effacerFichiersMedia n'a qu'un seul appelant, supprimerMedia ; supprimer un produit ne touche pas le disque), mais l'origine des six fichiers n'a pas pu etre etablie — ils etaient deja supprimes. e2e/admin-produits.spec.ts et tests/server/media.test.ts compensent deja a la main ; seule une execution interrompue laisse des orphelins.
+- **Réserve** : Non verifie : ce que prisma migrate dev genere pour un renommage d'enumeration. Non lance volontairement (risque de reset de la base de dev). Signale dans RENOMMAGE.md comme a verifier en --create-only avant application.
+- **Réserve** : Les noms cibles anglais sont des propositions argumentees, non validees par le proprietaire. Les points ambigus sont marques dans RENOMMAGE.md.
 
 ## Tâche conventions
 

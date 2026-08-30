@@ -5,6 +5,9 @@ sur ce dépôt : langue, architecture, sécurité, tests, rôles d'agents. Il l'
 habitude venue d'un autre projet.
 
 - Conventions : `docs/CONVENTIONS.md`
+- Renommage des identifiants français : `docs/RENOMMAGE.md` — table de correspondance,
+  points de vigilance et ordre d'exécution. **Ne renommez rien en passant** (§ 1 des
+  conventions) ; quand la tâche viendra, c'est ce document qu'on suit.
 - Journal des agents : `docs/journal/README.md` — consignez votre intervention en fin de tâche
   (en lecture seule ? remettez la commande au coordinateur, ne l'exécutez pas)
 - Dernière passation : `docs/passation/` (le fichier le plus récent)

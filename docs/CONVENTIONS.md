@@ -73,13 +73,54 @@ Concrètement, sous `src/app/` :
   `page.tsx`, `layout.tsx`, `route.ts`, `loading.tsx`, `error.tsx`. On ne les choisit pas.
   Les fichiers voisins que nous choisissons, eux, suivent la règle anglaise dès lors qu'ils
   ne paraissent dans aucune URL : `actions.ts`, `query.ts` sont des noms techniques, pas des
-  adresses. (`etats.ts` est un reste français ; il fait partie du lot à renommer.)
+  adresses. (`etats.ts` est un reste français — **il y en a trois**, un par écran
+  d'administration ; ils font partie du lot à renommer.)
 - **Ce qui ne paraît pas dans l'URL suit la règle anglaise** : groupes de routes entre
   parenthèses, et segments dynamiques entre crochets — `[id]`, `[...all]`. Attention
   toutefois : renommer un groupe de routes ne change aucune adresse, mais renommer un
   segment dynamique change le nom du paramètre que le code reçoit.
 - **`src/app/api/` n'est pas une adresse que la cliente lit** : `api/auth/[...all]` est
   l'interface d'une bibliothèque, imposée par elle. Ces segments restent en anglais.
+
+#### Les trois cas que la vitrine va créer (tâches 13 à 20)
+
+Les règles ci-dessus suffisent à l'existant. Elles sont muettes sur ce qui n'existe pas
+encore, et le plan V1.0 les enfreint déjà en deux endroits. Trois cas, tranchés :
+
+**1. Un groupe de routes — `(nom)` — n'apparaît PAS dans l'URL.** C'est un dossier de
+regroupement : Next.js le retire du chemin. `src/app/(boutique)/panier/page.tsx` sert
+`/panier`, pas `/boutique/panier`. Il n'est donc jamais lu par un être humain hors du dépôt :
+**il est en anglais**, comme n'importe quel dossier technique. Le plan écrit
+`src/app/(boutique)/…` (tâches 14 à 20) : **c'est à corriger en `(storefront)`** au moment de
+créer ces routes, pas après. Le renommer plus tard ne changera aucune adresse — c'est
+précisément ce qui rend l'erreur indolore à commettre et durable à garder.
+
+Conséquence de sécurité, déjà payée ici (§ 4, règle 6) : parce qu'un groupe est invisible
+dans l'URL, une page rangée dans le mauvais groupe est publique **sans aucun symptôme**. Le
+nom du groupe est une information pour le relecteur, pas pour la cliente — raison de plus
+pour qu'il soit exact et technique.
+
+**2. Un segment dynamique — `[nom]` — n'apparaît pas non plus : c'est sa VALEUR qui
+apparaît.** `boutique/[slug]` sert `/boutique/collier-etoile`. Le crochet nomme un paramètre
+de code, pas une adresse : **il est en anglais** — `[id]`, `[slug]`, `[token]`,
+`[provider]`, `[...all]`. Le plan est déjà conforme sur ce point. Attention : ce nom est le
+nom de la clé reçue dans `params`, donc le renommer casse le code appelant, pas les URL —
+l'inverse exact d'un segment statique.
+
+**3. Un gestionnaire de route sous `api/` est une adresse, mais aucune cliente ne la lit.**
+C'est le cas que le point précédent sur `api/auth/[...all]` ne couvrait qu'à moitié : il
+justifiait l'anglais par « imposé par la bibliothèque », ce qui ne dit rien des routes que
+**nous** écrivons. La règle générale tranche quand même — le critère est « un être humain
+le lit-il dans une barre d'adresse ? », et la réponse est non : `/api/**` est consommé par
+une machine (un webhook de paiement, un client `fetch`), jamais recopié ni prononcé.
+**Tout `src/app/api/` est en anglais, y compris nos propres gestionnaires.** Le plan écrit
+`src/app/api/paiement/[provider]/webhook/route.ts` (tâche 19) : **c'est à créer en
+`api/payments/[provider]/webhook/`.** Un webhook dont l'URL est communiquée à un prestataire
+est en outre coûteux à changer après coup — il faut la faire modifier chez lui.
+
+Le principe qui produit ces trois réponses, à réappliquer aux cas non prévus : **ce qu'un
+être humain lit dans une barre d'adresse est en français ; tout le reste suit la règle
+anglaise.**
 
 **Partout ailleurs, la règle anglaise s'applique sans exception** : `src/domain/`,
 `src/server/`, `src/admin/`, `src/components/`, `src/styles/`, `tests/`, `tools/`, `e2e/`,
@@ -96,32 +137,98 @@ comprise.**
 Ce qu'un être humain lit n'est jamais la valeur brute, c'est sa traduction affichée :
 `LIBELLES_STATUT` (`src/admin/resources/orders.ts`) rend déjà `en_preparation` par
 « En préparation », et `LIBELLES_TRANSITION` la rend par « Mettre en préparation » sur un
-bouton. Cette indirection existe déjà partout, elle est le bon endroit pour le français, et
-c'est elle qui rendra le renommage possible sans toucher à un seul libellé — donc sans
-casser un seul test de bout en bout.
+bouton. Cette indirection existe déjà partout et elle est le bon endroit pour le français :
+**le renommage ne touche aucun libellé.**
+
+#### Ce que le renommage touche quand même
+
+Ce document a d'abord conclu de ce qui précède que le renommage se ferait « sans toucher à
+un seul libellé, **donc sans casser un seul test de bout en bout** ». La première moitié est
+vraie ; la seconde est fausse, et c'est celle-là sur laquelle un agent chargé du renommage se
+reposerait. Une valeur d'énumération n'est pas seulement stockée : **elle voyage dans l'URL
+des filtres du back-office**, où rien ne la traduit.
+
+Relevé le 2026-08-30 (pour la tête exacte : `git log -1`) :
+
+| Où | Quoi | Ce qui casse |
+| --- | --- | --- |
+| `e2e/admin-avis.spec.ts:80` et `:91` | `page.goto('/admin/avis?statut=en_attente')`, puis `?statut=publie` | la valeur est écrite en dur dans une URL : renommée en base, la page ne filtre plus, la ligne attendue n'est plus là, le test rougit |
+| `src/app/admin/avis/page.tsx` (`urlListe`) | construit `?statut=<valeur>` à partir de `STATUTS_AVIS` | toute la navigation par statut de l'écran avis porte la valeur brute |
+| `src/app/admin/commandes/page.tsx` + `src/admin/engine/table.tsx` | `<form method="get">` dont les `<select name="statut">` / `name="canal"` ont pour `value` les valeurs d'énumération | filtrer envoie `?statut=…&canal=…` : **chaque filtre du back-office est une URL porteuse d'une valeur d'énumération** |
+| `AuditLog.avant` / `AuditLog.apres` | colonnes `Json` où `appliquerStatut` écrit `{ statut: 'en_preparation' }` | **aucune migration d'énumération ne les touche** — ce sont des colonnes Json, pas le type PostgreSQL. L'historique de la fiche commande garde les anciennes chaînes ; `libelleStatut` rend telle quelle une valeur inconnue, donc l'historique affichera `en_preparation` au lieu de « En préparation », **sans erreur ni symptôme** |
+| Signets, liens collés dans WhatsApp | `/admin/commandes?statut=confirmee` | cessent de filtrer, en silence |
+
+Et le volume brut des littéraux à réécrire en même temps que la base — mesuré le
+2026-08-30 : **304 occurrences**, réparties en `tests/` 200, `src/` 67, `prisma/` 24,
+`e2e/` 13 (sur 7 lignes, 2 fichiers). Pour le compte à jour :
+
+```bash
+grep -rnoE "'(en_attente_confirmation|en_attente_paiement|confirmee|en_preparation|expediee|prete_retrait|livree|annulee|echec_paiement|en_attente|publie|rejete|verifie|importe|orange_money|whatsapp|livraison|membre|percent|fixed)'" src/ prisma/ tests/ e2e/ | wc -l
+```
+
+Une règle qui sous-estime son coût est pire qu'une règle absente : elle fait partir un agent
+avec une fausse carte. La table de correspondance complète, les points de vigilance et
+l'ordre d'exécution sont dans **`docs/RENOMMAGE.md`**.
 
 **État actuel des énumérations, à ne pas confondre avec la règle.** Le schéma en porte sept,
 aux noms français — `Role`, `Canal`, `StatutCommande`, `PortePromo`, `TypePromo`,
-`SourceAvis`, `StatutAvis` — avec des valeurs françaises (`en_attente_confirmation`,
-`prete_retrait`, `echec_paiement`, `verifie`, `publie`, `rejete`, `membre`…). Une seule fait
-exception, et c'est bien ce qui montre que la frontière avait glissé : `TypePromo` porte
-déjà `percent` et `fixed`. **Les sept sont dans le lot à renommer**, valeurs comprises, avec
-la migration Prisma qui va avec — la partie la plus délicate du renommage, puisqu'elle
-touche des données déjà écrites.
+`SourceAvis`, `StatutAvis` — avec des valeurs majoritairement françaises
+(`en_attente_confirmation`, `prete_retrait`, `echec_paiement`, `verifie`, `publie`,
+`rejete`, `membre`…). Trois cas ne demandent pourtant aucune traduction de valeur, et il
+faut les distinguer plutôt que de les renommer par symétrie :
+
+- **`TypePromo` porte déjà `percent` et `fixed`** — la seule des sept dont *toutes* les
+  valeurs sont déjà anglaises. Seul son nom de type change. C'est bien ce qui montre que la
+  frontière avait glissé : la même passe avait tranché en anglais ici et en français ailleurs.
+- **`Canal` porte `orange_money` et `whatsapp`**, qui sont des noms propres : ils ne se
+  traduisent pas et ne bougent pas. Seule `livraison` est une valeur française.
+- **`Role` porte `admin`**, identique dans les deux langues. Seule `membre` bouge.
+
+**Les sept types sont dans le lot à renommer**, valeurs comprises quand elles sont
+françaises, avec la migration Prisma qui va avec — la partie la plus délicate du renommage,
+puisqu'elle touche des données déjà écrites (les sept types existent bien dans la base, avec
+ces valeurs exactes : `\dT+ public.*` sous `psql`).
 
 ### Ce qui reste à renommer
 
 **État actuel, à ne pas confondre avec la règle.** Une bonne partie du code existant porte
 des identifiants français ou mixtes — `appliquerStatut`, `listerProduitsPagines`, `STATUTS`,
 `champsSysteme`, `resolvePrix`, et les colonnes `nom`, `prixBase`, `deltaPrix`,
-`joursSemaine`. S'y ajoutent les sept énumérations avec leurs valeurs, et le fichier
-`src/app/admin/produits/etats.ts`. Ils précèdent cette règle. **Le renommage est un travail
-séparé, gouverné par ce document — ne renommez rien en passant.** Un renommage opportuniste
-au milieu d'une tâche fonctionnelle rend la revue impossible et casse les tests de bout en
-bout sans que personne ne sache pourquoi. Le code neuf, lui, suit la règle dès maintenant.
+`joursSemaine`. S'y ajoutent les sept énumérations avec leurs valeurs. Ils précèdent cette
+règle. **Le renommage est un travail séparé, gouverné par ce document — ne renommez rien en
+passant.** Un renommage opportuniste au milieu d'une tâche fonctionnelle rend la revue
+impossible et casse les tests de bout en bout sans que personne ne sache pourquoi. Le code
+neuf, lui, suit la règle dès maintenant.
+
+**Le lot ne se dresse pas en liste : il se mesure.** Une liste de fichiers écrite ici serait
+fausse au prochain commit — c'est exactement le défaut que le § 7 interdit. Le critère est
+donc une commande. Est non conforme tout fichier dont le nom, **hors nom imposé par le cadre**
+(`page`, `layout`, `route`, `loading`, `error`, `not-found`, `template`, `default`), contient
+un mot français :
+
+```bash
+git ls-files 'src/*' 'tests/*' 'e2e/*' 'tools/*' 'prisma/seed.ts' \
+| grep -vE '/(page|layout|route|loading|error|not-found|template|default)\.[jt]sx?$' \
+| grep -E '(^|/)[^/]*(etat|avis|formulaire|temoignage|bouton|statut|declinaison|carte|produit|commande|deconnexion|erreur|champ|systeme|nombre|compte|membre|acces|refuse|connexion|nouveau|panier|prix|remise|zone|livraison)[^/]*\.(ts|tsx|mjs|js)$'
+```
+
+*(Le vocabulaire de la seconde expression est celui réellement rencontré dans ce dépôt ; un
+mot français nouveau dans un nom de fichier s'y ajoute. Les dossiers ne sont pas filtrés :
+`admin/produits/` est un segment de route, donc conforme — voir ci-dessous.)*
+
+**Résultat de cette commande le 2026-08-30 : 27 fichiers.** C'est une mesure datée, pas un
+état permanent : relancez-la, ne la recopiez pas. Trois d'entre eux sont des `etats.ts` — ce
+document a longtemps écrit « le fichier `etats.ts` » au singulier, il y en a trois
+(`src/app/admin/{avis,commandes,produits}/etats.ts`).
 
 **Ce qui n'est PAS dans ce lot : les segments de route en français.** Ils sont conformes,
 pas en retard. `admin/produits` ne deviendra jamais `admin/products`.
+
+**Le nom cible de chaque identifiant est déjà écrit** — énumérations et valeurs, colonnes
+Prisma, 138 identifiants exportés, les 27 fichiers, ce qui ne change pas, les pièges et
+l'ordre d'exécution : **`docs/RENOMMAGE.md`**. Le renommage doit être mécanique ; s'il
+demande un arbitrage de vocabulaire, c'est que cette table est incomplète — complétez-la
+plutôt que de trancher dans le code.
 
 ## 2. Architecture : quatre couches, une seule direction
 
@@ -324,20 +431,38 @@ dans ce dépôt.
    cas, la propriétaire reçoit une `PrismaClientUnknownRequestError` au lieu d'un message.
    Le contrôle métier passe avant.
 
-5. **Aucune donnée venue du client ne compose un chemin de fichier sans être réduite à une
-   forme que nous avons choisie.** `path.join` normalise les `..` — il ne les borne pas : il
-   calcule sagement le chemin qui sort du dossier cible et le rend sans se plaindre. Défaut
-   réel de la tâche 8 : le nom de fichier fourni au téléversement n'était pas assaini,
-   **traversée de chemin confirmée**. La forme à appliquer est un filtre par liste blanche,
-   pas un nettoyage : `traiterImage` (`src/server/media.ts`) réduit le nom à
-   `path.basename(...)` puis **refuse** tout ce qui ne correspond pas à `/^[A-Za-z0-9_-]+$/`.
-   Refuser, pas corriger — un nom qu'on répare en silence est un nom qu'on n'a pas compris.
-   Quand la valeur ne peut pas se réduire à un nom simple (sous-dossiers légitimes),
-   la liste blanche ne suffit plus : il faut alors résoudre le chemin et vérifier qu'il reste
-   sous le dossier cible. Enfin, **ce contrôle appartient à la fonction qui écrit, pas à son
-   appelant** : c'est elle qui connaît le dossier cible, et c'est le seul endroit qu'un futur
-   appelant ne peut pas oublier. (Même raisonnement pour le suffixe anti-collision, remonté
-   de l'appelant vers `traiterImage` à la même tâche.)
+5. **Aucune valeur ne compose un chemin de fichier sans être réduite à une forme que nous
+   avons choisie — quelle que soit sa provenance.** `path.join` normalise les `..` — il ne
+   les borne pas : il calcule sagement le chemin qui sort du dossier cible et le rend sans se
+   plaindre.
+
+   **Le vecteur réel de la tâche 8, à ne pas confondre avec celui qu'on attend.** Ce document
+   a d'abord écrit que « le nom de fichier fourni au téléversement n'était pas assaini ».
+   C'est faux, et l'erreur n'est pas anodine : elle désigne un danger que ce code n'a jamais
+   couru, et laisse le vrai ouvert. Le nom envoyé par le navigateur (`fichier.name`)
+   **n'atteignait déjà pas** la fonction d'écriture. Le vecteur était le **paramètre de
+   composition du chemin de sortie fourni par l'appelant** : `traiterImage(buffer, nomBase)`
+   (`src/server/media.ts`) construisait `path.join(DOSSIER, …)` à partir de `nomBase` sans le
+   borner. Le ledger de la tâche 8 le dit dans ces termes : « `nomBase` non assaini →
+   traversée de chemin confirmée ». Aujourd'hui l'unique appelant lui passe `productId`
+   (`src/app/admin/produits/actions.ts`), une valeur qui ne vient pas du formulaire.
+
+   **C'est précisément ce qui rend la règle nécessaire.** Un paramètre fourni par l'appelant
+   se lit comme sûr — il l'est peut-être aujourd'hui. Il suffit qu'un futur appelant y passe
+   un slug saisi, un nom de catégorie, un identifiant reçu dans une requête, pour que la
+   traversée revienne ; et ce futur appelant n'aura aucune raison de rouvrir la fonction
+   d'écriture. **Une fonction qui écrit sur le disque n'accorde donc aucune confiance à sa
+   propre signature.**
+
+   La forme à appliquer est un filtre par liste blanche, pas un nettoyage : `traiterImage`
+   réduit le nom à `path.basename(...)` puis **refuse** tout ce qui ne correspond pas à
+   `/^[A-Za-z0-9_-]+$/`. Refuser, pas corriger — un nom qu'on répare en silence est un nom
+   qu'on n'a pas compris. Quand la valeur ne peut pas se réduire à un nom simple
+   (sous-dossiers légitimes), la liste blanche ne suffit plus : il faut alors résoudre le
+   chemin et vérifier qu'il reste sous le dossier cible. Enfin, **ce contrôle appartient à la
+   fonction qui écrit, pas à son appelant** : c'est elle qui connaît le dossier cible, et
+   c'est le seul endroit qu'un futur appelant ne peut pas oublier. (Même raisonnement pour le
+   suffixe anti-collision, remonté de l'appelant vers `traiterImage` à la même tâche.)
 
 6. **Ce qu'une bibliothèque ouvre par défaut est fermé explicitement, et la fermeture se
    vérifie de l'extérieur, par une requête.** Monter une bibliothèque d'authentification,
@@ -442,12 +567,27 @@ versionné AVEC le changement qu'il décrit ne peut pas contenir le SHA du commi
 contient : il sera toujours en retard d'un cran. Écrivez « pour la tête exacte : `git log -1` ».
 
 **Même raisonnement pour tout compteur.** Le nombre de tests d'une passation est faux au
-moment même où le commit qui la porte ajoute des tests — la passation des tâches 1 à 12
-annonçait « 222 tests (22 fichiers) » dans le commit qui en portait 240 sur 23. Un chiffre
-n'a sa place dans un document versionné que **daté et présenté comme une mesure d'alors** ;
-pour la valeur courante, renvoyez à la commande qui la donne, exactement comme on renvoie à
-`git log -1` pour la tête. Le journal (§ 9), lui, est daté par nature : c'est le bon endroit
-pour un chiffre mesuré, parce qu'il n'y prétend jamais décrire le présent.
+moment même où le commit qui la porte ajoute des tests. La passation des tâches 1 à 12 a
+annoncé « 222 tests (22 fichiers) » dans un commit qui en portait davantage ; **corrigée,
+elle a figé « 240 tests sur 23 fichiers » — et `npm test` sur ce même arbre en a mesuré
+243.** Le paragraphe qui enseignait à ne pas figer un compteur en figeait donc un faux, deux
+fois de suite. C'est le défaut le plus tenace de ce dépôt : on ne le corrige pas en
+remplaçant le chiffre par un meilleur chiffre.
+
+La règle : **un compteur n'a sa place dans un document versionné que daté et présenté comme
+une mesure d'alors** ; pour la valeur courante, renvoyez à la commande qui la donne,
+exactement comme on renvoie à `git log -1` pour la tête.
+
+```bash
+npm test                          # nombre de tests Vitest et de fichiers
+npx --no-install playwright test  # tests de bout en bout (exige npm run build avant)
+```
+
+Le journal (§ 9), lui, est daté par nature : c'est le bon endroit pour un chiffre mesuré,
+parce qu'il n'y prétend jamais décrire le présent. Corollaire pour ses champs `--tests-before`
+et `--tests-after` : ils se remplissent avec la **sortie réelle** des commandes ci-dessus,
+lancées avant et après votre intervention — jamais avec le chiffre lu dans un exemple de
+documentation, jamais avec celui d'une passation, jamais de tête.
 
 ## 8. Rôles d'agents
 
@@ -478,11 +618,13 @@ trouvé :
   et vérifiez qu'elle existe aussi côté serveur. Scénario de référence : deux onglets ouverts.
 - **Le symétrique du cas déjà corrigé.** Une passe précédente a fermé `statut` et laissé
   `epingle`, dans le même fichier.
-- **Chemins de fichiers composés à partir d'une donnée du client.** Suivez chaque nom reçu
-  jusqu'au `writeFile`. `path.join` normalise les `..` sans borner le résultat : la traversée
-  de chemin de la tâche 8 est passée par là. Cherchez la liste blanche, et vérifiez qu'elle
-  **refuse** au lieu de réparer — et qu'elle est posée dans la fonction qui écrit, pas chez
-  son appelant.
+- **Chemins de fichiers composés à partir d'une valeur, d'où qu'elle vienne.** Ne vous
+  arrêtez pas aux données du client : la traversée de la tâche 8 passait par `nomBase`, un
+  **paramètre fourni par l'appelant**, pas par le nom de fichier du navigateur — qui
+  n'atteignait déjà pas la fonction. Partez donc du `writeFile` et remontez chaque composante
+  du chemin, y compris celles qui « viennent de chez nous ». `path.join` normalise les `..`
+  sans borner le résultat. Cherchez la liste blanche, et vérifiez qu'elle **refuse** au lieu
+  de réparer — et qu'elle est posée dans la fonction qui écrit, pas chez son appelant.
 - **Points d'entrée montés par une bibliothèque, ouverts par défaut.** Ils ne s'écrivent
   dans aucun fichier du dépôt : `POST /api/auth/sign-up/email` était joignable sans session
   alors que l'inscription publique est interdite (tâche 9). Énumérez ce que la bibliothèque
@@ -585,10 +727,16 @@ consignent eux-mêmes ; l'auditeur et le testeur UX/UI travaillent en lecture se
 lancer.
 
 ```
-npm run journal -- add --task 13 --role developer --summary "…" --verdict delivered
+npm run journal -- add --task 13 --role developer --summary "…" --verdict delivered \
+  --tests-before "<sortie réelle de npm test AVANT>" \
+  --tests-after  "<sortie réelle de npm test APRÈS>"
 npm run journal -- list --task 13
 npm run journal:render
 ```
+
+Les deux compteurs sont volontairement écrits ici en gabarit et non en chiffres : un exemple
+qui porte un nombre plausible finit recopié tel quel. Ils se mesurent (§ 7), et un champ dont
+la valeur n'a pas été mesurée reste **vide**.
 
 Mode d'emploi complet : `docs/journal/README.md`. Récapitulatif lisible :
 `docs/journal/JOURNAL.md`.
