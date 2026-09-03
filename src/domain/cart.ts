@@ -1,15 +1,18 @@
-export type LignePanier = { variantId: string; prixUnitaire: number; quantite: number }
-export type TotauxPanier = {
+export type CartLine = { variantId: string; prixUnitaire: number; quantite: number }
+export type CartTotals = {
   sousTotal: number; fraisLivraison: number; remise: number; total: number
 }
 
-export function calculerTotaux(
-  lignes: LignePanier[],
-  tarifZone: number | null,
-): TotauxPanier {
-  const sousTotal = lignes.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)
+export function computeTotals(
+  lines: CartLine[],
+  zoneFee: number | null,
+): CartTotals {
+  const subtotal = lines.reduce((s, l) => s + l.prixUnitaire * l.quantite, 0)
   // Un panier vide ne facture jamais de livraison.
-  const fraisLivraison = sousTotal === 0 ? 0 : (tarifZone ?? 0)
-  const remise = 0
-  return { sousTotal, fraisLivraison, remise, total: sousTotal + fraisLivraison - remise }
+  const shippingFee = subtotal === 0 ? 0 : (zoneFee ?? 0)
+  const discount = 0
+  return {
+    sousTotal: subtotal, fraisLivraison: shippingFee, remise: discount,
+    total: subtotal + shippingFee - discount,
+  }
 }

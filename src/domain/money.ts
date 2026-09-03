@@ -1,12 +1,12 @@
 const NBSP = '\u00A0'
 
-export function formatAriary(montant: number): string {
-  const entier = Math.round(montant)
-  const groupes = entier.toLocaleString('fr-FR').replace(/\s|\u202F/g, NBSP)
-  return `${groupes}${NBSP}Ar`
+export function formatAriary(amount: number): string {
+  const rounded = Math.round(amount)
+  const grouped = rounded.toLocaleString('fr-FR').replace(/\s|\u202F/g, NBSP)
+  return `${grouped}${NBSP}Ar`
 }
 
-export function appliquerPourcentage(montant: number, pourcentage: number): number {
-  const remise = Math.round((montant * pourcentage) / 100)
-  return Math.max(0, montant - remise)
+export function applyPercentage(amount: number, percentage: number): number {
+  const discount = Math.round((amount * percentage) / 100)
+  return Math.max(0, amount - discount)
 }

@@ -1,7 +1,7 @@
-import { appliquerPourcentage } from './money'
-import type { PromotionRule, PrixEffectif } from './types'
+import { applyPercentage } from './money'
+import type { PromotionRule, EffectivePrice } from './types'
 
-const FUSEAU = 'Indian/Antananarivo'
+const TIMEZONE = 'Indian/Antananarivo'
 
 /**
  * Décompose une date dans le fuseau de la boutique.
@@ -19,41 +19,41 @@ const FUSEAU = 'Indian/Antananarivo'
  * du projet (0 = lundi). `hourCycle: 'h23'` garantit que minuit vaut 0
  * et non 24.
  */
-function heureLocale(d: Date): { heure: number; jour: number } {
+function localTime(d: Date): { hour: number; day: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: FUSEAU,
+    timeZone: TIMEZONE,
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', hourCycle: 'h23',
   }).formatToParts(d)
-  const composante = (type: string): number =>
+  const component = (type: string): number =>
     Number(parts.find((p) => p.type === type)?.value ?? 0)
 
-  const annee = composante('year')
-  const mois = composante('month')
-  const jourDuMois = composante('day')
-  const heure = composante('hour')
+  const year = component('year')
+  const month = component('month')
+  const dayOfMonth = component('day')
+  const hour = component('hour')
 
-  const jourJS = new Date(Date.UTC(annee, mois - 1, jourDuMois)).getUTCDay() // 0 = dimanche
-  const jour = (jourJS + 6) % 7 // 0 = lundi … 6 = dimanche
+  const jsDay = new Date(Date.UTC(year, month - 1, dayOfMonth)).getUTCDay() // 0 = dimanche
+  const day = (jsDay + 6) % 7 // 0 = lundi … 6 = dimanche
 
-  return { heure, jour }
+  return { hour, day }
 }
 
-function estApplicable(
+function isApplicable(
   p: PromotionRule, productId: string, categoryId: string,
-  maintenant: Date, estMembre: boolean,
+  now: Date, isMember: boolean,
 ): boolean {
   if (!p.actif) return false
-  if (p.membresSeulement && !estMembre) return false
+  if (p.membresSeulement && !isMember) return false
 
   if (p.portee === 'produit' && p.cibleId !== productId) return false
   if (p.portee === 'categorie' && p.cibleId !== categoryId) return false
 
-  if (p.debut && maintenant < p.debut) return false
-  if (p.fin && maintenant > p.fin) return false
+  if (p.debut && now < p.debut) return false
+  if (p.fin && now > p.fin) return false
 
-  const { heure, jour } = heureLocale(maintenant)
-  if (((p.joursSemaine >> jour) & 1) === 0) return false
+  const { hour, day } = localTime(now)
+  if (((p.joursSemaine >> day) & 1) === 0) return false
 
   // Une plage horaire à moitié renseignée (un seul des deux bornes migré/
   // saisi) n'est pas une restriction qu'on peut interpréter : entre laisser
@@ -63,44 +63,47 @@ function estApplicable(
 
   if (p.heureDebut !== null && p.heureFin !== null) {
     // Une plage qui franchit minuit (22h → 2h) est traitée comme deux intervalles.
-    const dansLaPlage = p.heureDebut <= p.heureFin
-      ? heure >= p.heureDebut && heure < p.heureFin
-      : heure >= p.heureDebut || heure < p.heureFin
-    if (!dansLaPlage) return false
+    const inRange = p.heureDebut <= p.heureFin
+      ? hour >= p.heureDebut && hour < p.heureFin
+      : hour >= p.heureDebut || hour < p.heureFin
+    if (!inRange) return false
   }
 
   return true
 }
 
-function prixApres(p: PromotionRule, prixBase: number): number {
+function priceAfter(p: PromotionRule, basePrice: number): number {
   return p.type === 'percent'
-    ? appliquerPourcentage(prixBase, p.valeur)
-    : Math.max(0, prixBase - p.valeur)
+    ? applyPercentage(basePrice, p.valeur)
+    : Math.max(0, basePrice - p.valeur)
 }
 
-export function resolvePrix(args: {
+export function resolvePrice(args: {
   prixBase: number
   productId: string
   categoryId: string
   promotions: PromotionRule[]
   maintenant: Date
   estMembre: boolean
-}): PrixEffectif {
-  const { prixBase, productId, categoryId, promotions, maintenant, estMembre } = args
+}): EffectivePrice {
+  const {
+    prixBase: basePrice, productId, categoryId, promotions,
+    maintenant: now, estMembre: isMember,
+  } = args
 
   const candidates = promotions
-    .filter((p) => estApplicable(p, productId, categoryId, maintenant, estMembre))
-    .map((p) => ({ promo: p, prix: prixApres(p, prixBase) }))
+    .filter((p) => isApplicable(p, productId, categoryId, now, isMember))
+    .map((p) => ({ promo: p, price: priceAfter(p, basePrice) }))
 
   if (candidates.length === 0) {
-    return { prixInitial: prixBase, prixFinal: prixBase, promotionId: null }
+    return { prixInitial: basePrice, prixFinal: basePrice, promotionId: null }
   }
 
   // Priorité décroissante, puis prix le plus bas pour la cliente.
   candidates.sort((a, b) =>
-    b.promo.priorite - a.promo.priorite || a.prix - b.prix,
+    b.promo.priorite - a.promo.priorite || a.price - b.price,
   )
 
-  const gagnante = candidates[0]!
-  return { prixInitial: prixBase, prixFinal: gagnante.prix, promotionId: gagnante.promo.id }
+  const winner = candidates[0]!
+  return { prixInitial: basePrice, prixFinal: winner.price, promotionId: winner.promo.id }
 }

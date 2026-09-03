@@ -34,7 +34,7 @@ function BoutonTransition({ action, libelle }: { action: ActionTransition; libel
 
 /**
  * N'affiche QUE les transitions réellement autorisées depuis l'état courant (la liste vient
- * de `transitionsDepuis`, côté serveur) : un bouton qui mène à une erreur est un défaut
+ * de `transitionsFrom`, côté serveur) : un bouton qui mène à une erreur est un défaut
  * d'interface. Une commande livrée ou annulée n'en propose donc aucun.
  */
 export function BoutonsStatut({

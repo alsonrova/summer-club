@@ -16,7 +16,7 @@ export type StatutModeration = (typeof STATUTS_MODERATION)[number]
 
 /**
  * Vrai si la valeur est l'un des trois statuts d'avis — pour valider une valeur venue du
- * client. Pendant de `estStatut` côté commandes (src/domain/order-status.ts) : une Server
+ * client. Pendant de `isOrderStatus` côté commandes (src/domain/order-status.ts) : une Server
  * Action exportée est une route publique, protégée par `requireAdmin()` mais pas typée à
  * l'exécution.
  */

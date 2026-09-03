@@ -14,7 +14,7 @@ export type PromotionRule = {
   actif: boolean
 }
 
-export type PrixEffectif = {
+export type EffectivePrice = {
   prixInitial: number
   prixFinal: number
   promotionId: string | null

@@ -8,7 +8,7 @@ import {
   cheminsARevalider,
   TransitionInterditeError,
 } from '@/server/order-status-service'
-import { estStatut, type Statut } from '@/domain/order-status'
+import { isOrderStatus, type OrderStatus } from '@/domain/order-status'
 import { libelleStatut } from '@/admin/resources/orders'
 import type { EtatChangementStatut } from './etats'
 
@@ -24,14 +24,14 @@ import type { EtatChangementStatut } from './etats'
  * Le cœur métier vit dans src/server/order-status-service.ts, sans authentification, parce
  * que le webhook de paiement (tâche 19) l'appellera aussi et n'est pas un administrateur.
  */
-export async function changerStatut(orderId: string, vers: Statut) {
+export async function changerStatut(orderId: string, vers: OrderStatus) {
   const session = await requireAdmin()
 
   // `vers` arrive du client : une Server Action exportée est une route publique, protégée
   // par requireAdmin() mais pas typée à l'exécution. La machine à états rejetterait déjà une
-  // valeur inconnue (`transitionAutorisee` renvoie faux), mais mieux vaut la refuser ici,
+  // valeur inconnue (`transitionAllowed` renvoie faux), mais mieux vaut la refuser ici,
   // avant qu'elle n'atteigne l'énumération PostgreSQL, avec un message compréhensible.
-  if (!estStatut(vers)) {
+  if (!isOrderStatus(vers)) {
     throw new Error(`Statut inconnu : ${String(vers)}`)
   }
 
@@ -59,7 +59,7 @@ export async function changerStatut(orderId: string, vers: Statut) {
  */
 export async function changerStatutDepuisFormulaire(
   orderId: string,
-  vers: Statut,
+  vers: OrderStatus,
   _etatPrecedent: EtatChangementStatut,
   _formData: FormData,
 ): Promise<EtatChangementStatut> {

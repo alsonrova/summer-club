@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import { formatAriary } from '@/domain/money'
-import { transitionsDepuis, type Statut } from '@/domain/order-status'
+import { transitionsFrom, type OrderStatus } from '@/domain/order-status'
 import { LIBELLES_TRANSITION, libelleCanal, libelleStatut } from '@/admin/resources/orders'
 import { changerStatutDepuisFormulaire } from '../actions'
 import { BoutonsStatut } from './boutons-statut'
@@ -55,8 +55,8 @@ export default async function FicheCommandePage({
 
   if (!commande) notFound()
 
-  const statut = commande.statut as Statut
-  const transitions = transitionsDepuis(statut).map((vers) => ({
+  const statut = commande.statut as OrderStatus
+  const transitions = transitionsFrom(statut).map((vers) => ({
     vers,
     libelle: LIBELLES_TRANSITION[vers],
     action: changerStatutDepuisFormulaire.bind(null, commande.id, vers),

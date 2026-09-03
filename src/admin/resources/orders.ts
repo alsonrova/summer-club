@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Canal } from '@prisma/client'
 import { defineResource } from '@/admin/resource'
-import { STATUTS } from '@/domain/order-status'
+import { ORDER_STATUSES } from '@/domain/order-status'
 
 // Aligné sur l'énumération Prisma `Canal` (prisma/schema.prisma) par `satisfies` : ajouter
 // un canal au schéma sans l'ajouter ici devient une erreur de compilation, plutôt qu'un
@@ -12,7 +12,7 @@ export const CANAUX = ['orange_money', 'whatsapp', 'livraison'] as const satisfi
  * Vrai si la valeur est l'un des trois canaux — pour valider une valeur venue du client
  * (aujourd'hui la querystring du filtre de liste).
  *
- * Écrit comme `estStatut` (src/domain/order-status.ts) et `estStatutAvis`
+ * Écrit comme `isOrderStatus` (src/domain/order-status.ts) et `estStatutAvis`
  * (src/app/admin/avis/query.ts) : un GARDE DE TYPE, pas un `includes` suivi d'un `as`. La
  * différence n'est pas cosmétique — avec l'assertion, le compilateur ne vérifie plus rien et
  * une divergence entre le test et le type affirmé passe inaperçue. Ce projet n'a désormais
@@ -32,7 +32,7 @@ export const LIBELLES_STATUT = {
   livree: 'Livrée',
   annulee: 'Annulée',
   echec_paiement: 'Paiement échoué',
-} as const satisfies Record<(typeof STATUTS)[number], string>
+} as const satisfies Record<(typeof ORDER_STATUSES)[number], string>
 
 // Libellés des BOUTONS de transition, à l'infinitif : un bouton nomme l'action qu'il
 // déclenche, pas l'état qu'il vise. « Confirmer la commande » se lit ; un bouton intitulé
@@ -47,7 +47,7 @@ export const LIBELLES_TRANSITION = {
   livree: 'Marquer livrée',
   annulee: 'Annuler la commande',
   echec_paiement: 'Marquer le paiement en échec',
-} as const satisfies Record<(typeof STATUTS)[number], string>
+} as const satisfies Record<(typeof ORDER_STATUSES)[number], string>
 
 export const LIBELLES_CANAL = {
   orange_money: 'Orange Money',
@@ -55,7 +55,7 @@ export const LIBELLES_CANAL = {
   livraison: 'Livraison',
 } as const satisfies Record<Canal, string>
 
-// Prennent une chaîne, pas un `Statut` : l'historique de statut est relu depuis les
+// Prennent une chaîne, pas un `OrderStatus` : l'historique de statut est relu depuis les
 // colonnes Json du journal d'audit, où le type n'est pas garanti. Un statut inconnu
 // s'affiche tel quel plutôt que « undefined ».
 export function libelleStatut(valeur: string): string {
@@ -77,7 +77,7 @@ export const orderSchema = z.object({
   clientNom: z.string(),
   tel: z.string(),
   canal: z.enum(CANAUX),
-  statut: z.enum(STATUTS),
+  statut: z.enum(ORDER_STATUSES),
   total: z.number().int(),
 })
 

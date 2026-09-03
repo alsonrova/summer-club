@@ -201,7 +201,7 @@ describe('appliquerStatut — stock déjà engagé', () => {
       lignes: [{ variantId, quantite: 2 }], canal: 'orange_money', client,
       zoneId: null, estMembre: false,
     })
-    // en_attente_paiement appartient à STOCK_ENGAGE : la réservation a eu lieu à la création.
+    // en_attente_paiement appartient à STOCK_COMMITTED : la réservation a eu lieu à la création.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
 
     await changerStatut(c.id, 'confirmee')
@@ -215,11 +215,11 @@ describe('appliquerStatut — stock déjà engagé', () => {
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
-    // en_attente_paiement → echec_paiement sort de STOCK_ENGAGE : le stock revient.
+    // en_attente_paiement → echec_paiement sort de STOCK_COMMITTED : le stock revient.
     await changerStatut(c.id, 'echec_paiement')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
 
-    // echec_paiement → annulee : les deux sont hors de STOCK_ENGAGE, rien ne bouge.
+    // echec_paiement → annulee : les deux sont hors de STOCK_COMMITTED, rien ne bouge.
     await changerStatut(c.id, 'annulee')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })

@@ -1,6 +1,6 @@
 import { prisma } from '@/server/db'
 import { enregistrerAudit } from '@/server/audit'
-import { transitionAutorisee, effetSurStock, type Statut } from '@/domain/order-status'
+import { transitionAllowed, stockEffect, type OrderStatus } from '@/domain/order-status'
 import { CommandeError, RuptureStockError } from '@/server/orders'
 
 /**
@@ -9,14 +9,14 @@ import { CommandeError, RuptureStockError } from '@/server/orders'
  * Dérive de CommandeError, comme toute la famille d'erreurs métier levée par
  * src/server/orders.ts : l'interface d'administration peut ainsi distinguer d'un coup
  * une faute rattrapable (à afficher en français) d'une panne technique (à laisser
- * remonter). `effetSurStock` renvoie déjà 'aucun' pour une transition interdite, donc le
+ * remonter). `stockEffect` renvoie déjà 'none' pour une transition interdite, donc le
  * stock ne bougerait pas — mais accepter silencieusement de faire passer une commande
  * livrée à « expédiée » réécrirait l'historique sans le dire. On refuse explicitement.
  */
 export class TransitionInterditeError extends CommandeError {
   constructor(
-    public readonly de: Statut,
-    public readonly vers: Statut,
+    public readonly de: OrderStatus,
+    public readonly vers: OrderStatus,
   ) {
     super(`Transition interdite : ${de} → ${vers}`)
   }
@@ -56,8 +56,8 @@ export function cheminsARevalider(orderId: string): string[] {
  *    jamais le verrou : PostgreSQL l'avorte en 40001. Mesuré sur ce projet (stock de 5,
  *    deux clientes simultanées) : une vente sur deux était rejetée à tort.
  *
- * 2. `effetSurStock` est pure et sans mémoire : appelée deux fois avec le même couple
- *    d'états, elle renvoie deux fois 'decrementer'. La protection contre le rejeu (webhook
+ * 2. `stockEffect` est pure et sans mémoire : appelée deux fois avec le même couple
+ *    d'états, elle renvoie deux fois 'decrement'. La protection contre le rejeu (webhook
  *    livré deux fois, double clic) est ICI : la ligne de commande est verrouillée puis
  *    RELUE dans la transaction, et la décision se prend sur cet état relu — jamais sur un
  *    état reçu en paramètre. Un second appel voit le statut déjà écrit et se heurte à
@@ -71,7 +71,7 @@ export function cheminsARevalider(orderId: string): string[] {
  *    un filet de sécurité, pas la première ligne de défense : la laisser rattraper le cas
  *    donnerait une erreur SQL brute à la propriétaire.
  */
-export async function appliquerStatut(orderId: string, vers: Statut, acteur: string) {
+export async function appliquerStatut(orderId: string, vers: OrderStatus, acteur: string) {
   return prisma.$transaction(
     async (tx) => {
       // Verrou sur la LIGNE DE COMMANDE avant toute lecture : sans lui, deux changements
@@ -85,15 +85,15 @@ export async function appliquerStatut(orderId: string, vers: Statut, acteur: str
         where: { id: orderId },
         include: { items: true },
       })
-      const de = commande.statut as Statut
+      const de = commande.statut as OrderStatus
 
-      if (!transitionAutorisee(de, vers)) {
+      if (!transitionAllowed(de, vers)) {
         throw new TransitionInterditeError(de, vers)
       }
 
-      const effet = effetSurStock(de, vers)
+      const effet = stockEffect(de, vers)
 
-      if (effet !== 'aucun') {
+      if (effet !== 'none') {
         // Agrégation par déclinaison, même raison que dans creerCommande : deux lignes de
         // commande portant la même déclinaison forment une seule demande de stock. Les
         // contrôler séparément laisserait passer deux décréments là où le stock n'en
@@ -114,7 +114,7 @@ export async function appliquerStatut(orderId: string, vers: Statut, acteur: str
         )
 
         for (const [variantId, quantite] of quantites) {
-          if (effet === 'decrementer') {
+          if (effet === 'decrement') {
             // Relecture APRÈS le verrou : c'est elle qui voit la version fraîche de la
             // ligne et permet une décision juste.
             const variante = await tx.variant.findUniqueOrThrow({ where: { id: variantId } })

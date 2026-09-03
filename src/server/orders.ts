@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto'
 import { prisma } from './db'
-import { resolvePrix } from '@/domain/pricing'
-import { calculerTotaux } from '@/domain/cart'
-import { STOCK_ENGAGE } from '@/domain/order-status'
+import { resolvePrice } from '@/domain/pricing'
+import { computeTotals } from '@/domain/cart'
+import { STOCK_COMMITTED } from '@/domain/order-status'
 import type { PromotionRule } from '@/domain/types'
 
 /** Classe de base de toutes les erreurs métier levées par ce module. */
@@ -95,12 +95,12 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
       : 'confirmee'
 
   // Le stock est réservé dès la création pour les canaux orange_money et
-  // livraison (cf. STOCK_ENGAGE) : le paiement orange_money encaisse
+  // livraison (cf. STOCK_COMMITTED) : le paiement orange_money encaisse
   // immédiatement, il ne doit pas pouvoir encaisser deux fois la même
   // dernière pièce en attendant la confirmation du webhook. Le canal
   // whatsapp (en_attente_confirmation) ne réserve rien : ces commandes
   // attendent un accord manuel qui peut ne jamais venir.
-  const engageStock = STOCK_ENGAGE.includes(statutInitial)
+  const engageStock = STOCK_COMMITTED.includes(statutInitial)
 
   // Agrégation des quantités par déclinaison : deux lignes du panier sur
   // la même déclinaison doivent être vues comme une seule demande, sous
@@ -157,7 +157,7 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
       if (!variant.product.actif) throw new ProduitIndisponibleError(variant.productId)
       if (variant.stock < quantite) throw new RuptureStockError(variantId)
 
-      const { prixFinal } = resolvePrix({
+      const { prixFinal } = resolvePrice({
         prixBase: variant.product.prixBase + variant.deltaPrix,
         productId: variant.productId,
         categoryId: variant.product.categoryId,
@@ -179,7 +179,7 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
       zone = z
     }
 
-    const totaux = calculerTotaux(
+    const totaux = computeTotals(
       lignesCalculees.map((l) => ({
         variantId: l.variantId, prixUnitaire: l.prixUnitaireFige, quantite: l.quantite,
       })),

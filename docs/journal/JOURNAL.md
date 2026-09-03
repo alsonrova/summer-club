@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**61 entrées** · 15 tâches · Développeur 37 · Auditeur qualité et sécurité 18 · Coordinateur 6
+**62 entrées** · 16 tâches · Développeur 38 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -72,6 +72,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | 13 | Développeur | livré | — |
 | 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | 13 | Coordinateur | livré | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -667,3 +668,14 @@ Interruption du propriétaire pendant la revue : « le code n'est pas valide si 
 - **Tests** : — → npx vitest run tests/components/product-card.test.tsx : 1 fichier, 4 tests verts. npx --no-install tsc --noEmit : aucune sortie.
 - **Fichiers** : `docs/CONVENTIONS.md`, `tests/components/product-card.test.tsx`
 - **Réserve** : Suite complète non relancée après le renommage : identifiant local d'un test + documentation seuls touchés, la suite entière était verte sur le commit précédent (voir l'entrée du développeur).
+
+## Tâche renommage
+
+### 2026-09-03 · Développeur — livré
+
+Etape 1 - renomme les 13 identifiants exportes et 4 internes de src/domain/ (STATUTS->ORDER_STATUSES, Statut->OrderStatus, resolvePrix->resolvePrice, calculerTotaux->computeTotals, etc.), aligne les consommateurs (src/server, src/admin/resources/orders.ts, src/app/admin/commandes, tests/domain, tests/admin/commandes-query.test.ts) ; schema.prisma et les valeurs de statut de commande non touches
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : Test Files  25 passed (25) / Tests  249 passed (249) → Test Files  25 passed (25) / Tests  249 passed (249)
+- **Fichiers** : `src/domain/money.ts`, `src/domain/pricing.ts`, `src/domain/cart.ts`, `src/domain/order-status.ts`, `src/domain/types.ts`, `src/server/orders.ts`, `src/server/order-status-service.ts`, `src/admin/resources/orders.ts`, `src/app/admin/commandes/page.tsx`, `src/app/admin/commandes/query.ts`, `src/app/admin/commandes/actions.ts`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/[id]/boutons-statut.tsx`, `src/app/admin/avis/query.ts`, `tests/domain/money.test.ts`, `tests/domain/cart.test.ts`, `tests/domain/order-status.test.ts`, `tests/domain/pricing.test.ts`, `tests/admin/commandes-query.test.ts`, `tests/server/statut.test.ts`
+- **Réserve** : Type/interface property names not covered by RENOMMAGE.md sections 3.1/3.6 (EffectivePrice.prixInitial/prixFinal/promotionId, CartLine.prixUnitaire/quantite, CartTotals.sousTotal/fraisLivraison/remise, resolvePrice's own args-parameter fields prixBase/maintenant/estMembre, PromotionRule's Prisma-mirrored fields) left French, not covered by tables ; proposal in .superpowers/sdd/renommage-etape1-report.md

@@ -136,8 +136,8 @@ describe('listerCommandesPaginees', () => {
   })
 })
 
-// `estCanal` vit auprès de `CANAUX` (src/admin/resources/orders.ts), comme `estStatut` vit
-// auprès de `STATUTS` et `estStatutAvis` auprès de `STATUTS_AVIS` : une seule façon de
+// `estCanal` vit auprès de `CANAUX` (src/admin/resources/orders.ts), comme `isOrderStatus` vit
+// auprès de `ORDER_STATUSES` et `estStatutAvis` auprès de `STATUTS_AVIS` : une seule façon de
 // valider une valeur d'énumération venue du client dans ce projet. Il est testé ici parce
 // que c'est le filtre de CETTE liste qu'il protège.
 describe('estCanal', () => {
