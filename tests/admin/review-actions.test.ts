@@ -8,7 +8,7 @@ import {
   ProductNotFoundError,
   InvalidReviewStatusError,
 } from '@/server/reviews'
-import { initialReviewActionState } from '@/app/admin/avis/etats'
+import { initialReviewActionState } from '@/app/admin/avis/states'
 
 // Mêmes doublures que tests/admin/produits-actions.test.ts : requireAdmin() lit une session
 // via next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni

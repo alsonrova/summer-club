@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useId } from 'react'
-import type { TestimonialFormState } from './etats'
+import type { TestimonialFormState } from './states'
 
 function FieldErrors({ messages, id }: { messages: string[] | undefined; id: string }) {
   if (!messages || messages.length === 0) return null

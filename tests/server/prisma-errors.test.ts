@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Prisma } from '@prisma/client'
-import { isUniqueViolation } from '@/server/prisma-erreurs'
+import { isUniqueViolation } from '@/server/prisma-errors'
 
 function creerErreurP2002(target: string[]): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Violation de contrainte unique', {

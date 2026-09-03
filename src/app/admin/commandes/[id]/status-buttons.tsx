@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { StatusChangeState } from '../etats'
+import type { StatusChangeState } from '../states'
 
 type ActionTransition = (
   previousState: StatusChangeState,

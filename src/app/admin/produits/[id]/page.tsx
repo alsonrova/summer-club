@@ -12,12 +12,12 @@ import {
   setPrimaryPhoto,
   deleteMedia,
 } from '../actions'
-import { initialProductFormState } from '../etats'
-import { ProductForm } from '../formulaire-produit'
-import { StockForm } from './formulaire-stock'
-import { MediaForm } from './formulaire-media'
-import { VariantForm } from './formulaire-declinaison'
-import { MediaCard } from './media-carte'
+import { initialProductFormState } from '../states'
+import { ProductForm } from '../product-form'
+import { StockForm } from './stock-form'
+import { MediaForm } from './media-form'
+import { VariantForm } from './variant-form'
+import { MediaCard } from './media-card'
 
 export default async function ProductDetailPage({
   params,

@@ -1,4 +1,4 @@
-import { SignOutButton } from '@/components/bouton-deconnexion'
+import { SignOutButton } from '@/components/sign-out-button'
 
 // Atteinte par requireAdmin() quand une session valide n'a pas le rôle `admin` (ex. un
 // compte `membre`). Volontairement distincte de /connexion : rediriger un utilisateur déjà

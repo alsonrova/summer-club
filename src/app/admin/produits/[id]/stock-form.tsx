@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useId } from 'react'
-import type { SimpleActionState } from '../etats'
+import type { SimpleActionState } from '../states'
 
 // Un article en rupture n'affiche pas un bouton grisé mais une mention textuelle
 // explicite (spec §3.8) — reprise ici pour l'écran de stock, pas seulement en boutique.

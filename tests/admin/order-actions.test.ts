@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
 import { OrderError, createOrder } from '@/server/orders'
 import { pathsToRevalidate } from '@/server/order-status-service'
-import { initialStatusChangeState } from '@/app/admin/commandes/etats'
+import { initialStatusChangeState } from '@/app/admin/commandes/states'
 
 // Mêmes doublures que tests/admin/avis-actions.test.ts : requireAdmin() lit une session via
 // next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni

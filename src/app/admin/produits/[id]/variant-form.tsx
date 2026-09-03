@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { VariantFormState } from '../etats'
+import type { VariantFormState } from '../states'
 import { formatAriary } from '@/domain/money'
 
 function initialText(values: Record<string, unknown>, name: string): string {

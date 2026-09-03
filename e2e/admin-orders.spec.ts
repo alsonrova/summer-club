@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client'
 import path from 'node:path'
 
 // Réutilise la session administrateur écrite une seule fois par e2e/auth.setup.ts, comme
-// e2e/admin-produits.spec.ts : aucun de ces tests ne vérifie le parcours de connexion, et
+// e2e/admin-products.spec.ts : aucun de ces tests ne vérifie le parcours de connexion, et
 // s'y reconnecter saturerait le compartiment de limitation de débit partagé de
 // /sign-in/email (voir src/server/auth.ts).
 test.use({ storageState: path.join(__dirname, '.auth', 'admin.json') })

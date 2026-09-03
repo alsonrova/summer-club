@@ -6,7 +6,7 @@ test.use({ storageState: path.join(__dirname, '.auth', 'admin.json') })
 
 const prisma = new PrismaClient()
 
-// Chaque test possède SES données (voir e2e/admin-produits.spec.ts, correctif de la tâche
+// Chaque test possède SES données (voir e2e/admin-products.spec.ts, correctif de la tâche
 // 11 sur `test.afterAll`, exécuté une fois par worker) : le nom de l'autrice, dérivé du
 // titre du test, sert de clé de propriété pour les avis créés comme pour le nettoyage.
 function autricePourTest(testInfo: TestInfo): string {

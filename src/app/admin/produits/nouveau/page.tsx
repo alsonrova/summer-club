@@ -1,8 +1,8 @@
 import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import { createProduct } from '../actions'
-import { initialProductFormState } from '../etats'
-import { ProductForm } from '../formulaire-produit'
+import { initialProductFormState } from '../states'
+import { ProductForm } from '../product-form'
 
 // Segment statique /admin/produits/nouveau : Next.js le fait toujours correspondre en
 // priorité sur la route dynamique voisine /admin/produits/[id], donc "nouveau" n'est jamais

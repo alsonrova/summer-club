@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { ProductFormState } from './etats'
+import type { ProductFormState } from './states'
 
 type CategoryOption = { id: string; nom: string }
 

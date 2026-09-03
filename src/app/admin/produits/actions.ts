@@ -11,7 +11,7 @@ import {
   deleteMediaFiles,
   UnreadableImageError,
 } from '@/server/media'
-import { isUniqueViolation } from '@/server/prisma-erreurs'
+import { isUniqueViolation } from '@/server/prisma-errors'
 import { validateFormData, formDataToObject } from '@/admin/engine/actions'
 import { productsResource } from '@/admin/resources/products'
 import { variantsResource } from '@/admin/resources/variants'
@@ -19,7 +19,7 @@ import type {
   ProductFormState,
   VariantFormState,
   SimpleActionState,
-} from './etats'
+} from './states'
 
 // Convention d'administration (voir src/server/auth.ts) : un layout ne protège ni les
 // Server Actions ni les Route Handlers — chaque action ici appelle requireAdmin() elle-même,

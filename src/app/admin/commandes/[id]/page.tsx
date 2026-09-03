@@ -6,7 +6,7 @@ import { formatAriary } from '@/domain/money'
 import { transitionsFrom, type OrderStatus } from '@/domain/order-status'
 import { TRANSITION_LABELS, channelLabel, statusLabel } from '@/admin/resources/orders'
 import { changeStatusFromForm } from '../actions'
-import { StatusButtons } from './boutons-statut'
+import { StatusButtons } from './status-buttons'
 
 // `avant`/`apres` du journal d'audit sont des colonnes Json : Prisma les rend en
 // `JsonValue`, dont rien ne garantit la forme à la relecture (une trace ancienne, une

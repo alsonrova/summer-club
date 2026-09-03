@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { ReviewActionState } from './etats'
+import type { ReviewActionState } from './states'
 
 type ReviewAction = (
   previousState: ReviewActionState,

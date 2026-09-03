@@ -13,7 +13,7 @@ import {
 } from '@/server/reviews'
 import type { ValidationErrors } from '@/admin/engine/actions'
 import { isModerationStatus, type ModerationStatus } from './query'
-import type { ReviewActionState, TestimonialFormState } from './etats'
+import type { ReviewActionState, TestimonialFormState } from './states'
 
 // Convention de sécurité (voir src/server/auth.ts) : chaque Server Action appelle
 // requireAdmin() elle-même, en première instruction.

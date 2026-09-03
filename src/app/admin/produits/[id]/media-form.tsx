@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { SimpleActionState } from '../etats'
+import type { SimpleActionState } from '../states'
 
 export function MediaForm({
   action,

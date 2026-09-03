@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useId } from 'react'
-import type { SimpleActionState } from '../etats'
+import type { SimpleActionState } from '../states'
 
 type Media = { id: string; chemin: string; alt: string; position: number; isPrimary: boolean }
 

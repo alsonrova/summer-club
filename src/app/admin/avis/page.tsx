@@ -15,8 +15,8 @@ import {
   REVIEW_STATUS_LABELS,
   REVIEW_STATUSES,
 } from './query'
-import { ReviewActions } from './actions-avis'
-import { TestimonialForm } from './formulaire-temoignage'
+import { ReviewActions } from './review-actions'
+import { TestimonialForm } from './testimonial-form'
 
 function toValidPage(value: string | undefined): number {
   const n = Number(value)

@@ -10,7 +10,7 @@ import {
 } from '@/server/order-status-service'
 import { isOrderStatus, type OrderStatus } from '@/domain/order-status'
 import { statusLabel } from '@/admin/resources/orders'
-import type { StatusChangeState } from './etats'
+import type { StatusChangeState } from './states'
 
 // Convention de sécurité (voir src/server/auth.ts) : un layout ne protège ni les Server
 // Actions ni les Route Handlers. Chaque action ci-dessous appelle requireAdmin() elle-même,

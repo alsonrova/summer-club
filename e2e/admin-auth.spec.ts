@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { creerCompteMembre, supprimerCompte, fermerConnexionTest } from './utils/compte-membre'
+import { creerCompteMembre, supprimerCompte, fermerConnexionTest } from './utils/member-account'
 
 // Réutilise directement ADMIN_EMAIL / ADMIN_PASSWORD (les variables consommées par
 // `prisma/seed.ts` pour créer le compte administrateur) plutôt que d'introduire une

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/server/auth'
-import { SignOutButton } from '@/components/bouton-deconnexion'
+import { SignOutButton } from '@/components/sign-out-button'
 
 // Layout unique de tout /admin/* : la page de connexion vit hors de /admin (voir
 // src/app/connexion/page.tsx), donc requireAdmin() peut être appelé ici sans provoquer de

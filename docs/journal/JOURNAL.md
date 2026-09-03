@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**66 entrées** · 16 tâches · Développeur 42 · Auditeur qualité et sécurité 18 · Coordinateur 6
+**67 entrées** · 16 tâches · Développeur 43 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -72,6 +72,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | 13 | Développeur | livré | — |
 | 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | 13 | Coordinateur | livré | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
@@ -719,3 +720,12 @@ Etape 1 bis - applique RENOMMAGE.md section 3.7 (arbitree par le coordinateur) :
 - **Fichiers** : `src/app/acces-refuse/page.tsx`, `src/app/admin/avis/actions-avis.tsx`, `src/app/admin/avis/actions.ts`, `src/app/admin/avis/etats.ts`, `src/app/admin/avis/formulaire-temoignage.tsx`, `src/app/admin/avis/page.tsx`, `src/app/admin/avis/query.ts`, `src/app/admin/commandes/[id]/boutons-statut.tsx`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/commandes/etats.ts`, `src/app/admin/commandes/page.tsx`, `src/app/admin/commandes/query.ts`, `src/app/admin/layout.tsx`, `src/app/admin/produits/[id]/formulaire-declinaison.tsx`, `src/app/admin/produits/[id]/formulaire-media.tsx`, `src/app/admin/produits/[id]/formulaire-stock.tsx`, `src/app/admin/produits/[id]/media-carte.tsx`, `src/app/admin/produits/[id]/page.tsx`, `src/app/admin/produits/actions.ts`, `src/app/admin/produits/etats.ts`, `src/app/admin/produits/formulaire-produit.tsx`, `src/app/admin/produits/nouveau/page.tsx`, `src/app/admin/produits/page.tsx`, `src/app/admin/produits/query.ts`, `src/app/connexion/page.tsx`, `src/components/bouton-deconnexion.tsx`, `tests/admin/avis-actions.test.ts`, `tests/admin/avis-query.test.ts`, `tests/admin/commandes-actions.test.ts`, `tests/admin/commandes-query.test.ts`, `tests/admin/produits-actions.test.ts`, `tests/admin/produits-query.test.ts`, `docs/RENOMMAGE.md`
 - **Réserve** : tests/server/statut.test.ts déclare son propre helper local 'changerStatut' (alias de applyStatus, non exporté, sans lien avec src/app/admin/commandes/actions.ts) : hors périmètre de l'étape 4 (fichier de la couche src/server/, étape 2), volontairement non touché — seul un identifiant que CETTE tâche introduit ou réécrit doit être anglais (CONVENTIONS.md § 1).
 - **Réserve** : Commentaires de src/admin/, src/server/ et de tests/e2e hors périmètre nommant encore d'anciens identifiants (televerserMedia, changerStatut, modererAvis…) laissés tels quels : ce sont des commentaires (français, conforme § 1), dans des fichiers déjà livrés aux étapes 2/3 ou hors périmètre de celle-ci — pas du code.
+
+### 2026-09-03 · Développeur — livré
+
+Etape 5 - git mv des 27 fichiers du lot mesure vers leurs noms cibles anglais (src/app/admin/{avis,commandes,produits}, src/components, src/server, tests/admin, tests/server, e2e), imports/requires alignes dans les fichiers deplaces et leurs appelants, commentaires citant un chemin deplace corriges dans les fichiers touches (e2e/admin-orders.spec.ts, e2e/admin-reviews.spec.ts).
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : Test Files 25 passed (25), Tests 249 passed (249) → Test Files 25 passed (25), Tests 249 passed (249)
+- **Fichiers** : `e2e/admin-orders.spec.ts`, `e2e/admin-products.spec.ts`, `e2e/admin-reviews.spec.ts`, `e2e/utils/member-account.ts`, `e2e/admin-auth.spec.ts`, `src/app/admin/avis/states.ts`, `src/app/admin/avis/review-actions.tsx`, `src/app/admin/avis/testimonial-form.tsx`, `src/app/admin/avis/actions.ts`, `src/app/admin/avis/page.tsx`, `src/app/admin/commandes/states.ts`, `src/app/admin/commandes/[id]/status-buttons.tsx`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/produits/states.ts`, `src/app/admin/produits/product-form.tsx`, `src/app/admin/produits/[id]/variant-form.tsx`, `src/app/admin/produits/[id]/media-form.tsx`, `src/app/admin/produits/[id]/stock-form.tsx`, `src/app/admin/produits/[id]/media-card.tsx`, `src/app/admin/produits/[id]/page.tsx`, `src/app/admin/produits/actions.ts`, `src/app/admin/produits/nouveau/page.tsx`, `src/app/admin/layout.tsx`, `src/app/acces-refuse/page.tsx`, `src/components/sign-out-button.tsx`, `src/server/prisma-errors.ts`, `tests/admin/review-actions.test.ts`, `tests/admin/review-query.test.ts`, `tests/admin/system-fields.test.ts`, `tests/admin/order-actions.test.ts`, `tests/admin/order-query.test.ts`, `tests/admin/csv-numbers.test.ts`, `tests/admin/product-actions.test.ts`, `tests/admin/product-query.test.ts`, `tests/server/prisma-errors.test.ts`, `tests/server/order-status-service.test.ts`
+- **Réserve** : vitest.config.ts:25, src/server/products.ts:35 et src/admin/resources/variants.ts:25 citent encore un ancien chemin (tests/admin/produits-actions.test.ts, e2e/admin-produits.spec.ts, formulaire-produit.tsx) dans un commentaire ; hors perimetre de l'etape 5 car ces fichiers ne sont pas autrement touches (aucun import a corriger) - a signaler pour une passe ulterieure.
