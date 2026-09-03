@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**59 entrées** · 15 tâches · Développeur 37 · Auditeur qualité et sécurité 17 · Coordinateur 5
+**61 entrées** · 15 tâches · Développeur 37 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -70,6 +70,8 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-08-30 | conventions | Développeur | livré | — |
 | 2026-09-03 | dettes | Développeur | livré | — |
 | 2026-09-03 | 13 | Développeur | livré | — |
+| 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
+| 2026-09-03 | 13 | Coordinateur | livré | — |
 
 ## Tâche 1
 
@@ -650,3 +652,18 @@ Composants de base (Price, Button) et carte produit (ProductCard), plus Header/F
 - **Réserve** : Header et Footer ne sont montés dans aucune page (integration prevue taches 14-15) ; leur contrat visuel n'a donc pas ete verifie dans un navigateur, seulement relu contre la spec (ombre exacte, fond, focus clavier).
 - **Réserve** : npm i a ajoute des devDependencies dont la chaine prisma@6.19.3 -> @prisma/config -> deepmerge-ts porte 3 alertes 'high' (npm audit) preexistantes a cette tache, non liees aux paquets ajoutes (@testing-library/*, jsdom) ; non traitees ici, hors perimetre.
 - **Réserve** : Button est cree selon le contrat mais n'est encore consomme par aucun autre composant (ProductCard rend la rupture en texte simple, pas via Button) ; sa premiere utilisation reelle viendra d'une tache ulterieure (panier, formulaires).
+
+### 2026-09-03 · Auditeur qualité et sécurité — validé
+
+Revue conforme : contrat de nommage anglais respecté partout (Price/StorefrontProduct/ProductCard/Button/Header/Footer), aucun identifiant français dans le diff (grep ciblé sur montant/barre/produit/enStock/prixFinal/prixInitial/imageSecondaire, rien trouvé hors prose),   écrit en séquence d'échappement dans les tests. Tokens Tailwind utilisés (shell/clay/taupe/sage-deep/bark/bark-soft) vérifiés existants dans src/styles/tokens.css, --sage jamais utilisé pour du texte. Ratio 4:5 et --radius-arch bien scopés à la photo produit. Risque nommé vérifié : le projet vitest 'node' garde include et environment inchangés, globals:true posé seulement sur 'jsdom' — aucun impact sur la suite PostgreSQL existante. Rupture vérifiée sans aucun bouton rendu (test plus strict que le brief). Aucun constat bloquant ni important.
+
+- **Modèle** : claude-sonnet-5
+
+### 2026-09-03 · Coordinateur — livré
+
+Interruption du propriétaire pendant la revue : « le code n'est pas valide si du français dans le code ». Règle inscrite comme CRITÈRE DE VALIDITÉ dans docs/CONVENTIONS.md — § 1 (un identifiant français introduit ou réécrit rend la contribution invalide, variable locale comprise ; le stock hérité reste gouverné par RENOMMAGE.md), § 7 (relecture du diff avant de déclarer terminé), § 8 (contrôle bloquant de l'auditeur, jamais Mineur). Dans le code de la tâche 13 : identifiant « barre » renommé en « struckPrice » et commentaire citant « montant » au lieu de « amount » rectifié (tests/components/product-card.test.tsx). Séquences d'échappement U+00A0 vérifiées intactes après édition (od -c). Revue relancée sur les deux commits avec le critère durci : approuvée sans constat bloquant. Deux Mineurs au ledger : casts as Route à retirer aux tâches 14-15 ; Button/Header/Footer sans test direct (hors périmètre du brief).
+
+- **Modèle** : claude-fable-5
+- **Tests** : — → npx vitest run tests/components/product-card.test.tsx : 1 fichier, 4 tests verts. npx --no-install tsc --noEmit : aucune sortie.
+- **Fichiers** : `docs/CONVENTIONS.md`, `tests/components/product-card.test.tsx`
+- **Réserve** : Suite complète non relancée après le renommage : identifiant local d'un test + documentation seuls touchés, la suite entière était verte sur le commit précédent (voir l'entrée du développeur).
