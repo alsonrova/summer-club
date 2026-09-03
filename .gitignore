@@ -47,3 +47,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Téléversements locaux : produits par les tests (et demain par l'application), jamais
+# versionnés — un résidu d'exécution interrompue ne doit pas pouvoir entrer dans un commit
+# par un `git add -A` distrait (constat de la re-revue du renommage, 2026-09-04).
+public/uploads/*
+!public/uploads/.gitkeep
