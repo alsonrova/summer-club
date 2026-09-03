@@ -1,4 +1,3 @@
-import type { Route } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Price } from '@/components/ui/price'
@@ -20,12 +19,10 @@ export type StorefrontProduct = {
 export function ProductCard({ product }: { product: StorefrontProduct }) {
   return (
     <article className="group">
-      {/* `typedRoutes` (next.config.ts) exige `as Route` pour un href construit
-          dynamiquement — la route /boutique/[slug] n'existe d'ailleurs pas encore
-          (tâche 14), donc même un href littéral y échapperait aussi. Documenté dans
-          node_modules/next/dist/docs/.../02-typescript.md, § « Statically Typed
-          Links ». */}
-      <Link href={`/boutique/${product.slug}` as Route} className="block">
+      {/* `typedRoutes` (next.config.ts) accepte ce gabarit sans cast : depuis la tâche 14,
+          /boutique/[slug] existe sous src/app/ et `.next/types/routes.d.ts` (engendré au
+          build) type le href comme `/boutique/${string}`. */}
+      <Link href={`/boutique/${product.slug}`} className="block">
         <div
           className="relative aspect-[4/5] overflow-hidden bg-clay transition-transform duration-500 group-hover:scale-[1.015]"
           style={{ borderRadius: 'var(--radius-arch)' }}

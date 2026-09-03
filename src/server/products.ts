@@ -1,5 +1,144 @@
 import { prisma } from '@/server/db'
 import { deleteMediaFiles } from '@/server/media'
+import { resolvePrice } from '@/domain/pricing'
+import type { PromotionRule } from '@/domain/types'
+import type { StorefrontProduct } from '@/components/product/product-card'
+
+export type ProductDetail = StorefrontProduct & {
+  description: string
+  metaTitle: string
+  metaDescription: string
+  images: { path: string; alt: string }[]
+  // `price` est le prix effectif de la déclinaison et `initialPrice` son prix avant
+  // remise : Price (src/components/ui/price.tsx) barre le second quand il dépasse le
+  // premier. Un `initialPrice` pris au niveau du produit barrerait à tort une déclinaison
+  // dont le seul écart vient de priceDelta.
+  variants: { id: string; label: string; price: number; initialPrice: number; available: boolean }[]
+}
+
+// Largeurs produites par processImage (src/server/media.ts) : 800 px pour une carte du
+// catalogue, affichée au mieux sur une demi-largeur d'écran ; 1200 px pour la galerie
+// d'une fiche. Les images de repli portent les mêmes largeurs (public/placeholder-*.avif).
+const CATALOG_WIDTH = 800
+const DETAIL_WIDTH = 1200
+
+function imageFile(mediaPath: string, width: number): string {
+  return `${mediaPath}-${width}.avif`
+}
+
+function placeholder(width: number): string {
+  return `/placeholder-${width}.avif`
+}
+
+async function activePromotions(): Promise<PromotionRule[]> {
+  return prisma.promotion.findMany({ where: { active: true } })
+}
+
+// Sous-ensemble des colonnes dont la projection vitrine a besoin, indépendant de la forme
+// exacte des deux requêtes ci-dessous (l'une ne charge que le stock des déclinaisons et
+// deux photos, l'autre tout).
+type ProductRow = {
+  id: string
+  slug: string
+  name: string
+  basePrice: number
+  categoryId: string
+  variants: { stock: number }[]
+  media: { path: string }[]
+}
+
+// Prix public : la boutique ne connaît pas encore de session cliente, donc jamais de tarif
+// membre ici. `now` vient de l'appelant serveur, jamais du domaine (docs/CONVENTIONS.md § 2).
+function toStorefrontProduct(
+  product: ProductRow, promotions: PromotionRule[], now: Date, width: number,
+): StorefrontProduct {
+  const { initialPrice, finalPrice } = resolvePrice({
+    basePrice: product.basePrice, productId: product.id, categoryId: product.categoryId,
+    promotions, now, isMember: false,
+  })
+  const [first, second] = product.media
+  return {
+    slug: product.slug,
+    name: product.name,
+    initialPrice,
+    finalPrice,
+    image: first ? imageFile(first.path, width) : placeholder(width),
+    secondaryImage: second ? imageFile(second.path, width) : null,
+    inStock: product.variants.some((variant) => variant.stock > 0),
+  }
+}
+
+export async function listProducts(categorySlug?: string): Promise<StorefrontProduct[]> {
+  const products = await prisma.product.findMany({
+    where: {
+      active: true,
+      ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+    },
+    include: {
+      variants: { select: { stock: true } },
+      // La carte n'affiche que la photo principale et celle du survol.
+      media: { orderBy: { position: 'asc' }, take: 2, select: { path: true } },
+    },
+    // `name` départage deux produits de même ordre : sans ce second critère, l'ordre du
+    // catalogue dépendrait du plan d'exécution et pourrait changer d'un rendu à l'autre.
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+  })
+
+  const promotions = await activePromotions()
+  const now = new Date()
+  return products.map((product) => toStorefrontProduct(product, promotions, now, CATALOG_WIDTH))
+}
+
+export async function loadProduct(slug: string): Promise<ProductDetail | null> {
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    include: {
+      variants: { orderBy: { label: 'asc' } },
+      media: { orderBy: { position: 'asc' } },
+    },
+  })
+  // Un produit désactivé disparaît de la boutique comme s'il n'avait jamais existé :
+  // même réponse qu'un slug inconnu, pour ne rien révéler d'une fiche en coulisses.
+  if (!product || !product.active) return null
+
+  const promotions = await activePromotions()
+  const now = new Date()
+
+  const images = product.media.map((media) => ({
+    path: imageFile(media.path, DETAIL_WIDTH),
+    // Un texte alternatif vide n'a jamais sa place sur la photo principale d'une fiche.
+    alt: media.alt || product.name,
+  }))
+
+  return {
+    ...toStorefrontProduct(product, promotions, now, DETAIL_WIDTH),
+    description: product.description,
+    // `||` et non `??` : une chaîne vide n'est pas un titre.
+    metaTitle: product.metaTitle || `${product.name} — Summer Club`,
+    metaDescription: product.metaDescription || product.description.slice(0, 155),
+    // Sans photo, la fiche garde sa galerie (image de repli) plutôt qu'un vide qui
+    // déséquilibrerait la mise en page.
+    images: images.length > 0 ? images : [{ path: placeholder(DETAIL_WIDTH), alt: product.name }],
+    variants: product.variants.map((variant) => {
+      // Même assiette que createOrder (src/server/orders.ts) : la promotion s'applique au
+      // prix de base augmenté de l'écart. Remiser le prix du produit puis ajouter l'écart
+      // donnerait, pour une remise en pourcentage, un prix affiché que la commande ne
+      // facturerait pas.
+      const { initialPrice, finalPrice } = resolvePrice({
+        basePrice: product.basePrice + variant.priceDelta,
+        productId: product.id, categoryId: product.categoryId,
+        promotions, now, isMember: false,
+      })
+      return {
+        id: variant.id,
+        label: variant.label,
+        price: finalPrice,
+        initialPrice,
+        available: variant.stock > 0,
+      }
+    }),
+  }
+}
 
 // Fonction propriétaire de la suppression d'un produit. La cascade Prisma (Media, Variant)
 // n'atteint que les lignes en base : les fichiers écrits par processImage dans

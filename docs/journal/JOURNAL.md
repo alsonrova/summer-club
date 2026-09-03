@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**73 entrées** · 16 tâches · Développeur 46 · Auditeur qualité et sécurité 20 · Coordinateur 7
+**74 entrées** · 17 tâches · Développeur 47 · Auditeur qualité et sécurité 20 · Coordinateur 7
 
 ## Vue d'ensemble
 
@@ -84,6 +84,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | renommage | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Coordinateur | validé | — |
+| 2026-09-03 | 14 | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -795,3 +796,18 @@ Clôture du chantier de renommage, exécuté sur ordre du propriétaire (2026-09
 
 - **Modèle** : claude-fable-5
 - **Tests** : — → npm test : Tests 251 passed (251). npx --no-install playwright test : 14 passed. tsc --noEmit : aucune sortie. npm run build : 11 routes. prisma migrate diff : No difference detected.
+
+## Tâche 14
+
+### 2026-09-03 · Développeur — livré
+
+Catalogue et fiche produit. src/server/products.ts étendu : listProducts(categorySlug?) et loadProduct(slug) avec prix effectif via resolvePrice (now côté serveur, isMember false), promotion appliquée sur prix de base + écart comme createOrder, initialPrice par déclinaison, repli /placeholder-{800,1200}.avif, produit inactif traité comme inconnu. Groupe (storefront) : layout Header/Footer, /boutique (ISR 300 s, état vide en français), /boutique/[slug] (ISR 300 s — mesuré sur le build : sans generateStaticParams, Next 16.3 rendait la fiche dynamiquement, aucun en-tête x-nextjs-cache ; ajouté, la fiche seed répond HIT), not-found en français, JSON-LD Product par productJsonLd (chaque < échappé en séquence JSON, testé par injection de </script>). Composants Gallery et VariantPicker (groupe radio Déclinaison, Price, rupture en texte, aucun bouton panier avant la tâche 16, déclinaison épuisée sélectionnable et barrée). Casts as Route retirés sur /boutique et /boutique/[slug]. Tests : +12 serveur (fixtures storefront-test-*, catégorie et promotion propres), +4 Gallery, +5 VariantPicker, +3 JSON-LD, +2 e2e (storefront.spec.ts). Quatre preuves par mutation, une à la fois : filtre active de listProducts, dérivation de inStock, garde active de loadProduct, échappement JSON-LD — chacune fait rougir son seul test, restaurées.
+
+- **Modèle** : claude-fable-5-1
+- **Tests** : npm test : Test Files 25 passed (25), Tests 251 passed (251), Duration 16.51s → npm test : Test Files 28 passed (28), Tests 275 passed (275) | npx --no-install tsc --noEmit : aucune sortie (exit 0), lancé après le build | npm run build : Compiled successfully in 91s, 13 pages statiques, /boutique (○, revalidate 5m) et /boutique/[slug] (●, /boutique/collier-vahine pré-rendue, 5m) | npx --no-install playwright test : 16 passed (27.8s)
+- **Fichiers** : `src/server/products.ts`, `src/app/(storefront)/layout.tsx`, `src/app/(storefront)/boutique/page.tsx`, `src/app/(storefront)/boutique/[slug]/page.tsx`, `src/app/(storefront)/boutique/[slug]/structured-data.ts`, `src/app/(storefront)/boutique/[slug]/not-found.tsx`, `src/components/product/gallery.tsx`, `src/components/product/variant-picker.tsx`, `src/components/product/product-card.tsx`, `src/components/layout/header.tsx`, `public/placeholder-800.avif`, `public/placeholder-1200.avif`, `tests/server/products.test.ts`, `tests/components/gallery.test.tsx`, `tests/components/variant-picker.test.tsx`, `tests/storefront/structured-data.test.ts`, `e2e/storefront.spec.ts`
+- **Réserve** : Écart à la décision 8 du coordinateur : le produit du e2e est créé par le back-office (contexte administrateur séparé) et non via Prisma, parce qu'une ligne insérée hors application n'invalide pas le cache ISR de /boutique (revalidatePath n'est appelé que par les actions admin) ; la visite du catalogue et de la fiche reste anonyme, sans storageState.
+- **Réserve** : revalidatePath('/boutique') des actions du back-office (tâche 11) n'invalide pas /boutique/[slug] : avec l'ISR de la fiche voulu par la spec § 4.3, un changement de stock ou de prix peut rester affiché jusqu'à cinq minutes sur la fiche (la commande, elle, relit et recalcule en base). Arbitrage à rendre par le coordinateur : ajouter revalidatePath('/boutique/[slug]', 'page') aux actions, ou accepter le délai.
+- **Réserve** : Type ProductDetail.variants enrichi d'un initialPrice par déclinaison par rapport à la décision 1, sans quoi Price barrerait à tort un prix dont le seul écart vient de priceDelta ; not-found.tsx ajouté sous [slug] (état d'échec en français), absent de la liste du brief.
+- **Réserve** : Interface vérifiée par Playwright (bureau) et par relecture contre la charte, pas dans un navigateur réel aux largeurs mobile et tablette — rôle du testeur UX/UI.
+- **Réserve** : Quatre lignes AuditLog orphelines (admintest-modif-produit, 2026-09-03 19:59–20:01) observées en base, antérieures à cette session et hors périmètre : signalées, non traitées.

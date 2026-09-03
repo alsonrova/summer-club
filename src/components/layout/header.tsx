@@ -1,17 +1,17 @@
 import type { Route } from 'next'
 import Link from 'next/link'
 
-// Contrat volontairement minimal (YAGNI) : le tiroir panier arrive à la tâche 16, les
-// routes /boutique et /panier aux tâches 14-15. L'en-tête collant reste sur `--shell`
-// avec la SEULE ombre autorisée par la charte (spec § 3.5) : `0 1px 0
-// rgba(185,169,146,.35)`, jamais une ombre portée générique.
+// Contrat volontairement minimal (YAGNI) : le tiroir panier arrive à la tâche 16, la
+// route /panier à la tâche 15. L'en-tête collant reste sur `--shell` avec la SEULE ombre
+// autorisée par la charte (spec § 3.5) : `0 1px 0 rgba(185,169,146,.35)`, jamais une
+// ombre portée générique.
 //
 // `typedRoutes` (next.config.ts) valide chaque `href` littéral contre les routes qui
-// existent réellement sous src/app/ (.next/types/routes.d.ts) : /boutique et /panier
-// n'y figurent pas encore, d'où le `as Route` — le remède documenté par Next.js pour
-// un lien vers une route non encore statiquement connue (node_modules/next/dist/docs/
-// .../02-typescript.md, § « Statically Typed Links »). À retirer quand les tâches
-// 14-15 auront créé ces routes.
+// existent réellement sous src/app/ (.next/types/routes.d.ts) : /panier n'y figure pas
+// encore, d'où le `as Route` — le remède documenté par Next.js pour un lien vers une
+// route non encore statiquement connue (node_modules/next/dist/docs/.../02-typescript.md,
+// § « Statically Typed Links »). À retirer quand la tâche 15 aura créé cette route.
+// /boutique existe depuis la tâche 14 et n'a plus besoin du cast.
 export function Header() {
   return (
     <header className="sticky top-0 z-40 bg-shell shadow-[0_1px_0_rgba(185,169,146,0.35)]">
@@ -24,7 +24,7 @@ export function Header() {
         </Link>
         <nav aria-label="Navigation principale" className="flex items-center gap-6 text-small">
           <Link
-            href={'/boutique' as Route}
+            href="/boutique"
             className="text-bark-soft transition-colors hover:text-bark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-deep focus-visible:ring-offset-2"
           >
             Boutique
