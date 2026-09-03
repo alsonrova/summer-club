@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**58 entrées** · 14 tâches · Développeur 36 · Auditeur qualité et sécurité 17 · Coordinateur 5
+**59 entrées** · 15 tâches · Développeur 37 · Auditeur qualité et sécurité 17 · Coordinateur 5
 
 ## Vue d'ensemble
 
@@ -69,6 +69,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-08-30 | 12 | Développeur | livré | — |
 | 2026-08-30 | conventions | Développeur | livré | — |
 | 2026-09-03 | dettes | Développeur | livré | — |
+| 2026-09-03 | 13 | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -636,3 +637,16 @@ Résolution des dettes actionnables avant fusion de v1.0 dans main. 1) tests/adm
 - **Réserve** : e2e/admin-produits.spec.ts garde sa compensation manuelle dupliquée : il ne peut pas importer src/server/ (résolution de l'alias @/* sous Playwright, choix documenté dans le fichier). Elle est idempotente et ne contredit pas deleteProduct.
 - **Réserve** : BETTER_AUTH_URL n'est surchargé que dans l'environnement du webServer Playwright ; .env garde http://localhost:3000 pour l'usage manuel de npm run start.
 - **Réserve** : Hors périmètre, toujours ouverts : le renommage (docs/RENOMMAGE.md), le backlog V1.1/V1.2, PaymentProvider (tâche 17), advanced.ipAddress (tâche 22), l'écran catégories.
+
+## Tâche 13
+
+### 2026-09-03 · Développeur — livré
+
+Composants de base (Price, Button) et carte produit (ProductCard), plus Header/Footer minimaux au contrat fixé par le coordinateur (identifiants anglais, libellés et commentaires français). TDD : tests/components/product-card.test.tsx écrit et vu rouge (module manquant) avant l'implémentation. vitest.config.ts migré vers test.projects (environnementMatchGlobs a disparu de vitest 4, vérifié dans node_modules) pour faire cohabiter l'environnement node existant et un projet jsdom dédié aux composants ; globals: true posé sur ce seul projet jsdom, sans quoi le nettoyage automatique de @testing-library/react (afterEach bare, non importé) ne s'enregistre pas et le DOM d'un test fuit dans le suivant. Les assertions de prix comparent le texte du DOM sans le normaliseur par défaut de testing-library, qui réduit l'espace insécable à un espace ordinaire avant comparaison et aurait sinon rendu le test aveugle à une régression NBSP -> espace ; vérifié par mutation (Price modifié pour émettre un espace ordinaire, le test rougit seul sur les deux assertions de prix et elles seules, puis restauré). Les liens vers /boutique, /panier et /boutique/[slug] (routes des tâches 14-15, non encore créées) portent un cast 'as Route', remède documenté par Next.js (typedRoutes) pour une route non encore statiquement connue.
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : npm test (avant intervention) : 24 fichiers, 245 tests, tous passants → npm test (après, second passage) : 25 fichiers, 249 tests, tous passants. Un premier passage a vu tests/server/products.test.ts (sans lien avec ce lot) échouer sur un timeout de hook Vitest de 5000ms a froid ; repassé seul au vert au second essai, conforme au symptome documente dans le brief de la tache. npx tsc --noEmit et npm run build sont propres.
+- **Fichiers** : `vitest.config.ts`, `package.json`, `package-lock.json`, `src/components/ui/price.tsx`, `src/components/ui/button.tsx`, `src/components/product/product-card.tsx`, `src/components/layout/header.tsx`, `src/components/layout/footer.tsx`, `tests/components/product-card.test.tsx`
+- **Réserve** : Header et Footer ne sont montés dans aucune page (integration prevue taches 14-15) ; leur contrat visuel n'a donc pas ete verifie dans un navigateur, seulement relu contre la spec (ombre exacte, fond, focus clavier).
+- **Réserve** : npm i a ajoute des devDependencies dont la chaine prisma@6.19.3 -> @prisma/config -> deepmerge-ts porte 3 alertes 'high' (npm audit) preexistantes a cette tache, non liees aux paquets ajoutes (@testing-library/*, jsdom) ; non traitees ici, hors perimetre.
+- **Réserve** : Button est cree selon le contrat mais n'est encore consomme par aucun autre composant (ProductCard rend la rupture en texte simple, pas via Button) ; sa premiere utilisation reelle viendra d'une tache ulterieure (panier, formulaires).
