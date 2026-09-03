@@ -3,7 +3,7 @@ import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 import { prisma } from '@/server/db'
-import { ErreurImageIllisible } from '@/server/media'
+import { UnreadableImageError } from '@/server/media'
 import {
   creerProduit,
   modifierProduit,
@@ -46,7 +46,7 @@ const controleEcriture = vi.hoisted(() => ({
   erreur: null as (Error & { code?: string }) | null,
 }))
 // Doublure PARTIELLE : tout node:fs/promises reste réel, seul writeFile peut être armé pour
-// échouer. On mocke le système de fichiers plutôt que traiterImage afin que le vrai pipeline
+// échouer. On mocke le système de fichiers plutôt que processImage afin que le vrai pipeline
 // s'exécute — sharp encode réellement l'image, seule l'écriture casse. C'est exactement la
 // situation que televerserMedia doit savoir distinguer d'un fichier illisible.
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -210,8 +210,8 @@ describe('televerserMedia', () => {
   })
 
   it("retourne le message « image illisible » pour un fichier au type MIME accepté dont le contenu n'est pas une image", async () => {
-    // Le test voisin (application/pdf) est arrêté par validerFichierMedia et n'atteint
-    // jamais traiterImage : c'est un test de la garde d'entrée, pas du message d'erreur.
+    // Le test voisin (application/pdf) est arrêté par validateMediaFile et n'atteint
+    // jamais processImage : c'est un test de la garde d'entrée, pas du message d'erreur.
     // Ici le type MIME est image/jpeg — donc accepté — mais le contenu n'en est pas une :
     // la validation laisse passer, sharp échoue, et c'est le seul chemin qui atteint
     // réellement le message français rendu à la propriétaire.
@@ -239,13 +239,13 @@ describe('televerserMedia', () => {
     expect(String(appel?.[0])).toMatch(/televerserMedia/)
     const contexte = appel?.[1] as { productId: string; erreur: unknown }
     expect(contexte.productId).toBe(productId)
-    expect(contexte.erreur).toBeInstanceOf(ErreurImageIllisible)
-    expect((contexte.erreur as ErreurImageIllisible).cause).toBeInstanceOf(Error)
+    expect(contexte.erreur).toBeInstanceOf(UnreadableImageError)
+    expect((contexte.erreur as UnreadableImageError).cause).toBeInstanceOf(Error)
   })
 
   it("retourne le message de panne technique, et non « image illisible », quand c'est l'écriture disque qui échoue", async () => {
     // Test jumeau du précédent, et le seul à couvrir la branche FAUSSE du discriminant
-    // `erreur instanceof ErreurImageIllisible`. Sans lui, supprimer ce discriminant pour
+    // `erreur instanceof UnreadableImageError`. Sans lui, supprimer ce discriminant pour
     // répondre « image illisible » à n'importe quel échec — c'est-à-dire réintroduire
     // exactement la confusion que le correctif a fermée — laisserait la suite entièrement
     // verte. Ici l'image est une VRAIE image : sharp l'encode sans broncher, c'est
@@ -273,13 +273,13 @@ describe('televerserMedia', () => {
     expect(etat.erreur).not.toMatch(/n'a pas pu être lue/)
 
     // Rien n'est créé en base, et le journal serveur porte l'erreur réelle — celle qui
-    // permet de diagnostiquer un disque plein — et non une ErreurImageIllisible.
+    // permet de diagnostiquer un disque plein — et non une UnreadableImageError.
     expect(await prisma.media.count({ where: { productId } })).toBe(avant)
     expect(journal).toHaveBeenCalledTimes(1)
     const contexte = journal.mock.calls[0]?.[1] as { productId: string; erreur: unknown }
     expect(contexte.productId).toBe(productId)
     expect(contexte.erreur).toBe(panne)
-    expect(contexte.erreur).not.toBeInstanceOf(ErreurImageIllisible)
+    expect(contexte.erreur).not.toBeInstanceOf(UnreadableImageError)
   })
 })
 
@@ -660,7 +660,7 @@ describe('televerserMedia (chemin nominal)', () => {
     expect(audit.apres).toEqual({ chemin: media.chemin })
 
     // Nettoyage via supprimerMedia (Correctif 5) plutôt qu'un rm manuel : exerce du même
-    // coup son chemin nominal (effacement des six fichiers produits par traiterImage), et
+    // coup son chemin nominal (effacement des six fichiers produits par processImage), et
     // ne laisse rien dans public/uploads au-delà de .gitkeep.
     const etatSuppression = await supprimerMedia(media.id, { erreur: null }, new FormData())
     expect(etatSuppression.erreur).toBeNull()
@@ -674,7 +674,7 @@ describe('televerserMedia (chemin nominal)', () => {
     expect(apresCompte).toBe(avantCompte)
 
     // Aucun résidu sous le préfixe que CE test s'est attribué (le nom de fichier retourné
-    // par traiterImage) : attrape une largeur ou une extension que televerserMedia aurait
+    // par processImage) : attrape une largeur ou une extension que televerserMedia aurait
     // écrite et que supprimerMedia ne nettoierait pas. Aucune assertion, en revanche, sur
     // le contenu entier de public/uploads : ce dossier est une ressource globale que ce
     // fichier ne possède pas, et l'exiger vide (« il ne reste que .gitkeep ») entrait en

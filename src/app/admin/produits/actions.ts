@@ -4,14 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/server/db'
 import { requireAdmin } from '@/server/auth'
-import { enregistrerAudit } from '@/server/audit'
+import { recordAudit } from '@/server/audit'
 import {
-  traiterImage,
-  validerFichierMedia,
-  effacerFichiersMedia,
-  ErreurImageIllisible,
+  processImage,
+  validateMediaFile,
+  deleteMediaFiles,
+  UnreadableImageError,
 } from '@/server/media'
-import { estViolationUnicite } from '@/server/prisma-erreurs'
+import { isUniqueViolation } from '@/server/prisma-erreurs'
 import { validerFormData, formDataVersObjet } from '@/admin/engine/actions'
 import { productsResource } from '@/admin/resources/products'
 import { variantsResource } from '@/admin/resources/variants'
@@ -23,7 +23,7 @@ import type {
 
 // Convention d'administration (voir src/server/auth.ts) : un layout ne protège ni les
 // Server Actions ni les Route Handlers — chaque action ici appelle requireAdmin() elle-même,
-// même si les briques du moteur qu'elle invoque (validerFormData, enregistrerAudit) le font
+// même si les briques du moteur qu'elle invoque (validerFormData, recordAudit) le font
 // déjà indirectement pour certaines. La lecture de session est mise en cache par requête
 // (React cache()), ce doublon ne coûte donc rien.
 
@@ -62,7 +62,7 @@ export async function creerProduit(
   try {
     produit = await prisma.product.create({ data: resultat.donnees })
   } catch (erreur) {
-    if (estViolationUnicite(erreur, 'slug')) {
+    if (isUniqueViolation(erreur, 'slug')) {
       return {
         succes: false,
         erreurs: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
@@ -72,12 +72,12 @@ export async function creerProduit(
     throw erreur
   }
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'creer',
-    entite: 'produits',
-    entiteId: produit.id,
-    apres: resultat.donnees,
+    entity: 'produits',
+    entityId: produit.id,
+    after: resultat.donnees,
   })
 
   // Le catalogue public lit ces mêmes produits : sans cette invalidation, une création
@@ -118,7 +118,7 @@ export async function modifierProduit(
   try {
     await prisma.product.update({ where: { id: productId }, data: resultat.donnees })
   } catch (erreur) {
-    if (estViolationUnicite(erreur, 'slug')) {
+    if (isUniqueViolation(erreur, 'slug')) {
       return {
         succes: false,
         erreurs: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
@@ -128,13 +128,13 @@ export async function modifierProduit(
     throw erreur
   }
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'modifier',
-    entite: 'produits',
-    entiteId: productId,
-    avant: avantMemesClefs,
-    apres: resultat.donnees,
+    entity: 'produits',
+    entityId: productId,
+    before: avantMemesClefs,
+    after: resultat.donnees,
   })
 
   revalidatePath('/boutique')
@@ -178,14 +178,14 @@ export async function creerDeclinaison(
     // Deux contraintes d'unicité distinctes sur Variant (voir prisma/schema.prisma) :
     // `sku` (globale) et `(productId, libelle)` (par produit). Sans les distinguer,
     // la propriétaire verrait une erreur technique au premier doublon.
-    if (estViolationUnicite(erreur, 'sku')) {
+    if (isUniqueViolation(erreur, 'sku')) {
       return {
         succes: false,
         erreurs: { sku: ['Ce SKU est déjà utilisé par une autre déclinaison.'] },
         valeursInitiales: formDataVersObjet(formData, variantsResource),
       }
     }
-    if (estViolationUnicite(erreur, 'libelle')) {
+    if (isUniqueViolation(erreur, 'libelle')) {
       return {
         succes: false,
         erreurs: { libelle: ['Une déclinaison avec ce libellé existe déjà pour ce produit.'] },
@@ -195,12 +195,12 @@ export async function creerDeclinaison(
     throw erreur
   }
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'creer',
-    entite: 'Variant',
-    entiteId: variant.id,
-    apres: resultat.donnees,
+    entity: 'Variant',
+    entityId: variant.id,
+    after: resultat.donnees,
   })
 
   revalidatePath('/boutique')
@@ -236,13 +236,13 @@ export async function ajusterStock(
 
   // Seule trace qui permettra plus tard de comprendre un écart d'inventaire : l'ancienne
   // ET la nouvelle valeur, jamais l'une sans l'autre.
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'ajustement_stock',
-    entite: 'Variant',
-    entiteId: variantId,
-    avant: { stock: avant.stock },
-    apres: { stock: apres.stock },
+    entity: 'Variant',
+    entityId: variantId,
+    before: { stock: avant.stock },
+    after: { stock: apres.stock },
   })
 
   revalidatePath('/boutique')
@@ -263,7 +263,7 @@ export async function televerserMedia(
     return { erreur: 'Aucun fichier sélectionné.' }
   }
 
-  const erreurValidation = validerFichierMedia(fichier)
+  const erreurValidation = validateMediaFile(fichier)
   if (erreurValidation) {
     return { erreur: erreurValidation }
   }
@@ -281,27 +281,27 @@ export async function televerserMedia(
   })
 
   const buffer = Buffer.from(await fichier.arrayBuffer())
-  // traiterImage assainit le nom et y ajoute elle-même un suffixe aléatoire d'unicité :
+  // processImage assainit le nom et y ajoute elle-même un suffixe aléatoire d'unicité :
   // inutile d'horodater ici, et surtout ne jamais lui passer le nom envoyé par le
   // navigateur (fichier.name) — seul l'identifiant du produit, déjà validé, lui est confié.
   //
   // Un fichier au type MIME usurpé (un PDF renommé en .jpg, une image tronquée, un format
-  // que sharp refuse malgré un en-tête accepté par validerFichierMedia) fait lever
-  // traiterImage : conformément à la conception « erreurs retournées, pas levées » de ce
+  // que sharp refuse malgré un en-tête accepté par validateMediaFile) fait lever
+  // processImage : conformément à la conception « erreurs retournées, pas levées » de ce
   // fichier, on l'attrape ici plutôt que de laisser l'action entière planter avec une
   // trace technique.
   let chemin: string
   try {
-    ;({ chemin } = await traiterImage(buffer, productId))
+    ;({ chemin } = await processImage(buffer, productId))
   } catch (erreur) {
     // Journalisé dans tous les cas, avec l'erreur réelle : sans cette trace, un disque
     // plein ou des droits refusés sur public/uploads seraient indiscernables côté serveur
     // d'un fichier corrompu, donc indiagnosticables.
     console.error('[televerserMedia] échec du traitement de l’image', { productId, erreur })
 
-    // Seul le vrai échec de décodage (ErreurImageIllisible, levée par le seul encodage —
+    // Seul le vrai échec de décodage (UnreadableImageError, levée par le seul encodage —
     // voir src/server/media.ts) mérite d'être imputé au fichier envoyé.
-    if (erreur instanceof ErreurImageIllisible) {
+    if (erreur instanceof UnreadableImageError) {
       return {
         erreur:
           "Cette image n'a pas pu être lue. Vérifiez qu'il s'agit bien d'une photo JPEG, PNG, WebP ou AVIF.",
@@ -336,12 +336,12 @@ export async function televerserMedia(
     },
   })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'ajout_media',
-    entite: 'Media',
-    entiteId: media.id,
-    apres: { chemin },
+    entity: 'Media',
+    entityId: media.id,
+    after: { chemin },
   })
 
   revalidatePath('/boutique')
@@ -377,13 +377,13 @@ export async function reordonnerMedia(
     data: { position: nouvellePosition },
   })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'reordonner_media',
-    entite: 'Media',
-    entiteId: mediaId,
-    avant: { position: avant.position },
-    apres: { position: apres.position },
+    entity: 'Media',
+    entityId: mediaId,
+    before: { position: avant.position },
+    after: { position: apres.position },
   })
 
   revalidatePath('/boutique')
@@ -408,13 +408,13 @@ export async function modifierAltMedia(
   const avant = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
   await prisma.media.update({ where: { id: mediaId }, data: { alt } })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'modifier_alt_media',
-    entite: 'Media',
-    entiteId: mediaId,
-    avant: { alt: avant.alt },
-    apres: { alt },
+    entity: 'Media',
+    entityId: mediaId,
+    before: { alt: avant.alt },
+    after: { alt },
   })
 
   revalidatePath('/boutique')
@@ -444,13 +444,13 @@ export async function definirPhotoPrincipale(
     prisma.media.update({ where: { id: mediaId }, data: { isPrimary: true } }),
   ])
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'definir_photo_principale',
-    entite: 'Media',
-    entiteId: mediaId,
-    avant: { isPrimary: media.isPrimary },
-    apres: { isPrimary: true },
+    entity: 'Media',
+    entityId: mediaId,
+    before: { isPrimary: media.isPrimary },
+    after: { isPrimary: true },
   })
 
   revalidatePath('/boutique')
@@ -471,7 +471,7 @@ export async function supprimerMedia(
   // Efface les fichiers avant la ligne en base : si l'effacement disque échouait, mieux
   // vaut une ligne orpheline (photo cassée, visible, corrigible) qu'un fichier orphelin
   // sur disque qu'aucune fiche ne référence plus jamais.
-  await effacerFichiersMedia(media.chemin)
+  await deleteMediaFiles(media.chemin)
 
   await prisma.$transaction(async (tx) => {
     await tx.media.delete({ where: { id: mediaId } })
@@ -489,12 +489,12 @@ export async function supprimerMedia(
     }
   })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'supprimer_media',
-    entite: 'Media',
-    entiteId: mediaId,
-    avant: { chemin: media.chemin, alt: media.alt, isPrimary: media.isPrimary },
+    entity: 'Media',
+    entityId: mediaId,
+    before: { chemin: media.chemin, alt: media.alt, isPrimary: media.isPrimary },
   })
 
   revalidatePath('/boutique')

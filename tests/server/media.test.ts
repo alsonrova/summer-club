@@ -2,13 +2,13 @@ import { describe, it, expect, afterAll } from 'vitest'
 import { rm, stat, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
-import { traiterImage } from '@/server/media'
+import { processImage } from '@/server/media'
 
 const LARGEURS_TEST = [400, 800, 1200] as const
 const DOSSIER_UPLOADS = path.join(process.cwd(), 'public', 'uploads')
 
 // Chaque test qui produit réellement des fichiers y enregistre le
-// `chemin` retourné par traiterImage. Le nom réel des fichiers
+// `chemin` retourné par processImage. Le nom réel des fichiers
 // contenant désormais un suffixe aléatoire, le nettoyage ne peut se
 // faire qu'à partir de ces chemins retournés — jamais en devinant un
 // nom construit à la main.
@@ -36,8 +36,8 @@ afterAll(async () => {
   await Promise.all(fichiers.map((f) => rm(f, { force: true })))
 
   // Assertion automatisée : aucun résidu dans public/uploads SOUS LES
-  // PRÉFIXES que ce fichier de test s'est attribués (`nomBase` +
-  // suffixe aléatoire retourné par traiterImage). Deux propriétés :
+  // PRÉFIXES que ce fichier de test s'est attribués (`baseName` +
+  // suffixe aléatoire retourné par processImage). Deux propriétés :
   // — elle reste plus forte que « les six fichiers nettoyés ci-dessus
   //   ont disparu », qui serait tautologique après un rm : elle
   //   attrape une largeur ou une extension écrite en plus de celles
@@ -53,13 +53,13 @@ afterAll(async () => {
   expect(entrees.filter((entree) => prefixes.some((p) => entree.startsWith(p)))).toEqual([])
 })
 
-describe('traiterImage', () => {
+describe('processImage', () => {
   it('produit un fichier au ratio 4:5 exact', async () => {
     const source = await creerSourceJpeg(1000, 600, '#EDE5DA')
 
-    const { chemin, largeurs } = await traiterImage(source, 'test-img')
+    const { chemin, widths } = await processImage(source, 'test-img')
     cheminsUtilises.push(chemin)
-    expect(largeurs).toEqual([400, 800, 1200])
+    expect(widths).toEqual([400, 800, 1200])
 
     const meta = await sharp(fichierPour(chemin, 400, 'avif')).metadata()
     expect(meta.width).toBe(400)
@@ -68,16 +68,16 @@ describe('traiterImage', () => {
 
   it('écrit aussi une version webp de repli', async () => {
     const source = await creerSourceJpeg(800, 800, '#EDE5DA')
-    const { chemin } = await traiterImage(source, 'test-img')
+    const { chemin } = await processImage(source, 'test-img')
     cheminsUtilises.push(chemin)
     await expect(stat(fichierPour(chemin, 800, 'webp'))).resolves.toBeTruthy()
   })
 
   it('produit les trois largeurs au ratio 4:5 exact, en avif comme en webp', async () => {
     const source = await creerSourceJpeg(1000, 600, '#EDE5DA')
-    const { chemin, largeurs } = await traiterImage(source, 'dimensions')
+    const { chemin, widths } = await processImage(source, 'dimensions')
     cheminsUtilises.push(chemin)
-    expect(largeurs).toEqual([400, 800, 1200])
+    expect(widths).toEqual([400, 800, 1200])
 
     for (const largeur of LARGEURS_TEST) {
       const hauteurAttendue = Math.round((largeur * 5) / 4)
@@ -99,7 +99,7 @@ describe('traiterImage', () => {
     const metaSource = await sharp(source).metadata()
     expect(metaSource.orientation).toBe(6)
 
-    const { chemin } = await traiterImage(source, 'exif-portrait')
+    const { chemin } = await processImage(source, 'exif-portrait')
     cheminsUtilises.push(chemin)
 
     const meta = await sharp(fichierPour(chemin, 400, 'avif')).metadata()
@@ -108,13 +108,13 @@ describe('traiterImage', () => {
     expect(meta.orientation).toBeUndefined()
   })
 
-  it('garantit des chemins distincts et zéro collision entre deux téléversements concurrents du même nomBase', async () => {
+  it('garantit des chemins distincts et zéro collision entre deux téléversements concurrents du même baseName', async () => {
     const source1 = await creerSourceJpeg(900, 900, '#111111')
     const source2 = await creerSourceJpeg(900, 900, '#EEEEEE')
 
     const [resultat1, resultat2] = await Promise.all([
-      traiterImage(source1, 'concurrent'),
-      traiterImage(source2, 'concurrent'),
+      processImage(source1, 'concurrent'),
+      processImage(source2, 'concurrent'),
     ])
     cheminsUtilises.push(resultat1.chemin, resultat2.chemin)
 
@@ -140,7 +140,7 @@ describe('traiterImage', () => {
       `${nomBaseMalicieux}-400.avif`,
     )
 
-    const { chemin } = await traiterImage(source, nomBaseMalicieux)
+    const { chemin } = await processImage(source, nomBaseMalicieux)
     cheminsUtilises.push(chemin)
 
     expect(path.basename(chemin).startsWith('evil-')).toBe(true)
@@ -148,10 +148,10 @@ describe('traiterImage', () => {
     await expect(stat(fichierPour(chemin, 400, 'avif'))).resolves.toBeTruthy()
   })
 
-  it('rejette un nomBase dont le composant de base contient des caractères interdits', async () => {
+  it('rejette un baseName dont le composant de base contient des caractères interdits', async () => {
     const source = await creerSourceJpeg(400, 400, '#000000')
-    await expect(traiterImage(source, '../../../../evil.png')).rejects.toThrow(
-      /nomBase invalide/,
+    await expect(processImage(source, '../../../../evil.png')).rejects.toThrow(
+      /baseName invalide/,
     )
   })
 })

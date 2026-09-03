@@ -515,6 +515,20 @@ Couche `src/domain/` (arbitrée par le coordinateur, consignée au journal) :
 | `CartTotals` | `sousTotal` / `fraisLivraison` / `remise` | `subtotal` / `shippingFee` / `discount` — miroirs des colonnes `Order` (§ 2) : le **type** change dès l'étape 1-bis, les **colonnes** attendent l'étape 6 |
 | `resolvePrice` (clés du paramètre) | `prixBase` / `maintenant` / `estMembre` | `basePrice` / `now` / `isMember` |
 
+Couche `src/server/` (étape 2) :
+
+| Type ou paramètre | Actuel | Cible |
+| --- | --- | --- |
+| `OrderInput` (`CommandeInput`) | `lignes` / `lignes[].quantite` / `estMembre` | `lines` / `lines[].quantity` / `isMember` |
+| `OrderInput.client` | `nom` / `tel` / `adresse` | `customerName` / `phone` / `address` — vocabulaire de la colonne `Order` (§ 2) |
+| `OrderInput` | `canal` | `channel` ⚠ le document de cadrage range `canal` du côté des clés qui « restent françaises jusqu'à l'étape 6 » dans son exemple de frontière Prisma (`{ sousTotal, clientNom, statut, canal }`), mais cet exemple décrit l'objet `data` écrit dans Prisma, pas le type `OrderInput` lui-même. Par symétrie avec `CartTotals` (§ 1-bis, ci-dessus : le type change dès son étape, la colonne Prisma attend l'étape 6), et parce que le champ est réécrit dans ce commit, `canal` devient `channel` sur `OrderInput` — seule sa valeur (`'orange_money' \| 'whatsapp' \| 'livraison'`) reste inchangée. Au point d'écriture Prisma (`tx.order.create({ data: { canal: input.channel, … } })`), la clé `canal:` reste française, conformément à la distinction critique |
+| `CreatedOrder` (`CommandeCreee`) | `tokenSuivi` | `trackingToken` — miroir de `Order.tokenSuivi` (§ 2), type propre à cette couche, pas un objet passé tel quel à Prisma |
+| `recordAudit` (`enregistrerAudit`, args) | `acteur` / `entite` / `entiteId` / `avant` / `apres` | `actor` / `entity` / `entityId` / `before` / `after`. À la frontière Prisma, à l'intérieur de `recordAudit`, les clés de `client.auditLog.create({ data: { … } })` restent `acteur`/`entite`/`entiteId`/`avant`/`apres` (colonnes `AuditLog`, § 2, étape 6) — seules les valeurs viennent des champs renommés (`args.actor`, …) |
+| `ForbiddenTransitionError` (`TransitionInterditeError`, propriétés publiques) | `de` / `vers` | `from` / `to` — aligné sur `transitionAllowed(from, to)` (`src/domain/order-status.ts`, déjà ainsi depuis l'étape 1) |
+| `ReviewNotPublishedError` (`AvisNonPublieError`, propriété publique) | `statut` | `status` |
+| `InvalidReviewStatusError` / `InvalidPinError` (`StatutAvisInvalideError` / `EpinglageInvalideError`, propriété publique) | `valeur` | `value` |
+| `processImage` (`traiterImage`, forme de retour) | `largeurs` | `widths` — le second champ du retour, `chemin`, **reste français** : il est réinjecté tel quel dans `prisma.media.create({ data: { …, chemin } })` par ses appelants (`src/app/admin/produits/actions.ts`), donc contraint par la frontière Prisma (`Media.chemin`, § 2, étape 6), au même titre que le paramètre `mediaPath` de `deleteMediaFiles` |
+
 ---
 
 ## 4. Fichiers à renommer

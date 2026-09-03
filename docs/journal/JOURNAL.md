@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**63 entrées** · 16 tâches · Développeur 39 · Auditeur qualité et sécurité 18 · Coordinateur 6
+**64 entrées** · 16 tâches · Développeur 40 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -72,6 +72,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | 13 | Développeur | livré | — |
 | 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | 13 | Coordinateur | livré | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 
@@ -689,3 +690,12 @@ Etape 1 bis - applique RENOMMAGE.md section 3.7 (arbitree par le coordinateur) :
 - **Tests** : Test Files  25 passed (25) / Tests  249 passed (249) → Test Files  25 passed (25) / Tests  249 passed (249)
 - **Fichiers** : `src/domain/types.ts`, `src/domain/cart.ts`, `src/domain/pricing.ts`, `src/server/orders.ts`, `tests/domain/cart.test.ts`, `tests/domain/pricing.test.ts`, `docs/RENOMMAGE.md`
 - **Réserve** : Les 4 signalements de l'etape 1 sont maintenant tous couverts. RENOMMAGE.md section 6.9 (valeurs de AuditLog.action) ajoutee par le coordinateur dans le meme commit, non traitee ici - c'est l'etape 6.
+
+### 2026-09-03 · Développeur — livré
+
+Étape 2 — src/server/ (erreurs, orders, order-status-service, audit, media, reviews, prisma-erreurs, auth) renommé en anglais ; consommateurs (src/admin/, src/app/, tests/) alignés sur les nouveaux exports ; propriétés OrderInput/CreatedOrder/recordAudit/ForbiddenTransitionError/ReviewNotPublishedError/InvalidReviewStatusError/InvalidPinError/processImage renommées et consignées en § 3.7
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : npm test : Tests 249 passed (249) → npm test : Test Files 25 passed (25), Tests 249 passed (249)
+- **Fichiers** : `src/server/orders.ts`, `src/server/order-status-service.ts`, `src/server/audit.ts`, `src/server/media.ts`, `src/server/reviews.ts`, `src/server/prisma-erreurs.ts`, `src/server/auth.ts`, `src/server/products.ts`, `src/admin/engine/actions.ts`, `src/app/admin/avis/actions.ts`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/produits/[id]/media-carte.tsx`, `src/app/admin/produits/actions.ts`, `next.config.ts`, `e2e/admin-produits.spec.ts`, `tests/admin/avis-actions.test.ts`, `tests/admin/champs-systeme.test.ts`, `tests/admin/commandes-actions.test.ts`, `tests/admin/produits-actions.test.ts`, `tests/server/media-validation.test.ts`, `tests/server/media.test.ts`, `tests/server/orders.test.ts`, `tests/server/prisma-erreurs.test.ts`, `tests/server/products.test.ts`, `tests/server/statut.test.ts`, `docs/RENOMMAGE.md`
+- **Réserve** : OrderInput.channel (ex. canal) et le pass-through Prisma media.chemin/processImage sont des choix de jugement documentés en § 3.7, marqués la ou signalés dans le rapport ; a re-verifier en revue.

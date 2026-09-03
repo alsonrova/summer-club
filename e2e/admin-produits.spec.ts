@@ -63,7 +63,7 @@ async function effacerFichiersMediaTest(chemin: string) {
 }
 
 // Supprime un produit de test avec tout ce qui en dépend : ses fichiers média sur disque
-// (traiterImage() les écrit hors de la base, la cascade Prisma sur Media ne les efface
+// (processImage() les écrit hors de la base, la cascade Prisma sur Media ne les efface
 // pas), puis le produit lui-même (cascade Prisma sur Variant/Media), puis les lignes de
 // journal d'audit qui le référencent — sans quoi elles resteraient orphelines après coup
 // (Correctif 8 de la revue de la tâche 11 : « résidus d'audit »).

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Prisma } from '@prisma/client'
-import { estViolationUnicite } from '@/server/prisma-erreurs'
+import { isUniqueViolation } from '@/server/prisma-erreurs'
 
 function creerErreurP2002(target: string[]): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Violation de contrainte unique', {
@@ -10,17 +10,17 @@ function creerErreurP2002(target: string[]): Prisma.PrismaClientKnownRequestErro
   })
 }
 
-describe('estViolationUnicite', () => {
+describe('isUniqueViolation', () => {
   it('reconnaît une violation P2002 sur la colonne demandée', () => {
-    expect(estViolationUnicite(creerErreurP2002(['sku']), 'sku')).toBe(true)
+    expect(isUniqueViolation(creerErreurP2002(['sku']), 'sku')).toBe(true)
   })
 
   it('reconnaît une violation P2002 sur une contrainte composite contenant la colonne demandée', () => {
-    expect(estViolationUnicite(creerErreurP2002(['productId', 'libelle']), 'libelle')).toBe(true)
+    expect(isUniqueViolation(creerErreurP2002(['productId', 'libelle']), 'libelle')).toBe(true)
   })
 
   it('ne confond pas deux contraintes distinctes', () => {
-    expect(estViolationUnicite(creerErreurP2002(['sku']), 'libelle')).toBe(false)
+    expect(isUniqueViolation(creerErreurP2002(['sku']), 'libelle')).toBe(false)
   })
 
   it("ignore une erreur Prisma qui n'est pas P2002", () => {
@@ -28,10 +28,10 @@ describe('estViolationUnicite', () => {
       code: 'P2025',
       clientVersion: 'test',
     })
-    expect(estViolationUnicite(erreur, 'sku')).toBe(false)
+    expect(isUniqueViolation(erreur, 'sku')).toBe(false)
   })
 
   it("ignore une erreur qui n'est pas une PrismaClientKnownRequestError", () => {
-    expect(estViolationUnicite(new Error('boom'), 'sku')).toBe(false)
+    expect(isUniqueViolation(new Error('boom'), 'sku')).toBe(false)
   })
 })

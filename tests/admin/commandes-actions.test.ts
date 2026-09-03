@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
-import { CommandeError, creerCommande } from '@/server/orders'
-import { cheminsARevalider } from '@/server/order-status-service'
+import { OrderError, createOrder } from '@/server/orders'
+import { pathsToRevalidate } from '@/server/order-status-service'
 import { etatChangementStatutInitial } from '@/app/admin/commandes/etats'
 
 // Mêmes doublures que tests/admin/avis-actions.test.ts : requireAdmin() lit une session via
@@ -21,7 +21,7 @@ const { changerStatut, changerStatutDepuisFormulaire } = await import(
 )
 
 // Ce que ce fichier couvre, et que rien ne couvrait : les ACTIONS de commande. Le cœur
-// métier (`appliquerStatut`) a ses propres tests dans tests/server/statut.test.ts, et la
+// métier (`applyStatus`) a ses propres tests dans tests/server/statut.test.ts, et la
 // requête de liste dans tests/admin/commandes-query.test.ts — mais l'enveloppe
 // authentifiée et son adaptateur `useActionState` n'étaient exercés qu'en bout-en-bout,
 // sur le chemin heureux. Or c'est précisément là que vivent le garde de type sur le statut
@@ -35,7 +35,7 @@ const SLUG_CATEGORIE = 'test-cmd-actions-categorie'
 const SLUG_PRODUIT = 'test-cmd-actions-produit'
 const SKU = 'CMDACT-45'
 
-const client = { nom: 'Cliente de test (actions commandes)', tel: '0320000000' }
+const client = { customerName: 'Cliente de test (actions commandes)', phone: '0320000000' }
 
 let variantId: string
 
@@ -105,23 +105,23 @@ afterAll(async () => {
   await prisma.$disconnect()
 })
 
-async function commandeWhatsapp(quantite: number) {
-  return creerCommande({
-    lignes: [{ variantId, quantite }],
-    canal: 'whatsapp',
+async function commandeWhatsapp(quantity: number) {
+  return createOrder({
+    lines: [{ variantId, quantity }],
+    channel: 'whatsapp',
     client,
     zoneId: null,
-    estMembre: false,
+    isMember: false,
   })
 }
 
-async function commandeConfirmee(quantite: number) {
-  return creerCommande({
-    lignes: [{ variantId, quantite }],
-    canal: 'livraison',
+async function commandeConfirmee(quantity: number) {
+  return createOrder({
+    lines: [{ variantId, quantity }],
+    channel: 'livraison',
     client,
     zoneId: null,
-    estMembre: false,
+    isMember: false,
   })
 }
 
@@ -152,8 +152,8 @@ describe('changerStatut — chemin nominal', () => {
       'confirmee',
     )
     // La liste vient du module métier, elle n'est pas recopiée ici : c'est ce qui garantit
-    // qu'aucun chemin ajouté à `cheminsARevalider` ne sera oublié par l'action.
-    for (const chemin of cheminsARevalider(c.id)) {
+    // qu'aucun chemin ajouté à `pathsToRevalidate` ne sera oublié par l'action.
+    for (const chemin of pathsToRevalidate(c.id)) {
       expect(revalidatePath).toHaveBeenCalledWith(chemin)
     }
   })
@@ -177,7 +177,7 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
     expect(etat.erreur).toContain('Rechargez la page.')
     // Ni valeur brute d'énumération, ni nom de classe d'erreur sous les yeux de la
     // propriétaire.
-    expect(etat.erreur).not.toMatch(/confirmee|livree|TransitionInterdite/)
+    expect(etat.erreur).not.toMatch(/confirmee|livree|ForbiddenTransition/)
     expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
       'confirmee',
     )
@@ -198,7 +198,7 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
 
     expect(etat.erreur).toContain('Stock insuffisant')
     expect(etat.erreur).toContain('Réapprovisionnez')
-    expect(etat.erreur).not.toMatch(/RuptureStock|prisma|constraint/i)
+    expect(etat.erreur).not.toMatch(/OutOfStock|prisma|constraint/i)
     // Refusée avant toute écriture : ni stock entamé, ni statut avancé à tort.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(1)
     expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
@@ -234,11 +234,11 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
     ).then(() => null, (e: unknown) => e)
 
     // On NOMME l'erreur attendue. Un `rejects.toThrow()` sans argument passerait pour
-    // n'importe quel rejet — RuptureStockError et TransitionInterditeError compris, c'est-à-dire
+    // n'importe quel rejet — OutOfStockError et ForbiddenTransitionError compris, c'est-à-dire
     // précisément les deux erreurs que cette action est censée TRADUIRE au lieu de les laisser
     // remonter : le test ne distinguerait donc pas le comportement voulu de son contraire.
     expect(erreur).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
     expect((erreur as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
-    expect(erreur).not.toBeInstanceOf(CommandeError)
+    expect(erreur).not.toBeInstanceOf(OrderError)
   })
 })

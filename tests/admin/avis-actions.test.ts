@@ -2,11 +2,11 @@ import { describe, it, expect, beforeAll, afterEach, afterAll, vi } from 'vitest
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
 import {
-  AvisError,
-  AvisNonPublieError,
-  EpinglageInvalideError,
-  ProduitIntrouvableError,
-  StatutAvisInvalideError,
+  ReviewError,
+  ReviewNotPublishedError,
+  InvalidPinError,
+  ProductNotFoundError,
+  InvalidReviewStatusError,
 } from '@/server/reviews'
 import { etatActionAvisInitial } from '@/app/admin/avis/etats'
 
@@ -169,7 +169,7 @@ describe('importerTemoignage', () => {
         texte: 'Un témoignage sur un produit fantôme.',
         auteur: AUTEUR,
       }),
-    ).rejects.toBeInstanceOf(ProduitIntrouvableError)
+    ).rejects.toBeInstanceOf(ProductNotFoundError)
   })
 
   it("journalise l'import dans le journal d'audit", async () => {
@@ -217,7 +217,7 @@ describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le co
   it("refuse d'épingler un avis en attente, sans écrire ni épinglage ni trace", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
 
-    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(AvisNonPublieError)
+    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
 
     const apres = await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })
     expect(apres.epingle).toBe(false)
@@ -233,7 +233,7 @@ describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le co
     const avis = await creerAvisDeTest({ statut: 'publie' })
     await modererAvis(avis.id, 'rejete')
 
-    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(AvisNonPublieError)
+    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
     expect(
       (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).epingle,
     ).toBe(false)
@@ -267,7 +267,7 @@ describe("epinglerAvis — valeur d'épinglage venue du client", () => {
 
     await expect(
       epinglerAvis(avis.id, 'oui' as never),
-    ).rejects.toBeInstanceOf(EpinglageInvalideError)
+    ).rejects.toBeInstanceOf(InvalidPinError)
     await expect(
       epinglerAvis(avis.id, 'oui' as never),
     ).rejects.toThrow("Valeur d'épinglage invalide : oui")
@@ -290,7 +290,7 @@ describe("epinglerAvis — valeur d'épinglage venue du client", () => {
 
     await expect(
       epinglerAvis(avis.id, undefined as never),
-    ).rejects.toBeInstanceOf(EpinglageInvalideError)
+    ).rejects.toBeInstanceOf(InvalidPinError)
 
     expect(
       (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).epingle,
@@ -305,7 +305,7 @@ describe("epinglerAvis — valeur d'épinglage venue du client", () => {
     )
 
     expect(etat.erreur).toMatch(/épinglage/i)
-    expect(etat.erreur).not.toMatch(/prisma|invalid value|boolean|Epinglage/i)
+    expect(etat.erreur).not.toMatch(/prisma|invalid value|boolean|InvalidPin/i)
   })
 })
 
@@ -315,7 +315,7 @@ describe('modererAvis — statut venu du client', () => {
 
     await expect(
       modererAvis(avis.id, 'supprime' as never),
-    ).rejects.toBeInstanceOf(StatutAvisInvalideError)
+    ).rejects.toBeInstanceOf(InvalidReviewStatusError)
     await expect(
       modererAvis(avis.id, 'supprime' as never),
     ).rejects.toThrow("Statut d'avis inconnu : supprime")
@@ -330,7 +330,7 @@ describe('modererAvis — statut venu du client', () => {
 
     await expect(
       modererAvis(avis.id, 'en_attente' as never),
-    ).rejects.toBeInstanceOf(StatutAvisInvalideError)
+    ).rejects.toBeInstanceOf(InvalidReviewStatusError)
     expect(
       (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).statut,
     ).toBe('publie')
@@ -398,7 +398,7 @@ describe("epinglerAvis — une bascule sans effet n'est pas un événement", () 
     // se verrait confirmer son épinglage en silence.
     const avis = await creerAvisDeTest({ statut: 'en_attente', epingle: true })
 
-    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(AvisNonPublieError)
+    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
   })
 })
 
@@ -463,7 +463,7 @@ describe("actions d'avis — identifiant venu du client", () => {
     expect((erreurEpinglage as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
     // Surtout pas une erreur métier : c'est ce qui protège aussi la redirection de
     // requireAdmin(), qui s'implémente par un throw et ne doit jamais être avalée.
-    expect(erreurEpinglage).not.toBeInstanceOf(AvisError)
+    expect(erreurEpinglage).not.toBeInstanceOf(ReviewError)
 
     const erreurModeration = await modererAvisDepuisFormulaire(
       'avis-totalement-inexistant', 'publie', etatActionAvisInitial, new FormData(),
@@ -471,7 +471,7 @@ describe("actions d'avis — identifiant venu du client", () => {
 
     expect(erreurModeration).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
     expect((erreurModeration as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
-    expect(erreurModeration).not.toBeInstanceOf(AvisError)
+    expect(erreurModeration).not.toBeInstanceOf(ReviewError)
   })
 
   it("ne journalise rien pour un identifiant forgé", async () => {

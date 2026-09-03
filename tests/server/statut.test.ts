@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
-import { creerCommande, RuptureStockError } from '@/server/orders'
-import { appliquerStatut, TransitionInterditeError } from '@/server/order-status-service'
+import { createOrder, OutOfStockError } from '@/server/orders'
+import { applyStatus, ForbiddenTransitionError } from '@/server/order-status-service'
 
-// Les tests visent appliquerStatut : changerStatut n'en est que
+// Les tests visent applyStatus : changerStatut n'en est que
 // l'enveloppe authentifiée, et requireAdmin n'a pas de sens hors requête.
-const changerStatut = (id: string, vers: Parameters<typeof appliquerStatut>[1]) =>
-  appliquerStatut(id, vers, 'test')
+const changerStatut = (id: string, vers: Parameters<typeof applyStatus>[1]) =>
+  applyStatus(id, vers, 'test')
 
 let variantId: string
 
@@ -35,7 +35,7 @@ const SLUG_CATEGORIE = 'test-statuts-categorie'
 const SLUG_PRODUIT = 'test-statuts-produit'
 const SKU = 'STATUT-45'
 
-const client = { nom: 'T', tel: '0320000000' }
+const client = { customerName: 'T', phone: '0320000000' }
 
 /** Toutes les commandes de ce fichier — et elles seules — portent cette déclinaison. */
 function mesCommandes() {
@@ -106,9 +106,9 @@ afterAll(async () => {
 
 describe('changerStatut', () => {
   it('recrédite le stock à l\'annulation d\'une commande confirmée', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 3 }], canal: 'livraison',
-      client: { nom: 'T', tel: '0320000000' }, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 3 }], channel: 'livraison',
+      client: { customerName: 'T', phone: '0320000000' }, zoneId: null, isMember: false,
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
@@ -117,18 +117,18 @@ describe('changerStatut', () => {
   })
 
   it('refuse une transition interdite', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-      client: { nom: 'T', tel: '0320000000' }, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      client: { customerName: 'T', phone: '0320000000' }, zoneId: null, isMember: false,
     })
     await changerStatut(c.id, 'annulee')
     await expect(changerStatut(c.id, 'expediee')).rejects.toThrow(/transition/i)
   })
 
   it('ne recrédite pas deux fois si l\'annulation est rejouée', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'livraison',
-      client: { nom: 'T', tel: '0320000000' }, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'livraison',
+      client: { customerName: 'T', phone: '0320000000' }, zoneId: null, isMember: false,
     })
     await changerStatut(c.id, 'annulee')
     await changerStatut(c.id, 'annulee').catch(() => {})
@@ -136,15 +136,15 @@ describe('changerStatut', () => {
   })
 })
 
-describe('appliquerStatut — transitions interdites', () => {
-  it('lève TransitionInterditeError (famille CommandeError) avec un message français, sans toucher au stock', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'livraison', client,
-      zoneId: null, estMembre: false,
+describe('applyStatus — transitions interdites', () => {
+  it('lève ForbiddenTransitionError (famille OrderError) avec un message français, sans toucher au stock', async () => {
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'livraison', client,
+      zoneId: null, isMember: false,
     })
     // confirmee → livree n'est pas une transition déclarée : il faut passer par
     // en_preparation, puis expediee ou prete_retrait.
-    await expect(changerStatut(c.id, 'livree')).rejects.toBeInstanceOf(TransitionInterditeError)
+    await expect(changerStatut(c.id, 'livree')).rejects.toBeInstanceOf(ForbiddenTransitionError)
     await expect(changerStatut(c.id, 'livree')).rejects.toThrow(
       'Transition interdite : confirmee → livree',
     )
@@ -153,11 +153,11 @@ describe('appliquerStatut — transitions interdites', () => {
   })
 })
 
-describe('appliquerStatut — confirmation d\'une commande WhatsApp', () => {
+describe('applyStatus — confirmation d\'une commande WhatsApp', () => {
   it('décrémente le stock à la confirmation, puisque rien n\'était réservé à la création', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'whatsapp', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'whatsapp', client,
+      zoneId: null, isMember: false,
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
 
@@ -165,16 +165,16 @@ describe('appliquerStatut — confirmation d\'une commande WhatsApp', () => {
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
   })
 
-  it('lève RuptureStockError quand le stock est parti entre-temps, sans laisser la contrainte CHECK de la base rattraper le coup', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 3 }], canal: 'whatsapp', client,
-      zoneId: null, estMembre: false,
+  it('lève OutOfStockError quand le stock est parti entre-temps, sans laisser la contrainte CHECK de la base rattraper le coup', async () => {
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 3 }], channel: 'whatsapp', client,
+      zoneId: null, isMember: false,
     })
     // Le stock part ailleurs entre la prise de commande WhatsApp et son acceptation :
     // c'est le scénario métier réel, une commande WhatsApp ne réserve rien.
     await prisma.variant.update({ where: { id: variantId }, data: { stock: 1 } })
 
-    await expect(changerStatut(c.id, 'confirmee')).rejects.toBeInstanceOf(RuptureStockError)
+    await expect(changerStatut(c.id, 'confirmee')).rejects.toBeInstanceOf(OutOfStockError)
 
     // Le contrôle métier doit avoir refusé AVANT toute écriture : ni stock négatif rattrapé
     // par la contrainte `variant_stock_non_negatif`, ni statut avancé à tort.
@@ -185,9 +185,9 @@ describe('appliquerStatut — confirmation d\'une commande WhatsApp', () => {
   })
 
   it('ne décrémente qu\'une fois si la confirmation est rejouée', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 4 }], canal: 'whatsapp', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 4 }], channel: 'whatsapp', client,
+      zoneId: null, isMember: false,
     })
     await changerStatut(c.id, 'confirmee')
     await changerStatut(c.id, 'confirmee').catch(() => {})
@@ -195,11 +195,11 @@ describe('appliquerStatut — confirmation d\'une commande WhatsApp', () => {
   })
 })
 
-describe('appliquerStatut — stock déjà engagé', () => {
+describe('applyStatus — stock déjà engagé', () => {
   it('ne décrémente pas une seconde fois à la confirmation d\'un paiement Orange Money', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'orange_money', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'orange_money', client,
+      zoneId: null, isMember: false,
     })
     // en_attente_paiement appartient à STOCK_COMMITTED : la réservation a eu lieu à la création.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
@@ -209,9 +209,9 @@ describe('appliquerStatut — stock déjà engagé', () => {
   })
 
   it('recrédite un paiement échoué puis annulé exactement une fois', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 3 }], canal: 'orange_money', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 3 }], channel: 'orange_money', client,
+      zoneId: null, isMember: false,
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
@@ -225,11 +225,11 @@ describe('appliquerStatut — stock déjà engagé', () => {
   })
 })
 
-describe('appliquerStatut — accès concurrent sur la même commande', () => {
+describe('applyStatus — accès concurrent sur la même commande', () => {
   it('n\'applique qu\'un seul des deux changements de statut simultanés', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 3 }], canal: 'livraison', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 3 }], channel: 'livraison', client,
+      zoneId: null, isMember: false,
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
@@ -247,7 +247,7 @@ describe('appliquerStatut — accès concurrent sur la même commande', () => {
     // pas par un conflit de sérialisation opaque (P2034 / 40001) qui n'aurait jamais atteint
     // ce contrôle : c'est cette assertion qui empêche la régression du correctif
     // d'isolation (Serializable + FOR UPDATE, cf. src/server/order-status-service.ts).
-    expect(echouees[0]!.reason).toBeInstanceOf(TransitionInterditeError)
+    expect(echouees[0]!.reason).toBeInstanceOf(ForbiddenTransitionError)
 
     // Un seul recrédit, donc le stock initial — pas 13.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
@@ -255,13 +255,13 @@ describe('appliquerStatut — accès concurrent sur la même commande', () => {
 
   it('sert deux annulations concurrentes de commandes DIFFÉRENTES sans en rejeter une à tort', async () => {
     const [a, b] = await Promise.all([
-      creerCommande({
-        lignes: [{ variantId, quantite: 2 }], canal: 'livraison', client,
-        zoneId: null, estMembre: false,
+      createOrder({
+        lines: [{ variantId, quantity: 2 }], channel: 'livraison', client,
+        zoneId: null, isMember: false,
       }),
-      creerCommande({
-        lignes: [{ variantId, quantite: 3 }], canal: 'livraison', client,
-        zoneId: null, estMembre: false,
+      createOrder({
+        lines: [{ variantId, quantity: 3 }], channel: 'livraison', client,
+        zoneId: null, isMember: false,
       }),
     ])
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(5)
@@ -275,13 +275,13 @@ describe('appliquerStatut — accès concurrent sur la même commande', () => {
   })
 })
 
-describe('appliquerStatut — journal d\'audit', () => {
+describe('applyStatus — journal d\'audit', () => {
   it('journalise l\'acteur, l\'ancien et le nouveau statut', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'whatsapp', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'whatsapp', client,
+      zoneId: null, isMember: false,
     })
-    await appliquerStatut(c.id, 'confirmee', 'proprietaire@summerclub.mg')
+    await applyStatus(c.id, 'confirmee', 'proprietaire@summerclub.mg')
 
     // Assertion bornée à MA commande : le journal d'audit est une table globale que ce
     // fichier ne possède pas.
@@ -297,19 +297,19 @@ describe('appliquerStatut — journal d\'audit', () => {
   })
 
   it("écrit la trace AVEC le client de transaction, donc l'annule avec elle", async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'whatsapp', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'whatsapp', client,
+      zoneId: null, isMember: false,
     })
 
     // Le seul moment où `tx` se distingue du client global est un ROLLBACK POSTÉRIEUR à
     // l'écriture de la trace : écrite avec le client global, elle serait partie sur une
     // autre connexion et aurait SURVÉCU à l'annulation — le journal affirmerait alors un
     // changement de statut que la base n'a jamais enregistré. On laisse donc le corps
-    // d'appliquerStatut aller jusqu'au bout, puis on avorte la transaction depuis
+    // d'applyStatus aller jusqu'au bout, puis on avorte la transaction depuis
     // l'extérieur, sans toucher au code testé.
     //
-    // C'est ce test-là qui échouerait si quelqu'un repassait `enregistrerAudit` au client
+    // C'est ce test-là qui échouerait si quelqu'un repassait `recordAudit` au client
     // global. Le test voisin (« n'écrit aucune trace quand la transition est refusée ») ne
     // le ferait pas : sur ce chemin, la fonction lève AVANT l'écriture d'audit, qui n'est
     // jamais atteinte.
@@ -330,7 +330,7 @@ describe('appliquerStatut — journal d\'audit', () => {
 
     try {
       await expect(
-        appliquerStatut(c.id, 'confirmee', 'proprietaire@summerclub.mg'),
+        applyStatus(c.id, 'confirmee', 'proprietaire@summerclub.mg'),
       ).rejects.toBeInstanceOf(EchecApresEcriture)
     } finally {
       // Restauré même si l'assertion ci-dessus échoue.
@@ -350,9 +350,9 @@ describe('appliquerStatut — journal d\'audit', () => {
   })
 
   it('n\'écrit aucune trace quand la transition est refusée', async () => {
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison', client,
-      zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison', client,
+      zoneId: null, isMember: false,
     })
     await changerStatut(c.id, 'livree').catch(() => {})
     expect(

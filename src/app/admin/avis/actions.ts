@@ -4,12 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { prisma } from '@/server/db'
 import { requireAdmin } from '@/server/auth'
-import { enregistrerAudit } from '@/server/audit'
+import { recordAudit } from '@/server/audit'
 import {
-  AvisNonPublieError,
-  EpinglageInvalideError,
-  ProduitIntrouvableError,
-  StatutAvisInvalideError,
+  ReviewNotPublishedError,
+  InvalidPinError,
+  ProductNotFoundError,
+  InvalidReviewStatusError,
 } from '@/server/reviews'
 import type { ErreursValidation } from '@/admin/engine/actions'
 import { estStatutModeration, type StatutModeration } from './query'
@@ -73,19 +73,19 @@ export async function importerTemoignage(donnees: unknown) {
   // étrangère (P2003) brute au lieu d'un message lisible.
   if (valide.productId !== null) {
     const produit = await prisma.product.findUnique({ where: { id: valide.productId } })
-    if (!produit) throw new ProduitIntrouvableError(valide.productId)
+    if (!produit) throw new ProductNotFoundError(valide.productId)
   }
 
   const avis = await prisma.review.create({
     data: { ...valide, source: 'importe', statut: 'publie' },
   })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'importer_temoignage',
-    entite: 'Review',
-    entiteId: avis.id,
-    apres: { auteur: avis.auteur, note: avis.note, source: avis.source, statut: avis.statut },
+    entity: 'Review',
+    entityId: avis.id,
+    after: { auteur: avis.auteur, note: avis.note, source: avis.source, statut: avis.statut },
   })
 
   revaliderAvis()
@@ -120,13 +120,13 @@ export async function epinglerAvis(id: string, epingle: boolean) {
   // .update` qui échoue, en `PrismaClientValidationError` brute sous les yeux de
   // l'administratrice.
   if (typeof epingle !== 'boolean') {
-    throw new EpinglageInvalideError(String(epingle))
+    throw new InvalidPinError(String(epingle))
   }
 
   const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
 
   if (epingle && avant.statut !== 'publie') {
-    throw new AvisNonPublieError(avant.statut)
+    throw new ReviewNotPublishedError(avant.statut)
   }
 
   // IDEMPOTENTE, comme `modererAvis` : une bascule qui ne bascule rien n'écrit rien et ne
@@ -141,13 +141,13 @@ export async function epinglerAvis(id: string, epingle: boolean) {
 
   const avis = await prisma.review.update({ where: { id }, data: { epingle } })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'epingler_avis',
-    entite: 'Review',
-    entiteId: id,
-    avant: { epingle: avant.epingle },
-    apres: { epingle: avis.epingle },
+    entity: 'Review',
+    entityId: id,
+    before: { epingle: avant.epingle },
+    after: { epingle: avis.epingle },
   })
 
   revaliderAvis()
@@ -181,7 +181,7 @@ export async function modererAvis(id: string, statut: StatutModeration) {
   // sous les yeux de l'administratrice. `en_attente` est refusé lui aussi : c'est l'état
   // d'entrée de la file, pas une décision de modération.
   if (!estStatutModeration(statut)) {
-    throw new StatutAvisInvalideError(String(statut))
+    throw new InvalidReviewStatusError(String(statut))
   }
 
   const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
@@ -198,13 +198,13 @@ export async function modererAvis(id: string, statut: StatutModeration) {
     data: { statut, epingle: epingleCible },
   })
 
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'moderer_avis',
-    entite: 'Review',
-    entiteId: id,
-    avant: { statut: avant.statut, epingle: avant.epingle },
-    apres: { statut: avis.statut, epingle: avis.epingle },
+    entity: 'Review',
+    entityId: id,
+    before: { statut: avant.statut, epingle: avant.epingle },
+    after: { statut: avis.statut, epingle: avis.epingle },
   })
 
   revaliderAvis()
@@ -262,7 +262,7 @@ export async function importerTemoignageDepuisFormulaire(
     // Seul cas attendu ici : le produit choisi a été supprimé entre l'affichage du
     // formulaire et son envoi. Tout le reste remonte (y compris la redirection de
     // requireAdmin(), qui s'implémente par un throw).
-    if (erreur instanceof ProduitIntrouvableError) {
+    if (erreur instanceof ProductNotFoundError) {
       return {
         succes: false,
         erreurs: { productId: ["Ce produit n'existe plus. Rechargez la page."] },
@@ -290,7 +290,7 @@ export async function epinglerAvisDepuisFormulaire(
     // onglet, la propriétaire elle-même). C'est une situation normale, qui doit se lire en
     // français sous le bouton — pas une panne. Tout le reste remonte, y compris la
     // redirection de requireAdmin(), qui s'implémente par un throw.
-    if (erreur instanceof AvisNonPublieError) {
+    if (erreur instanceof ReviewNotPublishedError) {
       return {
         erreur:
           "Cet avis n'est pas publié : seul un avis en vitrine peut être épinglé sur la "
@@ -299,7 +299,7 @@ export async function epinglerAvisDepuisFormulaire(
     }
     // Même traduction que celle du statut forgé côté modération : ni valeur brute, ni nom de
     // classe d'erreur sous les yeux de la propriétaire.
-    if (erreur instanceof EpinglageInvalideError) {
+    if (erreur instanceof InvalidPinError) {
       return { erreur: "Cette action d'épinglage est inconnue. Rechargez la page." }
     }
     throw erreur
@@ -319,7 +319,7 @@ export async function modererAvisDepuisFormulaire(
   try {
     await modererAvis(id, statut)
   } catch (erreur) {
-    if (erreur instanceof StatutAvisInvalideError) {
+    if (erreur instanceof InvalidReviewStatusError) {
       return { erreur: 'Cette décision de modération est inconnue. Rechargez la page.' }
     }
     throw erreur

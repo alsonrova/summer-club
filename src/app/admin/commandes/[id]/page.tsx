@@ -45,7 +45,7 @@ export default async function FicheCommandePage({
       // n'affiche donc jamais le prix courant du catalogue, qui a pu changer depuis.
       include: { items: { orderBy: { id: 'asc' } }, zone: true },
     }),
-    // Le journal d'audit est la seule source de l'historique de statut : `appliquerStatut`
+    // Le journal d'audit est la seule source de l'historique de statut : `applyStatus`
     // y écrit dans la même transaction que le changement lui-même.
     prisma.auditLog.findMany({
       where: { entite: 'Order', entiteId: id, action: 'changement_statut' },

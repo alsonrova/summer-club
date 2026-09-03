@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/server/auth'
-import { RuptureStockError } from '@/server/orders'
+import { OutOfStockError } from '@/server/orders'
 import {
-  appliquerStatut,
-  cheminsARevalider,
-  TransitionInterditeError,
+  applyStatus,
+  pathsToRevalidate,
+  ForbiddenTransitionError,
 } from '@/server/order-status-service'
 import { isOrderStatus, type OrderStatus } from '@/domain/order-status'
 import { libelleStatut } from '@/admin/resources/orders'
@@ -18,7 +18,7 @@ import type { EtatChangementStatut } from './etats'
 // ne coûte rien.
 
 /**
- * Enveloppe AUTHENTIFIÉE d'`appliquerStatut` : vérifie l'administratrice, transmet son
+ * Enveloppe AUTHENTIFIÉE d'`applyStatus` : vérifie l'administratrice, transmet son
  * e-mail comme acteur du journal, puis invalide les caches.
  *
  * Le cœur métier vit dans src/server/order-status-service.ts, sans authentification, parce
@@ -35,12 +35,12 @@ export async function changerStatut(orderId: string, vers: OrderStatus) {
     throw new Error(`Statut inconnu : ${String(vers)}`)
   }
 
-  const commande = await appliquerStatut(orderId, vers, session.user.email)
+  const commande = await applyStatus(orderId, vers, session.user.email)
 
-  // `appliquerStatut` n'invalide rien elle-même (elle doit rester appelable hors requête,
+  // `applyStatus` n'invalide rien elle-même (elle doit rester appelable hors requête,
   // cf. son commentaire) : c'est ici, dans une vraie requête, qu'on le fait — en suivant la
   // liste qu'elle publie, pour n'en oublier aucun.
-  for (const chemin of cheminsARevalider(orderId)) {
+  for (const chemin of pathsToRevalidate(orderId)) {
     revalidatePath(chemin)
   }
 
@@ -68,18 +68,18 @@ export async function changerStatutDepuisFormulaire(
   try {
     await changerStatut(orderId, vers)
   } catch (erreur) {
-    if (erreur instanceof RuptureStockError) {
+    if (erreur instanceof OutOfStockError) {
       return {
         erreur:
           "Stock insuffisant pour confirmer cette commande : la pièce est partie entre-temps. "
           + 'Réapprovisionnez la déclinaison concernée, ou annulez la commande.',
       }
     }
-    if (erreur instanceof TransitionInterditeError) {
+    if (erreur instanceof ForbiddenTransitionError) {
       return {
         erreur:
-          `Cette commande est passée à « ${libelleStatut(erreur.de)} » entre-temps : `
-          + `« ${libelleStatut(erreur.vers)} » n'est plus possible. Rechargez la page.`,
+          `Cette commande est passée à « ${libelleStatut(erreur.from)} » entre-temps : `
+          + `« ${libelleStatut(erreur.to)} » n'est plus possible. Rechargez la page.`,
       }
     }
     throw erreur

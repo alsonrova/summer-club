@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest'
 import { prisma } from '@/server/db'
 import {
-  creerCommande,
-  RuptureStockError,
-  PanierVideError,
-  QuantiteInvalideError,
-  VariantIntrouvableError,
-  ProduitIndisponibleError,
-  ZoneInvalideError,
+  createOrder,
+  OutOfStockError,
+  EmptyCartError,
+  InvalidQuantityError,
+  VariantNotFoundError,
+  ProductUnavailableError,
+  InvalidZoneError,
 } from '@/server/orders'
 
 async function variantTest(stock: number) {
@@ -24,7 +24,7 @@ async function variantTest(stock: number) {
 // qui a rendu la collision mesurable).
 const CLIENTE = 'Test'
 
-const client = { nom: CLIENTE, tel: '0320000000' }
+const client = { customerName: CLIENTE, phone: '0320000000' }
 
 // Seule promotion créée par ce fichier, et clé de propriété de son nettoyage : un
 // `promotion.deleteMany()` sans filtre viderait la table entière, y compris les lignes
@@ -71,12 +71,12 @@ afterAll(async () => {
   await prisma.$disconnect()
 })
 
-describe('creerCommande', () => {
+describe('createOrder', () => {
   it('crée la commande et décrémente le stock', async () => {
     const variantId = await variantTest(5)
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'livraison',
-      client, zoneId: 'zone-tana', estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'livraison',
+      client, zoneId: 'zone-tana', isMember: false,
     })
     expect(c.reference).toMatch(/^SC-/)
     expect(c.total).toBe(45000 * 2 + 5000)
@@ -86,9 +86,9 @@ describe('creerCommande', () => {
 
   it('fige le nom et le prix dans la ligne de commande', async () => {
     const variantId = await variantTest(5)
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
     })
     const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: c.id } })
     expect(item.nomFige).toContain('Collier Vahiné')
@@ -97,26 +97,26 @@ describe('creerCommande', () => {
 
   it('refuse une commande dépassant le stock disponible', async () => {
     const variantId = await variantTest(1)
-    await expect(creerCommande({
-      lignes: [{ variantId, quantite: 3 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(RuptureStockError)
+    await expect(createOrder({
+      lines: [{ variantId, quantity: 3 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(OutOfStockError)
   })
 
   it("n'écrit aucune commande quand le stock manque", async () => {
     const variantId = await variantTest(1)
-    await creerCommande({
-      lignes: [{ variantId, quantite: 3 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
+    await createOrder({
+      lines: [{ variantId, quantity: 3 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
     }).catch(() => {})
     expect(await compterMesCommandes()).toBe(0)
   })
 
   it('ne survend jamais sous accès concurrent', async () => {
     const variantId = await variantTest(1)
-    const tentative = () => creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
+    const tentative = () => createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
     })
     const resultats = await Promise.allSettled([tentative(), tentative(), tentative()])
     const reussies = resultats.filter((r) => r.status === 'fulfilled')
@@ -131,7 +131,7 @@ describe('creerCommande', () => {
     )
     expect(echouees).toHaveLength(2)
     for (const echec of echouees) {
-      expect(echec.reason).toBeInstanceOf(RuptureStockError)
+      expect(echec.reason).toBeInstanceOf(OutOfStockError)
     }
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(0)
@@ -139,9 +139,9 @@ describe('creerCommande', () => {
 
   it('sert les deux clientes concurrentes quand le stock le permet (non-régression : ne doit pas rejeter à tort sur conflit de sérialisation)', async () => {
     const variantId = await variantTest(5)
-    const tentative = () => creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
+    const tentative = () => createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
     })
     const resultats = await Promise.allSettled([tentative(), tentative()])
     const reussies = resultats.filter((r) => r.status === 'fulfilled')
@@ -151,19 +151,19 @@ describe('creerCommande', () => {
   })
 })
 
-describe('creerCommande — validation des entrées', () => {
+describe('createOrder — validation des entrées', () => {
   it('refuse un panier vide', async () => {
-    await expect(creerCommande({
-      lignes: [], canal: 'livraison', client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(PanierVideError)
+    await expect(createOrder({
+      lines: [], channel: 'livraison', client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(EmptyCartError)
   })
 
   it('refuse une quantité négative sans jamais recréditer le stock (exploitable via stock = stock - (-n))', async () => {
     const variantId = await variantTest(5)
-    await expect(creerCommande({
-      lignes: [{ variantId, quantite: -5 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(QuantiteInvalideError)
+    await expect(createOrder({
+      lines: [{ variantId, quantity: -5 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(InvalidQuantityError)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(5)
     expect(await compterMesCommandes()).toBe(0)
@@ -171,22 +171,22 @@ describe('creerCommande — validation des entrées', () => {
 
   it('refuse une quantité nulle, non entière, ou supérieure à la borne du panier (20)', async () => {
     const variantId = await variantTest(50)
-    for (const quantite of [0, 1.5, 21]) {
-      await expect(creerCommande({
-        lignes: [{ variantId, quantite }], canal: 'livraison',
-        client, zoneId: null, estMembre: false,
-      })).rejects.toBeInstanceOf(QuantiteInvalideError)
+    for (const quantity of [0, 1.5, 21]) {
+      await expect(createOrder({
+        lines: [{ variantId, quantity }], channel: 'livraison',
+        client, zoneId: null, isMember: false,
+      })).rejects.toBeInstanceOf(InvalidQuantityError)
     }
   })
 })
 
-describe('creerCommande — agrégation des quantités par déclinaison', () => {
+describe('createOrder — agrégation des quantités par déclinaison', () => {
   it("agrège deux lignes de la même déclinaison avant le contrôle de stock, plutôt que de les contrôler séparément", async () => {
     const variantId = await variantTest(1)
-    await expect(creerCommande({
-      lignes: [{ variantId, quantite: 1 }, { variantId, quantite: 1 }],
-      canal: 'livraison', client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(RuptureStockError)
+    await expect(createOrder({
+      lines: [{ variantId, quantity: 1 }, { variantId, quantity: 1 }],
+      channel: 'livraison', client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(OutOfStockError)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(1)
     expect(await compterMesCommandes()).toBe(0)
@@ -194,9 +194,9 @@ describe('creerCommande — agrégation des quantités par déclinaison', () => 
 
   it('écrit une seule ligne de commande avec la quantité agrégée quand le stock suffit', async () => {
     const variantId = await variantTest(5)
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 1 }, { variantId, quantite: 2 }],
-      canal: 'livraison', client, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 1 }, { variantId, quantity: 2 }],
+      channel: 'livraison', client, zoneId: null, isMember: false,
     })
     const items = await prisma.orderItem.findMany({ where: { orderId: c.id } })
     expect(items).toHaveLength(1)
@@ -205,24 +205,24 @@ describe('creerCommande — agrégation des quantités par déclinaison', () => 
     expect(v.stock).toBe(2)
   })
 
-  it("refuse deux lignes de 20 sur la même déclinaison même si le stock les couvre (la borne QUANTITE_MAX porte sur la quantité agrégée)", async () => {
+  it("refuse deux lignes de 20 sur la même déclinaison même si le stock les couvre (la borne MAX_QUANTITY porte sur la quantité agrégée)", async () => {
     const variantId = await variantTest(50)
-    await expect(creerCommande({
-      lignes: [{ variantId, quantite: 20 }, { variantId, quantite: 20 }],
-      canal: 'livraison', client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(QuantiteInvalideError)
+    await expect(createOrder({
+      lines: [{ variantId, quantity: 20 }, { variantId, quantity: 20 }],
+      channel: 'livraison', client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(InvalidQuantityError)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(50)
     expect(await compterMesCommandes()).toBe(0)
   })
 })
 
-describe('creerCommande — réservation du stock selon le canal', () => {
+describe('createOrder — réservation du stock selon le canal', () => {
   it('réserve le stock dès la création pour le canal orange_money (en_attente_paiement)', async () => {
     const variantId = await variantTest(5)
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'orange_money',
-      client, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'orange_money',
+      client, zoneId: null, isMember: false,
     })
     const commande = await prisma.order.findUniqueOrThrow({ where: { id: c.id } })
     expect(commande.statut).toBe('en_attente_paiement')
@@ -232,9 +232,9 @@ describe('creerCommande — réservation du stock selon le canal', () => {
 
   it('ne réserve rien à la création pour le canal whatsapp (en_attente_confirmation)', async () => {
     const variantId = await variantTest(5)
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 2 }], canal: 'whatsapp',
-      client, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 2 }], channel: 'whatsapp',
+      client, zoneId: null, isMember: false,
     })
     const commande = await prisma.order.findUniqueOrThrow({ where: { id: c.id } })
     expect(commande.statut).toBe('en_attente_confirmation')
@@ -243,15 +243,15 @@ describe('creerCommande — réservation du stock selon le canal', () => {
   })
 })
 
-describe('creerCommande — produits et zones désactivés', () => {
+describe('createOrder — produits et zones désactivés', () => {
   it('refuse une commande sur un produit désactivé', async () => {
     const variant = await prisma.variant.findUniqueOrThrow({ where: { sku: 'VAH-45' } })
     await prisma.variant.update({ where: { id: variant.id }, data: { stock: 5 } })
     await prisma.product.update({ where: { id: variant.productId }, data: { actif: false } })
-    await expect(creerCommande({
-      lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(ProduitIndisponibleError)
+    await expect(createOrder({
+      lines: [{ variantId: variant.id, quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(ProductUnavailableError)
     expect(await compterMesCommandes()).toBe(0)
   })
 
@@ -261,10 +261,10 @@ describe('creerCommande — produits et zones désactivés', () => {
       data: { nom: 'Zone test désactivée', tarif: 1000, delai: '48 h', actif: false },
     })
     try {
-      await expect(creerCommande({
-        lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-        client, zoneId: zone.id, estMembre: false,
-      })).rejects.toBeInstanceOf(ZoneInvalideError)
+      await expect(createOrder({
+        lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+        client, zoneId: zone.id, isMember: false,
+      })).rejects.toBeInstanceOf(InvalidZoneError)
       expect(await compterMesCommandes()).toBe(0)
     } finally {
       await prisma.deliveryZone.delete({ where: { id: zone.id } })
@@ -272,24 +272,24 @@ describe('creerCommande — produits et zones désactivés', () => {
   })
 })
 
-describe('creerCommande — erreurs typées', () => {
-  it('lève VariantIntrouvableError pour une déclinaison inexistante plutôt qu\'une erreur Prisma brute', async () => {
-    await expect(creerCommande({
-      lignes: [{ variantId: 'variant-inexistant', quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
-    })).rejects.toBeInstanceOf(VariantIntrouvableError)
+describe('createOrder — erreurs typées', () => {
+  it('lève VariantNotFoundError pour une déclinaison inexistante plutôt qu\'une erreur Prisma brute', async () => {
+    await expect(createOrder({
+      lines: [{ variantId: 'variant-inexistant', quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
+    })).rejects.toBeInstanceOf(VariantNotFoundError)
   })
 
-  it('lève ZoneInvalideError pour une zone inexistante plutôt qu\'une violation de clé étrangère', async () => {
+  it('lève InvalidZoneError pour une zone inexistante plutôt qu\'une violation de clé étrangère', async () => {
     const variantId = await variantTest(5)
-    await expect(creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-      client, zoneId: 'zone-inexistante', estMembre: false,
-    })).rejects.toBeInstanceOf(ZoneInvalideError)
+    await expect(createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      client, zoneId: 'zone-inexistante', isMember: false,
+    })).rejects.toBeInstanceOf(InvalidZoneError)
   })
 })
 
-describe('creerCommande — prix figé', () => {
+describe('createOrder — prix figé', () => {
   it('fige le prix effectif après promotion et deltaPrix de la déclinaison, pas le prix de base du produit', async () => {
     const variant = await prisma.variant.findUniqueOrThrow({
       where: { sku: 'VAH-45' }, include: { product: true },
@@ -303,9 +303,9 @@ describe('creerCommande — prix figé', () => {
         portee: 'produit', cibleId: variant.productId, actif: true,
       },
     })
-    const c = await creerCommande({
-      lignes: [{ variantId: variant.id, quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId: variant.id, quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
     })
     const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: c.id } })
     // (prixBase 45000 + deltaPrix 3000) remisé de 10% = 43200
@@ -315,9 +315,9 @@ describe('creerCommande — prix figé', () => {
   it("conserve le prix figé de la ligne de commande même si le prix de base du produit change ensuite", async () => {
     const variantId = await variantTest(5)
     const variant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
-    const c = await creerCommande({
-      lignes: [{ variantId, quantite: 1 }], canal: 'livraison',
-      client, zoneId: null, estMembre: false,
+    const c = await createOrder({
+      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      client, zoneId: null, isMember: false,
     })
     await prisma.product.update({
       where: { id: variant.productId }, data: { prixBase: 99999 },

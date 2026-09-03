@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { defineResource } from '@/admin/resource'
 import { creerRessource } from '@/admin/engine/actions'
 
-// creerRessource passe par requireAdmin() (session, next/headers) et enregistrerAudit()
+// creerRessource passe par requireAdmin() (session, next/headers) et recordAudit()
 // (Prisma) : hors du périmètre de ce test, qui ne porte que sur le retrait des champs
 // système avant l'appel au delegate. On les remplace par de simples doublures — vi.mock
 // est hissé par vitest au-dessus des imports ci-dessus, donc actions.ts reçoit bien ces
@@ -12,7 +12,7 @@ vi.mock('@/server/auth', () => ({
   requireAdmin: vi.fn().mockResolvedValue({ user: { email: 'admin@test.dev' } }),
 }))
 vi.mock('@/server/audit', () => ({
-  enregistrerAudit: vi.fn().mockResolvedValue(undefined),
+  recordAudit: vi.fn().mockResolvedValue(undefined),
 }))
 
 describe('champs système (id, createdAt, updatedAt)', () => {

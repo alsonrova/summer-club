@@ -6,9 +6,9 @@ import { Prisma } from '@prisma/client'
 // plusieurs contraintes d'unicité distinctes (voir Variant : `sku` ET `(productId,
 // libelle)`) — sans distinguer laquelle a été violée, l'appelant ne peut pas rattacher un
 // message d'erreur français au bon champ du formulaire.
-export function estViolationUnicite(erreur: unknown, colonne: string): boolean {
-  if (!(erreur instanceof Prisma.PrismaClientKnownRequestError)) return false
-  if (erreur.code !== 'P2002') return false
-  const cible = erreur.meta?.['target']
-  return Array.isArray(cible) && cible.includes(colonne)
+export function isUniqueViolation(error: unknown, column: string): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false
+  if (error.code !== 'P2002') return false
+  const target = error.meta?.['target']
+  return Array.isArray(target) && target.includes(column)
 }

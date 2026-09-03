@@ -1,5 +1,5 @@
 import { requireAdmin } from '@/server/auth'
-import { enregistrerAudit } from '@/server/audit'
+import { recordAudit } from '@/server/audit'
 import type { ResourceConfig } from '../resource'
 
 export type ErreursValidation = Record<string, string[]>
@@ -111,12 +111,12 @@ export async function creerRessource<T extends Record<string, unknown>>(
   // colonnes lui-même (id, createdAt, updatedAt) — il ne les exige jamais en écriture.
   const donneesAEcrire = omettreChampsSysteme(resultat.donnees, resource.champsSysteme) as T
   const cree = await delegate.create({ data: donneesAEcrire })
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'creer',
-    entite: resource.name,
-    entiteId: cree.id,
-    apres: resultat.donnees,
+    entity: resource.name,
+    entityId: cree.id,
+    after: resultat.donnees,
   })
 
   return resultat
@@ -136,13 +136,13 @@ export async function modifierRessource<T extends Record<string, unknown>>(
   // Voir le commentaire équivalent dans creerRessource : même retrait, même raison.
   const donneesAEcrire = omettreChampsSysteme(resultat.donnees, resource.champsSysteme) as Partial<T>
   const apres = await delegate.update({ where: { id: entiteId }, data: donneesAEcrire })
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'modifier',
-    entite: resource.name,
-    entiteId,
-    avant,
-    apres,
+    entity: resource.name,
+    entityId: entiteId,
+    before: avant,
+    after: apres,
   })
 
   return resultat
@@ -156,11 +156,11 @@ export async function supprimerRessource<T extends Record<string, unknown>>(
   const session = await requireAdmin()
   const avant = await delegate.findUnique({ where: { id: entiteId } })
   await delegate.delete({ where: { id: entiteId } })
-  await enregistrerAudit({
-    acteur: session.user.email,
+  await recordAudit({
+    actor: session.user.email,
     action: 'supprimer',
-    entite: resource.name,
-    entiteId,
-    avant,
+    entity: resource.name,
+    entityId: entiteId,
+    before: avant,
   })
 }

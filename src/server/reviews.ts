@@ -1,5 +1,5 @@
 /**
- * Erreurs métier des avis. Même parti pris que la famille dérivée de `CommandeError`
+ * Erreurs métier des avis. Même parti pris que la famille dérivée de `OrderError`
  * (src/server/orders.ts) : une classe, pas une chaîne de message.
  *
  * Ces classes ne peuvent pas vivre dans `src/app/admin/avis/actions.ts` : un fichier
@@ -9,7 +9,7 @@
  * traduit en message pour la propriétaire — comparer des messages d'erreur pour décider
  * quoi afficher casserait à la première reformulation, sans que rien ne l'annonce.
  */
-export class AvisError extends Error {
+export class ReviewError extends Error {
   constructor(message: string) {
     super(message)
     this.name = new.target.name
@@ -17,7 +17,7 @@ export class AvisError extends Error {
 }
 
 /** Le produit rattaché au témoignage n'existe pas (ou plus). */
-export class ProduitIntrouvableError extends AvisError {
+export class ProductNotFoundError extends ReviewError {
   constructor(public readonly productId: string) {
     super("Ce produit n'existe pas.")
   }
@@ -32,8 +32,8 @@ export class ProduitIntrouvableError extends AvisError {
  * une Server Action exportée est un point d'entrée POST à part entière, et deux onglets
  * ouverts sur la liste suffisent à la joindre avec un rendu périmé.
  */
-export class AvisNonPublieError extends AvisError {
-  constructor(public readonly statut: string) {
+export class ReviewNotPublishedError extends ReviewError {
+  constructor(public readonly status: string) {
     super("Seul un avis publié peut être épinglé sur la page d'accueil.")
   }
 }
@@ -46,16 +46,16 @@ export class AvisNonPublieError extends AvisError {
  * `PrismaClientValidationError` brute — « Invalid value for argument `statut`. Expected
  * StatutAvis. » — jusque sous les yeux de l'administratrice.
  */
-export class StatutAvisInvalideError extends AvisError {
-  constructor(public readonly valeur: string) {
-    super(`Statut d'avis inconnu : ${valeur}`)
+export class InvalidReviewStatusError extends ReviewError {
+  constructor(public readonly value: string) {
+    super(`Statut d'avis inconnu : ${value}`)
   }
 }
 
 /**
  * Valeur d'épinglage forgée, refusée avant d'atteindre la colonne booléenne.
  *
- * Jumeau exact de `StatutAvisInvalideError` : `epinglerAvis` est exportée du même fichier
+ * Jumeau exact de `InvalidReviewStatusError` : `epinglerAvis` est exportée du même fichier
  * `'use server'` que `modererAvis`, c'est donc le même genre de point d'entrée POST, et son
  * paramètre n'est pas plus typé à l'exécution que ne l'était le statut. Sans ce refus, la
  * valeur traverse l'action et remonte en `PrismaClientValidationError` brute — « Argument
@@ -67,8 +67,8 @@ export class StatutAvisInvalideError extends AvisError {
  * le franchirait par la porte du dépunaisage, toujours ouverte. Ni l'un ni l'autre ne serait
  * arrêté par un test de valeur.
  */
-export class EpinglageInvalideError extends AvisError {
-  constructor(public readonly valeur: string) {
-    super(`Valeur d'épinglage invalide : ${valeur}`)
+export class InvalidPinError extends ReviewError {
+  constructor(public readonly value: string) {
+    super(`Valeur d'épinglage invalide : ${value}`)
   }
 }

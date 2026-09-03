@@ -9,7 +9,7 @@ type ActionMedia = (etatPrecedent: EtatActionSimple, formData: FormData) => Prom
 
 // Cadre en arche (rounded-arch) au ratio 4:5 : le motif signature de la marque (spec §3.9),
 // appliqué ici à la vignette admin. `<picture>` avec les variantes AVIF/WebP déjà générées
-// par traiterImage() plutôt que next/image : les fichiers sont déjà ré-encodés aux largeurs
+// par processImage() plutôt que next/image : les fichiers sont déjà ré-encodés aux largeurs
 // utiles (400/800/1200), un second passage d'optimisation serait redondant.
 //
 // Pas de glisser-déposer (hors périmètre de cette tâche) : un simple champ de position
@@ -49,7 +49,7 @@ export function MediaCarte({
           <source srcSet={`${media.chemin}-400.avif`} type="image/avif" />
           <source srcSet={`${media.chemin}-400.webp`} type="image/webp" />
           {/* eslint-disable-next-line @next/next/no-img-element -- fichier local déjà
-              ré-encodé par traiterImage() aux largeurs utiles ; next/image le réoptimiserait
+              ré-encodé par processImage() aux largeurs utiles ; next/image le réoptimiserait
               inutilement une seconde fois. */}
           <img src={`${media.chemin}-400.webp`} alt={media.alt} className="h-full w-full object-cover" />
         </picture>

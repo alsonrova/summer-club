@@ -20,16 +20,16 @@ import { prisma } from './db'
 // suivantes ne servent qu'à vérifier d'anciens cookies encore valides). On retient
 // explicitement le secret validé pour le transmettre à betterAuth({ secret }) plutôt que
 // de laisser la bibliothèque le relire seule depuis l'environnement.
-function secretCourantDeLaRotation(env: string | undefined): string | undefined {
+function currentRotationSecret(env: string | undefined): string | undefined {
   if (!env) return undefined
-  const premiereEntree = env.split(',')[0]?.trim() ?? ''
-  const idxDeuxPoints = premiereEntree.indexOf(':')
-  if (idxDeuxPoints === -1) return undefined
-  return premiereEntree.slice(idxDeuxPoints + 1).trim() || undefined
+  const firstEntry = env.split(',')[0]?.trim() ?? ''
+  const colonIndex = firstEntry.indexOf(':')
+  if (colonIndex === -1) return undefined
+  return firstEntry.slice(colonIndex + 1).trim() || undefined
 }
 
 const secret =
-  secretCourantDeLaRotation(process.env.BETTER_AUTH_SECRETS) ||
+  currentRotationSecret(process.env.BETTER_AUTH_SECRETS) ||
   process.env.BETTER_AUTH_SECRET ||
   process.env.AUTH_SECRET
 

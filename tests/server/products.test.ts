@@ -3,22 +3,22 @@ import { readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 import { prisma } from '@/server/db'
-import { traiterImage } from '@/server/media'
+import { processImage } from '@/server/media'
 import { deleteProduct } from '@/server/products'
 
 // deleteProduct est la fonction qui possède la suppression d'un produit. La cascade Prisma
 // (Media.onDelete: Cascade) efface les lignes, mais aucune cascade n'atteint le disque :
 // sans cette fonction, chaque appelant devait effacer lui-même les fichiers écrits par
-// traiterImage — et un appelant qui l'oubliait laissait des orphelins dans public/uploads,
+// processImage — et un appelant qui l'oubliait laissait des orphelins dans public/uploads,
 // un dossier servi publiquement (dette constatée le 2026-08-30 : six fichiers orphelins).
-// Ces tests créent de VRAIS fichiers via traiterImage, puis assertent l'absence de résidu,
+// Ces tests créent de VRAIS fichiers via processImage, puis assertent l'absence de résidu,
 // sur disque comme en base.
 
 const SLUG_PREFIX = 'products-test-'
 const WIDTHS = [400, 800, 1200] as const
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
 
-// Chemins réellement retournés par traiterImage, seuls noms fiables pour le nettoyage
+// Chemins réellement retournés par processImage, seuls noms fiables pour le nettoyage
 // défensif d'afterAll (le nom sur disque porte un suffixe aléatoire — même raison que
 // tests/server/media.test.ts).
 const usedPaths: string[] = []
@@ -68,10 +68,10 @@ describe('deleteProduct', () => {
       data: { productId: product.id, libelle: 'Unique', sku: `${SLUG_PREFIX}sku`, stock: 1 },
     })
 
-    // Deux photos réelles, comme en production : traiterImage écrit six fichiers chacune.
+    // Deux photos réelles, comme en production : processImage écrit six fichiers chacune.
     const source = await createJpegSource()
-    const media1 = await traiterImage(source, product.id)
-    const media2 = await traiterImage(source, product.id)
+    const media1 = await processImage(source, product.id)
+    const media2 = await processImage(source, product.id)
     usedPaths.push(media1.chemin, media2.chemin)
     await prisma.media.createMany({
       data: [

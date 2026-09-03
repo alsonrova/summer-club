@@ -1,31 +1,31 @@
 import { prisma } from '@/server/db'
-import { enregistrerAudit } from '@/server/audit'
+import { recordAudit } from '@/server/audit'
 import { transitionAllowed, stockEffect, type OrderStatus } from '@/domain/order-status'
-import { CommandeError, RuptureStockError } from '@/server/orders'
+import { OrderError, OutOfStockError } from '@/server/orders'
 
 /**
  * Transition refusée par la machine à états (src/domain/order-status.ts).
  *
- * Dérive de CommandeError, comme toute la famille d'erreurs métier levée par
+ * Dérive de OrderError, comme toute la famille d'erreurs métier levée par
  * src/server/orders.ts : l'interface d'administration peut ainsi distinguer d'un coup
  * une faute rattrapable (à afficher en français) d'une panne technique (à laisser
  * remonter). `stockEffect` renvoie déjà 'none' pour une transition interdite, donc le
  * stock ne bougerait pas — mais accepter silencieusement de faire passer une commande
  * livrée à « expédiée » réécrirait l'historique sans le dire. On refuse explicitement.
  */
-export class TransitionInterditeError extends CommandeError {
+export class ForbiddenTransitionError extends OrderError {
   constructor(
-    public readonly de: OrderStatus,
-    public readonly vers: OrderStatus,
+    public readonly from: OrderStatus,
+    public readonly to: OrderStatus,
   ) {
-    super(`Transition interdite : ${de} → ${vers}`)
+    super(`Transition interdite : ${from} → ${to}`)
   }
 }
 
 /**
  * Chemins dont le rendu dépend du statut ou du stock d'une commande.
  *
- * `appliquerStatut` n'invalide RIEN elle-même : `revalidatePath` exige un contexte de
+ * `applyStatus` n'invalide RIEN elle-même : `revalidatePath` exige un contexte de
  * requête Next.js (« Invariant: static generation store missing » sinon — vérifié sous
  * Vitest), or ce module doit rester appelable hors requête (tests, scripts, tâches
  * planifiées). L'invalidation appartient donc aux appelants qui, eux, s'exécutent bien
@@ -33,7 +33,7 @@ export class TransitionInterditeError extends CommandeError {
  * webhook de paiement. Cette liste est exportée pour qu'aucun des deux n'ait à deviner —
  * ni à oublier — ce qu'il faut invalider.
  */
-export function cheminsARevalider(orderId: string): string[] {
+export function pathsToRevalidate(orderId: string): string[] {
   return [
     '/admin/commandes',
     `/admin/commandes/${orderId}`,
@@ -61,17 +61,17 @@ export function cheminsARevalider(orderId: string): string[] {
  *    livré deux fois, double clic) est ICI : la ligne de commande est verrouillée puis
  *    RELUE dans la transaction, et la décision se prend sur cet état relu — jamais sur un
  *    état reçu en paramètre. Un second appel voit le statut déjà écrit et se heurte à
- *    TransitionInterditeError au lieu de rejouer l'effet sur le stock.
+ *    ForbiddenTransitionError au lieu de rejouer l'effet sur le stock.
  *
  * 3. Une confirmation peut manquer de stock. Une commande WhatsApp
  *    (en_attente_confirmation) ne réserve rien à la création : le stock a pu partir
  *    entre-temps. On verrouille les lignes de variantes, on les relit, et on lève
- *    RuptureStockError si le compte n'y est pas. La contrainte CHECK
+ *    OutOfStockError si le compte n'y est pas. La contrainte CHECK
  *    `variant_stock_non_negatif` (prisma/migrations/20260812204141_stock_non_negatif) est
  *    un filet de sécurité, pas la première ligne de défense : la laisser rattraper le cas
  *    donnerait une erreur SQL brute à la propriétaire.
  */
-export async function appliquerStatut(orderId: string, vers: OrderStatus, acteur: string) {
+export async function applyStatus(orderId: string, to: OrderStatus, actor: string) {
   return prisma.$transaction(
     async (tx) => {
       // Verrou sur la LIGNE DE COMMANDE avant toute lecture : sans lui, deux changements
@@ -81,75 +81,75 @@ export async function appliquerStatut(orderId: string, vers: OrderStatus, acteur
       // chaque instruction) le statut réellement écrit.
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`
 
-      const commande = await tx.order.findUniqueOrThrow({
+      const order = await tx.order.findUniqueOrThrow({
         where: { id: orderId },
         include: { items: true },
       })
-      const de = commande.statut as OrderStatus
+      const from = order.statut as OrderStatus
 
-      if (!transitionAllowed(de, vers)) {
-        throw new TransitionInterditeError(de, vers)
+      if (!transitionAllowed(from, to)) {
+        throw new ForbiddenTransitionError(from, to)
       }
 
-      const effet = stockEffect(de, vers)
+      const effect = stockEffect(from, to)
 
-      if (effet !== 'none') {
-        // Agrégation par déclinaison, même raison que dans creerCommande : deux lignes de
+      if (effect !== 'none') {
+        // Agrégation par déclinaison, même raison que dans createOrder : deux lignes de
         // commande portant la même déclinaison forment une seule demande de stock. Les
         // contrôler séparément laisserait passer deux décréments là où le stock n'en
         // couvrait qu'un.
-        const quantites = new Map<string, number>()
-        for (const item of commande.items) {
-          quantites.set(item.variantId, (quantites.get(item.variantId) ?? 0) + item.quantite)
+        const quantities = new Map<string, number>()
+        for (const item of order.items) {
+          quantities.set(item.variantId, (quantities.get(item.variantId) ?? 0) + item.quantite)
         }
 
         // Verrouillage de toutes les variantes en une instruction, dans un ordre stable
-        // (par identifiant) : c'est le même ordre que celui de creerCommande, ce qui
+        // (par identifiant) : c'est le même ordre que celui de createOrder, ce qui
         // interdit l'interblocage entre deux transactions portant sur les mêmes variantes
         // dans des ordres différents.
-        const ids = [...quantites.keys()].sort()
+        const ids = [...quantities.keys()].sort()
         await tx.$queryRawUnsafe(
           `SELECT id FROM "Variant" WHERE id = ANY($1::text[]) ORDER BY id FOR UPDATE`,
           ids,
         )
 
-        for (const [variantId, quantite] of quantites) {
-          if (effet === 'decrement') {
+        for (const [variantId, quantity] of quantities) {
+          if (effect === 'decrement') {
             // Relecture APRÈS le verrou : c'est elle qui voit la version fraîche de la
             // ligne et permet une décision juste.
-            const variante = await tx.variant.findUniqueOrThrow({ where: { id: variantId } })
-            if (variante.stock < quantite) throw new RuptureStockError(variantId)
+            const variant = await tx.variant.findUniqueOrThrow({ where: { id: variantId } })
+            if (variant.stock < quantity) throw new OutOfStockError(variantId)
             await tx.variant.update({
               where: { id: variantId },
-              data: { stock: { decrement: quantite } },
+              data: { stock: { decrement: quantity } },
             })
           } else {
             await tx.variant.update({
               where: { id: variantId },
-              data: { stock: { increment: quantite } },
+              data: { stock: { increment: quantity } },
             })
           }
         }
       }
 
-      const apres = await tx.order.update({ where: { id: orderId }, data: { statut: vers } })
+      const updatedOrder = await tx.order.update({ where: { id: orderId }, data: { statut: to } })
 
       // Écrit avec `tx`, pas avec le client global : la trace ne doit exister que si le
       // changement est validé. Elle sert aussi d'historique de statut à l'écran de détail
       // (src/app/admin/commandes/[id]/page.tsx) — c'est la seule source de cet historique.
-      await enregistrerAudit(
+      await recordAudit(
         {
-          acteur,
+          actor,
           action: 'changement_statut',
-          entite: 'Order',
-          entiteId: orderId,
-          avant: { statut: de },
-          apres: { statut: vers },
+          entity: 'Order',
+          entityId: orderId,
+          before: { statut: from },
+          after: { statut: to },
         },
         tx,
       )
 
-      return apres
+      return updatedOrder
     },
     { timeout: 15000, maxWait: 5000 },
   )
