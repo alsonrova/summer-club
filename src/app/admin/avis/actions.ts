@@ -11,7 +11,7 @@ import {
   ProductNotFoundError,
   InvalidReviewStatusError,
 } from '@/server/reviews'
-import type { ErreursValidation } from '@/admin/engine/actions'
+import type { ValidationErrors } from '@/admin/engine/actions'
 import { estStatutModeration, type StatutModeration } from './query'
 import type { EtatActionAvis, EtatFormulaireTemoignage } from './etats'
 
@@ -248,7 +248,7 @@ export async function importerTemoignageDepuisFormulaire(
 
   const analyse = temoignageSchema.safeParse(donnees)
   if (!analyse.success) {
-    const erreurs: ErreursValidation = {}
+    const erreurs: ValidationErrors = {}
     for (const probleme of analyse.error.issues) {
       const cle = probleme.path.length > 0 ? String(probleme.path[0]) : '_racine'
       ;(erreurs[cle] ??= []).push(probleme.message)

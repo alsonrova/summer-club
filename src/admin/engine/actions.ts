@@ -2,82 +2,82 @@ import { requireAdmin } from '@/server/auth'
 import { recordAudit } from '@/server/audit'
 import type { ResourceConfig } from '../resource'
 
-export type ErreursValidation = Record<string, string[]>
+export type ValidationErrors = Record<string, string[]>
 
-export type ResultatValidation<T> =
-  | { succes: true; donnees: T }
-  | { succes: false; erreurs: ErreursValidation }
+export type ValidationResult<T> =
+  | { success: true; data: T }
+  | { success: false; errors: ValidationErrors }
 
 // Un <form> HTML ne transmet que des chaînes (et l'absence de clé pour une case à cocher
 // non cochée). On convertit vers les types attendus par le schéma Zod de la ressource
 // avant validation : sans cette étape, un champ `number` resterait une chaîne et
 // échouerait systématiquement (z.number() refuse "45000").
-export function formDataVersObjet<T>(
+export function formDataToObject<T>(
   formData: FormData,
   resource: ResourceConfig<T>,
 ): Record<string, unknown> {
-  const objet: Record<string, unknown> = {}
+  const result: Record<string, unknown> = {}
 
-  for (const champ of resource.fields) {
-    if (champ.kind === 'boolean') {
-      objet[champ.name] = formData.has(champ.name)
+  for (const field of resource.fields) {
+    if (field.kind === 'boolean') {
+      result[field.name] = formData.has(field.name)
       continue
     }
 
-    const valeur = formData.get(champ.name)
-    if (valeur === null) continue
-    const s = String(valeur)
+    const value = formData.get(field.name)
+    if (value === null) continue
+    const s = String(value)
 
-    if (champ.kind === 'number') {
-      objet[champ.name] = s === '' ? undefined : Number(s)
-    } else if (champ.kind === 'date') {
-      objet[champ.name] = s === '' ? undefined : new Date(s)
+    if (field.kind === 'number') {
+      result[field.name] = s === '' ? undefined : Number(s)
+    } else if (field.kind === 'date') {
+      result[field.name] = s === '' ? undefined : new Date(s)
     } else {
-      objet[champ.name] = s
+      result[field.name] = s
     }
   }
 
-  return objet
+  return result
 }
 
 // Regroupe les messages d'erreur Zod (déjà en français dans les schémas du domaine) par
 // nom de champ, pour que form.tsx puisse les afficher sous chaque entrée.
-export function validerFormData<T>(
+export function validateFormData<T>(
   resource: ResourceConfig<T>,
   formData: FormData,
-): ResultatValidation<T> {
-  const brut = formDataVersObjet(formData, resource)
-  const analyse = resource.schema.safeParse(brut)
+): ValidationResult<T> {
+  const raw = formDataToObject(formData, resource)
+  const parsed = resource.schema.safeParse(raw)
 
-  if (analyse.success) {
-    return { succes: true, donnees: analyse.data as T }
+  if (parsed.success) {
+    return { success: true, data: parsed.data as T }
   }
 
-  const erreurs: ErreursValidation = {}
-  for (const probleme of analyse.error.issues) {
-    const cle = probleme.path.length > 0 ? String(probleme.path[0]) : '_racine'
-    ;(erreurs[cle] ??= []).push(probleme.message)
+  const errors: ValidationErrors = {}
+  for (const issue of parsed.error.issues) {
+    const key = issue.path.length > 0 ? String(issue.path[0]) : '_root'
+    ;(errors[key] ??= []).push(issue.message)
   }
-  return { succes: false, erreurs }
+  return { success: false, errors }
 }
 
 // Retire les champs système (id, createdAt, updatedAt par défaut — voir
-// CHAMPS_SYSTEME_PAR_DEFAUT dans resource.ts) des données validées, juste avant
-// l'écriture Prisma. Nécessaire même si formDataVersObjet ne les collecte déjà plus
+// DEFAULT_SYSTEM_FIELDS dans resource.ts) des données validées, juste avant
+// l'écriture Prisma. Nécessaire même si formDataToObject ne les collecte déjà plus
 // depuis le FormData (ils sont absents de resource.fields) : un schéma peut leur donner
 // une valeur par défaut (`z.string().default(...)`), que Zod applique alors aux données
 // analysées malgré leur absence du formulaire soumis — sans ce retrait, cette valeur par
 // défaut (ou un id forgé si le schéma ne le rend pas optionnel) partirait telle quelle
 // vers `delegate.create`/`delegate.update`.
-function omettreChampsSysteme(
-  donnees: Record<string, unknown>,
-  champsSysteme: string[],
+function omitSystemFields(
+  data: Record<string, unknown>,
+  systemFields: string[],
 ): Record<string, unknown> {
-  const copie = { ...donnees }
-  for (const champ of champsSysteme) {
-    delete copie[champ]
+  const copy = { ...data }
+  for (const field of systemFields) {
+    delete copy[field]
   }
-  return copie
+  return copy
 }
 
 // Sous-ensemble du delegate Prisma généré (ex. `prisma.produit`) dont l'engine a besoin.
@@ -97,70 +97,70 @@ export type DelegatePrisma<T> = {
 // à requireAdmin() ici ne dispense pas la Server Action appelante d'en faire un elle-même
 // au plus près de sa propre définition, mais protège ce module si jamais il est invoqué
 // autrement.
-export async function creerRessource<T extends Record<string, unknown>>(
+export async function createResource<T extends Record<string, unknown>>(
   resource: ResourceConfig<T>,
   delegate: DelegatePrisma<T>,
   formData: FormData,
-): Promise<ResultatValidation<T>> {
+): Promise<ValidationResult<T>> {
   const session = await requireAdmin()
-  const resultat = validerFormData(resource, formData)
-  if (!resultat.succes) return resultat
+  const result = validateFormData(resource, formData)
+  if (!result.success) return result
 
-  // Le cast vers T est sûr : `donneesAEcrire` est `resultat.donnees` privé des seules
-  // clés listées dans `resource.champsSysteme`, et le delegate Prisma réel génère ces
+  // Le cast vers T est sûr : `dataToWrite` est `result.data` privé des seules
+  // clés listées dans `resource.systemFields`, et le delegate Prisma réel génère ces
   // colonnes lui-même (id, createdAt, updatedAt) — il ne les exige jamais en écriture.
-  const donneesAEcrire = omettreChampsSysteme(resultat.donnees, resource.champsSysteme) as T
-  const cree = await delegate.create({ data: donneesAEcrire })
+  const dataToWrite = omitSystemFields(result.data, resource.systemFields) as T
+  const created = await delegate.create({ data: dataToWrite })
   await recordAudit({
     actor: session.user.email,
     action: 'creer',
     entity: resource.name,
-    entityId: cree.id,
-    after: resultat.donnees,
+    entityId: created.id,
+    after: result.data,
   })
 
-  return resultat
+  return result
 }
 
-export async function modifierRessource<T extends Record<string, unknown>>(
+export async function updateResource<T extends Record<string, unknown>>(
   resource: ResourceConfig<T>,
   delegate: DelegatePrisma<T>,
-  entiteId: string,
+  entityId: string,
   formData: FormData,
-): Promise<ResultatValidation<T>> {
+): Promise<ValidationResult<T>> {
   const session = await requireAdmin()
-  const resultat = validerFormData(resource, formData)
-  if (!resultat.succes) return resultat
+  const result = validateFormData(resource, formData)
+  if (!result.success) return result
 
-  const avant = await delegate.findUnique({ where: { id: entiteId } })
-  // Voir le commentaire équivalent dans creerRessource : même retrait, même raison.
-  const donneesAEcrire = omettreChampsSysteme(resultat.donnees, resource.champsSysteme) as Partial<T>
-  const apres = await delegate.update({ where: { id: entiteId }, data: donneesAEcrire })
+  const before = await delegate.findUnique({ where: { id: entityId } })
+  // Voir le commentaire équivalent dans createResource : même retrait, même raison.
+  const dataToWrite = omitSystemFields(result.data, resource.systemFields) as Partial<T>
+  const after = await delegate.update({ where: { id: entityId }, data: dataToWrite })
   await recordAudit({
     actor: session.user.email,
     action: 'modifier',
     entity: resource.name,
-    entityId: entiteId,
-    before: avant,
-    after: apres,
+    entityId,
+    before,
+    after,
   })
 
-  return resultat
+  return result
 }
 
-export async function supprimerRessource<T extends Record<string, unknown>>(
+export async function deleteResource<T extends Record<string, unknown>>(
   resource: ResourceConfig<T>,
   delegate: DelegatePrisma<T>,
-  entiteId: string,
+  entityId: string,
 ): Promise<void> {
   const session = await requireAdmin()
-  const avant = await delegate.findUnique({ where: { id: entiteId } })
-  await delegate.delete({ where: { id: entiteId } })
+  const before = await delegate.findUnique({ where: { id: entityId } })
+  await delegate.delete({ where: { id: entityId } })
   await recordAudit({
     actor: session.user.email,
     action: 'supprimer',
     entity: resource.name,
-    entityId: entiteId,
-    before: avant,
+    entityId,
+    before,
   })
 }

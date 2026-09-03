@@ -1,11 +1,11 @@
 import type { Prisma } from '@prisma/client'
 import type { OrderStatus } from '@/domain/order-status'
-import type { CANAUX } from '@/admin/resources/orders'
+import type { CHANNELS } from '@/admin/resources/orders'
 
 // Même taille de page que le catalogue : une boutique artisanale, pas une marketplace.
 export const COMMANDES_PAR_PAGE = 20
 
-export type Canal = (typeof CANAUX)[number]
+export type Canal = (typeof CHANNELS)[number]
 
 export type FiltresCommandes = {
   statut?: OrderStatus

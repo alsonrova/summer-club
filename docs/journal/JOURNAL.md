@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**64 entrées** · 16 tâches · Développeur 40 · Auditeur qualité et sécurité 18 · Coordinateur 6
+**65 entrées** · 16 tâches · Développeur 41 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -72,6 +72,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | 13 | Développeur | livré | — |
 | 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | 13 | Coordinateur | livré | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
@@ -699,3 +700,11 @@ Etape 1 bis - applique RENOMMAGE.md section 3.7 (arbitree par le coordinateur) :
 - **Tests** : npm test : Tests 249 passed (249) → npm test : Test Files 25 passed (25), Tests 249 passed (249)
 - **Fichiers** : `src/server/orders.ts`, `src/server/order-status-service.ts`, `src/server/audit.ts`, `src/server/media.ts`, `src/server/reviews.ts`, `src/server/prisma-erreurs.ts`, `src/server/auth.ts`, `src/server/products.ts`, `src/admin/engine/actions.ts`, `src/app/admin/avis/actions.ts`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/produits/[id]/media-carte.tsx`, `src/app/admin/produits/actions.ts`, `next.config.ts`, `e2e/admin-produits.spec.ts`, `tests/admin/avis-actions.test.ts`, `tests/admin/champs-systeme.test.ts`, `tests/admin/commandes-actions.test.ts`, `tests/admin/produits-actions.test.ts`, `tests/server/media-validation.test.ts`, `tests/server/media.test.ts`, `tests/server/orders.test.ts`, `tests/server/prisma-erreurs.test.ts`, `tests/server/products.test.ts`, `tests/server/statut.test.ts`, `docs/RENOMMAGE.md`
 - **Réserve** : OrderInput.channel (ex. canal) et le pass-through Prisma media.chemin/processImage sont des choix de jugement documentés en § 3.7, marqués la ou signalés dans le rapport ; a re-verifier en revue.
+
+### 2026-09-03 · Développeur — livré
+
+Étape 3 — src/admin/ renommé en anglais (§ 3.3 + § 3.6-admin : ChampAdmin/AdminField, ResultatValidation/ValidationResult, validerFormData/validateFormData, creerRessource/createResource, versCSV/toCSV, CANAUX/CHANNELS, LIBELLES_STATUT/STATUS_LABELS, etc.), consommateurs alignés dans src/app/ et tests/. § 3.7 complété : propriétés de ChampAdmin/AdminField (requis→required) et ResultatValidation/ValidationResult (succes/donnees/erreurs→success/data/errors), plus les clés de paramètre déstructuré non couvertes d'AdminTable et AdminForm (lignes/cheminBase/filtres/formatColonnes/optionsFiltres/lien et valeursInitiales/erreurs/libelleSoumettre), découvertes en exécutant l'étape et ajoutées à docs/RENOMMAGE.md.
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : npm test : Tests 249 passed (249) → npm test : Test Files 25 passed (25), Tests 249 passed (249)
+- **Fichiers** : `docs/RENOMMAGE.md`, `src/admin/engine/actions.ts`, `src/admin/engine/csv.ts`, `src/admin/engine/form.tsx`, `src/admin/engine/table.tsx`, `src/admin/resource.ts`, `src/admin/resources/orders.ts`, `src/admin/resources/products.ts`, `src/admin/resources/variants.ts`, `src/app/admin/avis/actions.ts`, `src/app/admin/avis/etats.ts`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/commandes/page.tsx`, `src/app/admin/commandes/query.ts`, `src/app/admin/produits/actions.ts`, `src/app/admin/produits/etats.ts`, `src/app/admin/produits/formulaire-produit.tsx`, `src/app/admin/produits/page.tsx`, `src/app/admin/produits/query.ts`, `tests/admin/champs-systeme.test.ts`, `tests/admin/commandes-query.test.ts`, `tests/admin/csv-nombres.test.ts`, `tests/admin/csv.test.ts`

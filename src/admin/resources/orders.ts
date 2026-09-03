@@ -6,7 +6,7 @@ import { ORDER_STATUSES } from '@/domain/order-status'
 // Aligné sur l'énumération Prisma `Canal` (prisma/schema.prisma) par `satisfies` : ajouter
 // un canal au schéma sans l'ajouter ici devient une erreur de compilation, plutôt qu'un
 // filtre silencieusement incomplet.
-export const CANAUX = ['orange_money', 'whatsapp', 'livraison'] as const satisfies readonly Canal[]
+export const CHANNELS = ['orange_money', 'whatsapp', 'livraison'] as const satisfies readonly Canal[]
 
 /**
  * Vrai si la valeur est l'un des trois canaux — pour valider une valeur venue du client
@@ -18,11 +18,11 @@ export const CANAUX = ['orange_money', 'whatsapp', 'livraison'] as const satisfi
  * une divergence entre le test et le type affirmé passe inaperçue. Ce projet n'a désormais
  * qu'une seule façon de valider une valeur d'énumération.
  */
-export function estCanal(valeur: unknown): valeur is Canal {
-  return typeof valeur === 'string' && (CANAUX as readonly string[]).includes(valeur)
+export function isChannel(value: unknown): value is Canal {
+  return typeof value === 'string' && (CHANNELS as readonly string[]).includes(value)
 }
 
-export const LIBELLES_STATUT = {
+export const STATUS_LABELS = {
   en_attente_confirmation: 'En attente de confirmation',
   en_attente_paiement: 'En attente de paiement',
   confirmee: 'Confirmée',
@@ -37,7 +37,7 @@ export const LIBELLES_STATUT = {
 // Libellés des BOUTONS de transition, à l'infinitif : un bouton nomme l'action qu'il
 // déclenche, pas l'état qu'il vise. « Confirmer la commande » se lit ; un bouton intitulé
 // « Confirmée » laisse la propriétaire se demander s'il décrit l'état courant ou la suite.
-export const LIBELLES_TRANSITION = {
+export const TRANSITION_LABELS = {
   en_attente_confirmation: 'Remettre en attente de confirmation',
   en_attente_paiement: 'Remettre en attente de paiement',
   confirmee: 'Confirmer la commande',
@@ -49,7 +49,7 @@ export const LIBELLES_TRANSITION = {
   echec_paiement: 'Marquer le paiement en échec',
 } as const satisfies Record<(typeof ORDER_STATUSES)[number], string>
 
-export const LIBELLES_CANAL = {
+export const CHANNEL_LABELS = {
   orange_money: 'Orange Money',
   whatsapp: 'WhatsApp',
   livraison: 'Livraison',
@@ -58,12 +58,12 @@ export const LIBELLES_CANAL = {
 // Prennent une chaîne, pas un `OrderStatus` : l'historique de statut est relu depuis les
 // colonnes Json du journal d'audit, où le type n'est pas garanti. Un statut inconnu
 // s'affiche tel quel plutôt que « undefined ».
-export function libelleStatut(valeur: string): string {
-  return (LIBELLES_STATUT as Record<string, string>)[valeur] ?? valeur
+export function statusLabel(value: string): string {
+  return (STATUS_LABELS as Record<string, string>)[value] ?? value
 }
 
-export function libelleCanal(valeur: string): string {
-  return (LIBELLES_CANAL as Record<string, string>)[valeur] ?? valeur
+export function channelLabel(value: string): string {
+  return (CHANNEL_LABELS as Record<string, string>)[value] ?? value
 }
 
 // Ce schéma ne sert PAS à valider une saisie : une commande n'est jamais créée ni modifiée
@@ -76,14 +76,14 @@ export const orderSchema = z.object({
   createdAt: z.date(),
   clientNom: z.string(),
   tel: z.string(),
-  canal: z.enum(CANAUX),
+  canal: z.enum(CHANNELS),
   statut: z.enum(ORDER_STATUSES),
   total: z.number().int(),
 })
 
-export type OrderListeInput = z.infer<typeof orderSchema>
+export type OrderListInput = z.infer<typeof orderSchema>
 
-export const ordersResource = defineResource<OrderListeInput>({
+export const ordersResource = defineResource<OrderListInput>({
   name: 'commandes',
   label: 'Commandes',
   schema: orderSchema,
@@ -91,12 +91,12 @@ export const ordersResource = defineResource<OrderListeInput>({
   filters: ['statut', 'canal', 'reference'],
   actions: [],
   // `createdAt` est ici une COLONNE AFFICHÉE, pas un champ de formulaire : la laisser dans
-  // CHAMPS_SYSTEME_PAR_DEFAUT la retirerait de `fields`, et <AdminTable> perdrait à la
+  // DEFAULT_SYSTEM_FIELDS la retirerait de `fields`, et <AdminTable> perdrait à la
   // fois son libellé et son type `date` — la date s'afficherait alors sous sa forme brute.
   // Aucun risque de forge par là : cette ressource n'a pas de formulaire (voir ci-dessus),
   // et `id` n'est délibérément pas dans le schéma.
-  champsSysteme: [],
-  libelles: {
+  systemFields: [],
+  labels: {
     reference: 'Référence',
     createdAt: 'Date',
     clientNom: 'Cliente',

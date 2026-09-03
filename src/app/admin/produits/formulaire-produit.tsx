@@ -11,7 +11,7 @@ function texteInitial(valeurs: Record<string, unknown>, nom: string): string {
 }
 
 // `idErreur`/`enErreur` relient le champ à son message via aria-describedby/aria-invalid —
-// même câblage que ChampSaisie dans src/admin/engine/form.tsx, pour qu'un lecteur d'écran
+// même câblage que InputField dans src/admin/engine/form.tsx, pour qu'un lecteur d'écran
 // annonce l'erreur au moment où il atteint le champ, pas seulement quand elle apparaît
 // visuellement.
 function ChampErreurs({ id, messages }: { id: string; messages: string[] | undefined }) {
@@ -35,7 +35,7 @@ function ChampErreurs({ id, messages }: { id: string; messages: string[] | undef
 // useActionState (React 19 / Next.js — voir node_modules/next/dist/docs/01-app/
 // 01-getting-started/10-error-handling.md, section « Handling expected errors » : les
 // erreurs de validation attendues sont modélisées comme des valeurs de retour, pas levées).
-// La validation elle-même (`validerFormData(productsResource, ...)` dans actions.ts) reste
+// La validation elle-même (`validateFormData(productsResource, ...)` dans actions.ts) reste
 // celle du moteur, pilotée par le même schéma Zod.
 //
 // Volontairement sans attribut HTML `required` : la validation serveur (Zod, en français)

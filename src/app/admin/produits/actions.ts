@@ -12,7 +12,7 @@ import {
   UnreadableImageError,
 } from '@/server/media'
 import { isUniqueViolation } from '@/server/prisma-erreurs'
-import { validerFormData, formDataVersObjet } from '@/admin/engine/actions'
+import { validateFormData, formDataToObject } from '@/admin/engine/actions'
 import { productsResource } from '@/admin/resources/products'
 import { variantsResource } from '@/admin/resources/variants'
 import type {
@@ -23,7 +23,7 @@ import type {
 
 // Convention d'administration (voir src/server/auth.ts) : un layout ne protège ni les
 // Server Actions ni les Route Handlers — chaque action ici appelle requireAdmin() elle-même,
-// même si les briques du moteur qu'elle invoque (validerFormData, recordAudit) le font
+// même si les briques du moteur qu'elle invoque (validateFormData, recordAudit) le font
 // déjà indirectement pour certaines. La lecture de session est mise en cache par requête
 // (React cache()), ce doublon ne coûte donc rien.
 
@@ -48,25 +48,25 @@ export async function creerProduit(
   formData: FormData,
 ): Promise<EtatFormulaireProduit> {
   const session = await requireAdmin()
-  const resultat = validerFormData(productsResource, formData)
+  const resultat = validateFormData(productsResource, formData)
 
-  if (!resultat.succes) {
+  if (!resultat.success) {
     return {
       succes: false,
-      erreurs: resultat.erreurs,
-      valeursInitiales: formDataVersObjet(formData, productsResource),
+      erreurs: resultat.errors,
+      valeursInitiales: formDataToObject(formData, productsResource),
     }
   }
 
   let produit
   try {
-    produit = await prisma.product.create({ data: resultat.donnees })
+    produit = await prisma.product.create({ data: resultat.data })
   } catch (erreur) {
     if (isUniqueViolation(erreur, 'slug')) {
       return {
         succes: false,
         erreurs: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
-        valeursInitiales: formDataVersObjet(formData, productsResource),
+        valeursInitiales: formDataToObject(formData, productsResource),
       }
     }
     throw erreur
@@ -77,7 +77,7 @@ export async function creerProduit(
     action: 'creer',
     entity: 'produits',
     entityId: produit.id,
-    after: resultat.donnees,
+    after: resultat.data,
   })
 
   // Le catalogue public lit ces mêmes produits : sans cette invalidation, une création
@@ -93,36 +93,36 @@ export async function modifierProduit(
   formData: FormData,
 ): Promise<EtatFormulaireProduit> {
   const session = await requireAdmin()
-  const resultat = validerFormData(productsResource, formData)
+  const resultat = validateFormData(productsResource, formData)
 
-  if (!resultat.succes) {
+  if (!resultat.success) {
     return {
       succes: false,
-      erreurs: resultat.erreurs,
-      valeursInitiales: formDataVersObjet(formData, productsResource),
+      erreurs: resultat.errors,
+      valeursInitiales: formDataToObject(formData, productsResource),
     }
   }
 
   const avantComplet = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
-  // Restreint aux mêmes clés que `resultat.donnees` (les champs réellement modifiés) :
+  // Restreint aux mêmes clés que `resultat.data` (les champs réellement modifiés) :
   // sans ce filtrage, `avant` porterait aussi des dates et des colonnes absentes du
   // formulaire, rendant `avant`/`apres` non comparables champ à champ dans le journal
   // d'audit — alors que c'est précisément sa raison d'être.
   const avantMemesClefs = Object.fromEntries(
-    Object.keys(resultat.donnees).map((cle) => [
+    Object.keys(resultat.data).map((cle) => [
       cle,
       (avantComplet as Record<string, unknown>)[cle],
     ]),
   )
 
   try {
-    await prisma.product.update({ where: { id: productId }, data: resultat.donnees })
+    await prisma.product.update({ where: { id: productId }, data: resultat.data })
   } catch (erreur) {
     if (isUniqueViolation(erreur, 'slug')) {
       return {
         succes: false,
         erreurs: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
-        valeursInitiales: formDataVersObjet(formData, productsResource),
+        valeursInitiales: formDataToObject(formData, productsResource),
       }
     }
     throw erreur
@@ -134,13 +134,13 @@ export async function modifierProduit(
     entity: 'produits',
     entityId: productId,
     before: avantMemesClefs,
-    after: resultat.donnees,
+    after: resultat.data,
   })
 
   revalidatePath('/boutique')
   revalidatePath(`/admin/produits/${productId}`)
 
-  return { succes: true, erreurs: {}, valeursInitiales: resultat.donnees }
+  return { succes: true, erreurs: {}, valeursInitiales: resultat.data }
 }
 
 export async function creerDeclinaison(
@@ -149,31 +149,31 @@ export async function creerDeclinaison(
   formData: FormData,
 ): Promise<EtatFormulaireDeclinaison> {
   const session = await requireAdmin()
-  const resultat = validerFormData(variantsResource, formData)
+  const resultat = validateFormData(variantsResource, formData)
 
-  if (!resultat.succes) {
+  if (!resultat.success) {
     return {
       succes: false,
-      erreurs: resultat.erreurs,
-      valeursInitiales: formDataVersObjet(formData, variantsResource),
+      erreurs: resultat.errors,
+      valeursInitiales: formDataToObject(formData, variantsResource),
     }
   }
 
   const produit = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
-  const prixResultant = produit.prixBase + resultat.donnees.deltaPrix
+  const prixResultant = produit.prixBase + resultat.data.deltaPrix
   if (prixResultant <= 0) {
     return {
       succes: false,
       erreurs: {
         deltaPrix: ['Le prix de vente résultant (prix de base + écart) doit être positif.'],
       },
-      valeursInitiales: formDataVersObjet(formData, variantsResource),
+      valeursInitiales: formDataToObject(formData, variantsResource),
     }
   }
 
   let variant
   try {
-    variant = await prisma.variant.create({ data: { productId, ...resultat.donnees } })
+    variant = await prisma.variant.create({ data: { productId, ...resultat.data } })
   } catch (erreur) {
     // Deux contraintes d'unicité distinctes sur Variant (voir prisma/schema.prisma) :
     // `sku` (globale) et `(productId, libelle)` (par produit). Sans les distinguer,
@@ -182,14 +182,14 @@ export async function creerDeclinaison(
       return {
         succes: false,
         erreurs: { sku: ['Ce SKU est déjà utilisé par une autre déclinaison.'] },
-        valeursInitiales: formDataVersObjet(formData, variantsResource),
+        valeursInitiales: formDataToObject(formData, variantsResource),
       }
     }
     if (isUniqueViolation(erreur, 'libelle')) {
       return {
         succes: false,
         erreurs: { libelle: ['Une déclinaison avec ce libellé existe déjà pour ce produit.'] },
-        valeursInitiales: formDataVersObjet(formData, variantsResource),
+        valeursInitiales: formDataToObject(formData, variantsResource),
       }
     }
     throw erreur
@@ -200,7 +200,7 @@ export async function creerDeclinaison(
     action: 'creer',
     entity: 'Variant',
     entityId: variant.id,
-    after: resultat.donnees,
+    after: resultat.data,
   })
 
   revalidatePath('/boutique')

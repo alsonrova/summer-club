@@ -1,4 +1,4 @@
-import type { ErreursValidation } from '@/admin/engine/actions'
+import type { ValidationErrors } from '@/admin/engine/actions'
 
 // Séparé de actions.ts : un fichier marqué 'use server' ne peut exporter que des fonctions
 // async (voir https://nextjs.org/docs/messages/invalid-use-server-value, rencontré en
@@ -8,7 +8,7 @@ import type { ErreursValidation } from '@/admin/engine/actions'
 
 export type EtatFormulaireProduit = {
   succes: boolean
-  erreurs: ErreursValidation
+  erreurs: ValidationErrors
   valeursInitiales: Record<string, unknown>
 }
 
@@ -29,7 +29,7 @@ export const etatActionSimpleInitial: EtatActionSimple = { erreur: null }
 // le même patron useActionState que FormulaireProduit, sur son propre schéma.
 export type EtatFormulaireDeclinaison = {
   succes: boolean
-  erreurs: ErreursValidation
+  erreurs: ValidationErrors
   valeursInitiales: Record<string, unknown>
 }
 

@@ -9,7 +9,7 @@ import {
   ForbiddenTransitionError,
 } from '@/server/order-status-service'
 import { isOrderStatus, type OrderStatus } from '@/domain/order-status'
-import { libelleStatut } from '@/admin/resources/orders'
+import { statusLabel } from '@/admin/resources/orders'
 import type { EtatChangementStatut } from './etats'
 
 // Convention de sécurité (voir src/server/auth.ts) : un layout ne protège ni les Server
@@ -78,8 +78,8 @@ export async function changerStatutDepuisFormulaire(
     if (erreur instanceof ForbiddenTransitionError) {
       return {
         erreur:
-          `Cette commande est passée à « ${libelleStatut(erreur.from)} » entre-temps : `
-          + `« ${libelleStatut(erreur.to)} » n'est plus possible. Rechargez la page.`,
+          `Cette commande est passée à « ${statusLabel(erreur.from)} » entre-temps : `
+          + `« ${statusLabel(erreur.to)} » n'est plus possible. Rechargez la page.`,
       }
     }
     throw erreur

@@ -1,22 +1,22 @@
 // Un entier ou un décimal, éventuellement négatif ("-5000", "-12.5") — jamais une
 // formule de tableur même s'il commence par "-", contrairement à "-1+1" ou "--5000".
-const NOMBRE_BIEN_FORME = /^-?\d+(\.\d+)?$/
+const WELL_FORMED_NUMBER = /^-?\d+(\.\d+)?$/
 
-function echapper(valeur: unknown): string {
-  if (valeur === null || valeur === undefined) return ''
-  let s = String(valeur)
+function escapeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  let s = String(value)
   // Un tableur interprète =, +, -, @ en tête de cellule comme une formule. Le préfixage
   // par une apostrophe empêche qu'une valeur malveillante (ex. un nom de produit) ne
   // s'exécute chez la personne qui ouvre l'export. Un montant négatif bien formé (une
   // remise, un avoir) n'est pas une formule : on l'exempte pour ne pas le transformer en
   // texte dans le tableur, tout en gardant la protection pour tout le reste ("-1+1",
   // "--5000", "-" seul…).
-  if (!NOMBRE_BIEN_FORME.test(s) && /^[=+\-@]/.test(s)) s = `'${s}`
+  if (!WELL_FORMED_NUMBER.test(s) && /^[=+\-@]/.test(s)) s = `'${s}`
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export function versCSV(lignes: Record<string, unknown>[], colonnes: string[]): string {
-  const entete = colonnes.map(echapper).join(',')
-  const corps = lignes.map((l) => colonnes.map((c) => echapper(l[c])).join(','))
-  return [entete, ...corps].join('\r\n')
+export function toCSV(rows: Record<string, unknown>[], columns: string[]): string {
+  const header = columns.map(escapeCsvValue).join(',')
+  const body = rows.map((row) => columns.map((col) => escapeCsvValue(row[col])).join(','))
+  return [header, ...body].join('\r\n')
 }

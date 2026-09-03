@@ -26,7 +26,7 @@ export type LigneProduitListe = {
   // Pas affiché en colonne (productsResource.columns ne le liste pas) : présent ici
   // uniquement pour que ce type reste structurellement compatible avec `ProductInput`
   // (productSchema, désormais porteur de `ordre` — voir resources/products.ts), que
-  // <AdminTable> exige de sa prop `lignes`.
+  // <AdminTable> exige de sa prop `rows`.
   ordre: number
 }
 

@@ -3,12 +3,12 @@ import { prisma } from '@/server/db'
 import { AdminTable } from '@/admin/engine/table'
 import {
   ordersResource,
-  CANAUX,
-  LIBELLES_CANAL,
-  LIBELLES_STATUT,
-  estCanal,
-  libelleCanal,
-  libelleStatut,
+  CHANNELS,
+  CHANNEL_LABELS,
+  STATUS_LABELS,
+  isChannel,
+  channelLabel,
+  statusLabel,
 } from '@/admin/resources/orders'
 import { formatAriary } from '@/domain/money'
 import { ORDER_STATUSES, isOrderStatus } from '@/domain/order-status'
@@ -24,8 +24,8 @@ function texteCourt(valeur: unknown): string {
   return s.slice(0, 60)
 }
 
-const OPTIONS_STATUT = ORDER_STATUSES.map((s) => ({ valeur: s, libelle: LIBELLES_STATUT[s] }))
-const OPTIONS_CANAL = CANAUX.map((c) => ({ valeur: c, libelle: LIBELLES_CANAL[c] }))
+const OPTIONS_STATUT = ORDER_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
+const OPTIONS_CANAL = CHANNELS.map((c) => ({ value: c, label: CHANNEL_LABELS[c] }))
 
 // Chaque page d'administration appelle requireAdmin() elle-même : voir la convention dans
 // src/server/auth.ts — le layout ne suffit pas.
@@ -45,7 +45,7 @@ export default async function CommandesPage({
   // plutôt que transmis à Prisma, qui répondrait par une erreur d'énumération PostgreSQL.
   // Les deux passent par le même genre de garde de type, jamais par un `as`.
   const statut = isOrderStatus(statutBrut) ? statutBrut : undefined
-  const canal = estCanal(canalBrut) ? canalBrut : undefined
+  const canal = isChannel(canalBrut) ? canalBrut : undefined
   const reference = texteCourt(referenceBrut) || undefined
   const page = versPageValide(typeof sp.page === 'string' ? sp.page : undefined)
 
@@ -65,20 +65,20 @@ export default async function CommandesPage({
 
       <AdminTable
         resource={ordersResource}
-        lignes={lignes}
-        cheminBase="/admin/commandes"
+        rows={lignes}
+        basePath="/admin/commandes"
         page={pageCourante}
         totalPages={totalPages}
-        filtres={{
+        filters={{
           statut: statut ?? '',
           canal: canal ?? '',
           reference: reference ?? '',
         }}
-        optionsFiltres={{ statut: OPTIONS_STATUT, canal: OPTIONS_CANAL }}
-        formatColonnes={{
+        filterOptions={{ statut: OPTIONS_STATUT, canal: OPTIONS_CANAL }}
+        columnFormatters={{
           total: (valeur) => formatAriary(Number(valeur)),
-          statut: (valeur) => libelleStatut(String(valeur)),
-          canal: (valeur) => libelleCanal(String(valeur)),
+          statut: (valeur) => statusLabel(String(valeur)),
+          canal: (valeur) => channelLabel(String(valeur)),
           // L'heure compte autant que le jour pour retrouver une commande passée le matin
           // même : le formatage `date` générique d'AdminTable ne donne que la date.
           createdAt: (valeur) =>
@@ -89,7 +89,7 @@ export default async function CommandesPage({
         // `ligne['id']` en notation crochet : le générique d'AdminTable est dérivé
         // d'orderSchema, qui ne déclare pas `id` (ce n'est pas une colonne). La ligne
         // réellement transmise (LigneCommandeListe) le porte bien à l'exécution.
-        lien={{ colonne: 'reference', vers: (ligne) => `/admin/commandes/${ligne['id']}` }}
+        link={{ column: 'reference', to: (ligne) => `/admin/commandes/${ligne['id']}` }}
       />
     </div>
   )

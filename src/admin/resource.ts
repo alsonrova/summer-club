@@ -19,12 +19,12 @@ z.config(fr())
 // défaut de ZodObject) laisse `.shape[name]` exposer l'instance classique complète.
 type SchemaAdmin = ZodObject<any>
 
-export type ChampAdmin = {
+export type AdminField = {
   name: string
   kind: 'text' | 'number' | 'boolean' | 'date' | 'select'
-  requis: boolean
+  required: boolean
   // Libellé affiché par form.tsx : la clé du schéma capitalisée par défaut, ou la
-  // surcharge fournie via `libelles` quand la clé brute n'est pas présentable
+  // surcharge fournie via `labels` quand la clé brute n'est pas présentable
   // (`categoryId`, `metaTitle`…).
   label: string
   // Uniquement pour kind === 'select' : les valeurs de l'énumération, dans l'ordre du
@@ -39,21 +39,21 @@ export type ResourceConfig<T> = {
   columns: (keyof T)[]
   filters: string[]
   actions: string[]
-  fields: ChampAdmin[]
+  fields: AdminField[]
   // Clés du schéma gérées par la base plutôt que par la personne qui remplit le
-  // formulaire (voir CHAMPS_SYSTEME_PAR_DEFAUT ci-dessous) — conservé sur la config pour
+  // formulaire (voir DEFAULT_SYSTEM_FIELDS ci-dessous) — conservé sur la config pour
   // qu'actions.ts puisse les retirer des données juste avant l'écriture Prisma.
-  champsSysteme: string[]
+  systemFields: string[]
 }
 
 // Une ressource dérive ses champs de formulaire de TOUTES les clés de son schéma Zod. Si
 // ce schéma décrit aussi des colonnes gérées par la base (identifiant, horodatages de
 // création/mise à jour), les exposer à la saisie permettrait à quiconque de forger un
-// `id` ou une date arbitraire dans le formulaire soumis — et `creerRessource` /
-// `modifierRessource` (voir actions.ts) les écriraient tels quels vers Prisma. Cette
+// `id` ou une date arbitraire dans le formulaire soumis — et `createResource` /
+// `updateResource` (voir actions.ts) les écriraient tels quels vers Prisma. Cette
 // liste par défaut écarte ce risque pour toute ressource qui ne la surcharge pas
 // explicitement.
-const CHAMPS_SYSTEME_PAR_DEFAUT = ['id', 'createdAt', 'updatedAt']
+const DEFAULT_SYSTEM_FIELDS = ['id', 'createdAt', 'updatedAt']
 
 // zod 4 expose le type d'un schéma via `_def.type` (une chaîne comme 'string', 'number',
 // 'boolean', 'date', 'enum'…) et non plus via `_def.typeName` ('ZodNumber', 'ZodBoolean'…)
@@ -64,7 +64,7 @@ const CHAMPS_SYSTEME_PAR_DEFAUT = ['id', 'createdAt', 'updatedAt']
 // Un wrapper (`.optional()`, `.nullable()`, `.default()`) porte lui-même un `_def.type`
 // ('optional' / 'nullable' / 'default') et place le schéma réel dans `_def.innerType` :
 // on déroule ces enveloppes pour retrouver le type concret du champ.
-type ZodDefInterne = {
+type InternalZodDef = {
   type?: string
   innerType?: unknown
   entries?: Record<string, string>
@@ -73,22 +73,22 @@ type ZodDefInterne = {
 // Première lettre en majuscule : un minimum de présentabilité pour un libellé de
 // formulaire dérivé automatiquement d'une clé de schéma ("nom" -> "Nom"). Ne rend pas une
 // clé en camelCase lisible pour autant ("categoryId" -> "CategoryId") — c'est précisément
-// pour ces cas que `libelles` permet à une ressource de fournir un vrai libellé.
-function capitaliser(s: string): string {
+// pour ces cas que `labels` permet à une ressource de fournir un vrai libellé.
+function capitalize(s: string): string {
   return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1)
 }
 
-function analyserChamp(def: unknown): { kind: ChampAdmin['kind']; options?: string[] } {
-  const zodDef = (def as { _def?: ZodDefInterne })._def
-  const nom = zodDef?.type ?? ''
+function analyzeField(def: unknown): { kind: AdminField['kind']; options?: string[] } {
+  const zodDef = (def as { _def?: InternalZodDef })._def
+  const typeName = zodDef?.type ?? ''
 
-  if (nom === 'optional' || nom === 'nullable' || nom === 'default') {
-    return analyserChamp(zodDef?.innerType)
+  if (typeName === 'optional' || typeName === 'nullable' || typeName === 'default') {
+    return analyzeField(zodDef?.innerType)
   }
-  if (nom === 'number') return { kind: 'number' }
-  if (nom === 'boolean') return { kind: 'boolean' }
-  if (nom === 'date') return { kind: 'date' }
-  if (nom === 'enum') return { kind: 'select', options: Object.keys(zodDef?.entries ?? {}) }
+  if (typeName === 'number') return { kind: 'number' }
+  if (typeName === 'boolean') return { kind: 'boolean' }
+  if (typeName === 'date') return { kind: 'date' }
+  if (typeName === 'enum') return { kind: 'select', options: Object.keys(zodDef?.entries ?? {}) }
   return { kind: 'text' }
 }
 
@@ -99,34 +99,34 @@ export function defineResource<T>(config: {
   columns: (keyof T)[]
   filters?: string[]
   actions?: string[]
-  // Surcharge de CHAMPS_SYSTEME_PAR_DEFAUT, pour une ressource qui aurait une raison
+  // Surcharge de DEFAULT_SYSTEM_FIELDS, pour une ressource qui aurait une raison
   // précise de gérer autrement ses colonnes techniques.
-  champsSysteme?: string[]
+  systemFields?: string[]
   // Libellés de formulaire surchargeant la capitalisation automatique, par nom de champ
   // (ex. { categoryId: 'Catégorie', metaTitle: 'Titre méta' }).
-  libelles?: Record<string, string>
+  labels?: Record<string, string>
 }): ResourceConfig<T> {
   const shape = config.schema.shape
-  const connus = Object.keys(shape)
-  const champsSysteme = config.champsSysteme ?? CHAMPS_SYSTEME_PAR_DEFAUT
+  const knownKeys = Object.keys(shape)
+  const systemFields = config.systemFields ?? DEFAULT_SYSTEM_FIELDS
 
   for (const col of config.columns) {
-    if (!connus.includes(String(col))) {
+    if (!knownKeys.includes(String(col))) {
       throw new Error(
         `defineResource("${config.name}") : la colonne "${String(col)}" n'existe pas dans le schéma`,
       )
     }
   }
 
-  const fields: ChampAdmin[] = connus
-    .filter((name) => !champsSysteme.includes(name))
+  const fields: AdminField[] = knownKeys
+    .filter((name) => !systemFields.includes(name))
     .map((name) => {
-      const { kind, options } = analyserChamp(shape[name])
+      const { kind, options } = analyzeField(shape[name])
       return {
         name,
         kind,
-        requis: !shape[name]!.isOptional(),
-        label: config.libelles?.[name] ?? capitaliser(name),
+        required: !shape[name]!.isOptional(),
+        label: config.labels?.[name] ?? capitalize(name),
         ...(options ? { options } : {}),
       }
     })
@@ -135,7 +135,7 @@ export function defineResource<T>(config: {
     ...config,
     filters: config.filters ?? [],
     actions: config.actions ?? [],
-    champsSysteme,
+    systemFields,
     fields,
   }
 }

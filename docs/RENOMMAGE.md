@@ -529,6 +529,17 @@ Couche `src/server/` (étape 2) :
 | `InvalidReviewStatusError` / `InvalidPinError` (`StatutAvisInvalideError` / `EpinglageInvalideError`, propriété publique) | `valeur` | `value` |
 | `processImage` (`traiterImage`, forme de retour) | `largeurs` | `widths` — le second champ du retour, `chemin`, **reste français** : il est réinjecté tel quel dans `prisma.media.create({ data: { …, chemin } })` par ses appelants (`src/app/admin/produits/actions.ts`), donc contraint par la frontière Prisma (`Media.chemin`, § 2, étape 6), au même titre que le paramètre `mediaPath` de `deleteMediaFiles` |
 
+Couche `src/admin/` (étape 3) :
+
+| Type ou paramètre | Actuel | Cible |
+| --- | --- | --- |
+| `AdminField` (`ChampAdmin`) | `requis` | `required` |
+| `ValidationResult` (`ResultatValidation`) | `succes` / `donnees` / `erreurs` | `success` / `data` / `errors` |
+| `AdminTable` (clés du paramètre déstructuré) | `lignes` / `cheminBase` / `filtres` / `formatColonnes` / `optionsFiltres` / `lien` | `rows` / `basePath` / `filters` / `columnFormatters` / `filterOptions` / `link` — non couvertes par § 3.3/§ 3.6 (le nom `AdminTable` était déjà conforme, seules ses clés de paramètre déstructuré ne l'étaient pas) ; découvertes en exécutant l'étape 3, dans le même esprit que les clés de `resolvePrice` (§ 3.7, couche `src/domain/`). Ses deux usages (`src/app/admin/commandes/page.tsx`, `src/app/admin/produits/page.tsx`) suivent dans le même commit |
+| `AdminTable.link` (`lien`) | `colonne` / `vers` | `column` / `to` |
+| `AdminTable.filterOptions` (`optionsFiltres`, éléments) | `valeur` / `libelle` | `value` / `label` |
+| `AdminForm` (clés du paramètre déstructuré) | `valeursInitiales` / `erreurs` / `libelleSoumettre` | `initialValues` / `errors` / `submitLabel` — même découverte ; `AdminForm` n'est pour l'instant invoqué nulle part dans `src/app/`, donc aucun consommateur à aligner dans ce commit |
+
 ---
 
 ## 4. Fichiers à renommer

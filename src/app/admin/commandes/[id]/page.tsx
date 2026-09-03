@@ -4,7 +4,7 @@ import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import { formatAriary } from '@/domain/money'
 import { transitionsFrom, type OrderStatus } from '@/domain/order-status'
-import { LIBELLES_TRANSITION, libelleCanal, libelleStatut } from '@/admin/resources/orders'
+import { TRANSITION_LABELS, channelLabel, statusLabel } from '@/admin/resources/orders'
 import { changerStatutDepuisFormulaire } from '../actions'
 import { BoutonsStatut } from './boutons-statut'
 
@@ -58,7 +58,7 @@ export default async function FicheCommandePage({
   const statut = commande.statut as OrderStatus
   const transitions = transitionsFrom(statut).map((vers) => ({
     vers,
-    libelle: LIBELLES_TRANSITION[vers],
+    libelle: TRANSITION_LABELS[vers],
     action: changerStatutDepuisFormulaire.bind(null, commande.id, vers),
   }))
 
@@ -69,7 +69,7 @@ export default async function FicheCommandePage({
           Commande {commande.reference}
         </h1>
         <p className="mt-1 text-bark-soft">
-          {libelleStatut(statut)} · {libelleCanal(commande.canal)} · {dateHeure(commande.createdAt)}
+          {statusLabel(statut)} · {channelLabel(commande.canal)} · {dateHeure(commande.createdAt)}
         </p>
       </div>
 
@@ -155,7 +155,7 @@ export default async function FicheCommandePage({
                 <li key={trace.id} className="text-bark">
                   <span className="tabular-nums text-bark-soft">{dateHeure(trace.createdAt)}</span>
                   {' — '}
-                  {de ? libelleStatut(de) : '?'} → {vers ? libelleStatut(vers) : '?'}
+                  {de ? statusLabel(de) : '?'} → {vers ? statusLabel(vers) : '?'}
                   {' · '}
                   <span className="text-bark-soft">{trace.acteur}</span>
                 </li>

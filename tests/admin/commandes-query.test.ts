@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { prisma } from '@/server/db'
 import { listerCommandesPaginees, COMMANDES_PAR_PAGE } from '@/app/admin/commandes/query'
-import { CANAUX, estCanal } from '@/admin/resources/orders'
+import { CHANNELS, isChannel } from '@/admin/resources/orders'
 
 // Vérifie que la liste des commandes interroge réellement la base (skip/take + comptage)
 // plutôt que de charger toutes les commandes en mémoire pour les découper ensuite — le
@@ -136,23 +136,23 @@ describe('listerCommandesPaginees', () => {
   })
 })
 
-// `estCanal` vit auprès de `CANAUX` (src/admin/resources/orders.ts), comme `isOrderStatus` vit
+// `isChannel` vit auprès de `CHANNELS` (src/admin/resources/orders.ts), comme `isOrderStatus` vit
 // auprès de `ORDER_STATUSES` et `estStatutAvis` auprès de `STATUTS_AVIS` : une seule façon de
 // valider une valeur d'énumération venue du client dans ce projet. Il est testé ici parce
 // que c'est le filtre de CETTE liste qu'il protège.
-describe('estCanal', () => {
+describe('isChannel', () => {
   it('accepte les trois canaux déclarés', () => {
-    expect(CANAUX.every((c) => estCanal(c))).toBe(true)
+    expect(CHANNELS.every((c) => isChannel(c))).toBe(true)
   })
 
   it("refuse une valeur forgée dans la querystring, plutôt que de la transmettre à Prisma", () => {
-    expect(estCanal('pigeon_voyageur')).toBe(false)
-    expect(estCanal('')).toBe(false)
+    expect(isChannel('pigeon_voyageur')).toBe(false)
+    expect(isChannel('')).toBe(false)
   })
 
   it("refuse ce qui n'est pas une chaîne — un paramètre d'URL peut être absent ou répété", () => {
-    expect(estCanal(undefined)).toBe(false)
-    expect(estCanal(null)).toBe(false)
-    expect(estCanal(['whatsapp'])).toBe(false)
+    expect(isChannel(undefined)).toBe(false)
+    expect(isChannel(null)).toBe(false)
+    expect(isChannel(['whatsapp'])).toBe(false)
   })
 })

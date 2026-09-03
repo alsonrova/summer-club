@@ -52,18 +52,18 @@ export default async function ProduitsPage({
 
       <AdminTable
         resource={productsResource}
-        lignes={lignes}
-        cheminBase="/admin/produits"
+        rows={lignes}
+        basePath="/admin/produits"
         page={pageCourante}
         totalPages={totalPages}
-        filtres={{ categoryId: categoryId ?? '', actif: actifBrut ?? '' }}
-        formatColonnes={{ prixBase: (valeur) => formatAriary(Number(valeur)) }}
+        filters={{ categoryId: categoryId ?? '', actif: actifBrut ?? '' }}
+        columnFormatters={{ prixBase: (valeur) => formatAriary(Number(valeur)) }}
         // `ligne['id']` en notation crochet, pas `ligne.id` : le paramètre générique T
         // d'AdminTable (ici ProductInput, dérivé de productSchema) n'a pas de champ `id`
         // propre — seule la contrainte structurelle `T extends Record<string, unknown>`
         // autorise l'indexation par une chaîne arbitraire. Le tableau réellement transmis
         // (LigneProduitListe) porte bien un `id` à l'exécution.
-        lien={{ colonne: 'nom', vers: (ligne) => `/admin/produits/${ligne['id']}` }}
+        link={{ column: 'nom', to: (ligne) => `/admin/produits/${ligne['id']}` }}
       />
     </div>
   )

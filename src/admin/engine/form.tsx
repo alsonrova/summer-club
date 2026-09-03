@@ -1,54 +1,54 @@
-import type { ChampAdmin, ResourceConfig } from '../resource'
-import type { ErreursValidation } from './actions'
+import type { AdminField, ResourceConfig } from '../resource'
+import type { ValidationErrors } from './actions'
 
-function valeurTexte(valeur: unknown): string {
-  return valeur === undefined || valeur === null ? '' : String(valeur)
+function textValue(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value)
 }
 
-// `idErreur`/`enErreur` relient le champ à son message via aria-describedby/aria-invalid,
+// `errorId`/`hasError` relient le champ à son message via aria-describedby/aria-invalid,
 // pour qu'un lecteur d'écran annonce l'erreur au moment où il atteint le champ — pas
 // seulement quand le message apparaît visuellement (voir AdminForm ci-dessous).
-function ChampSaisie({
-  champ,
-  valeur,
-  enErreur,
-  idErreur,
+function InputField({
+  field,
+  value,
+  hasError,
+  errorId,
 }: {
-  champ: ChampAdmin
-  valeur: unknown
-  enErreur: boolean
-  idErreur: string
+  field: AdminField
+  value: unknown
+  hasError: boolean
+  errorId: string
 }) {
-  const id = `champ-${champ.name}`
-  const attrsErreur = enErreur ? { 'aria-invalid': true as const, 'aria-describedby': idErreur } : {}
+  const id = `champ-${field.name}`
+  const errorAttrs = hasError ? { 'aria-invalid': true as const, 'aria-describedby': errorId } : {}
 
-  if (champ.kind === 'boolean') {
+  if (field.kind === 'boolean') {
     return (
       <input
         id={id}
         type="checkbox"
-        name={champ.name}
-        defaultChecked={Boolean(valeur)}
+        name={field.name}
+        defaultChecked={Boolean(value)}
         className="h-4 w-4 rounded border-taupe/40"
-        {...attrsErreur}
+        {...errorAttrs}
       />
     )
   }
 
-  if (champ.kind === 'select') {
+  if (field.kind === 'select') {
     return (
       <select
         id={id}
-        name={champ.name}
-        defaultValue={valeurTexte(valeur)}
-        required={champ.requis}
+        name={field.name}
+        defaultValue={textValue(value)}
+        required={field.required}
         className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
-        {...attrsErreur}
+        {...errorAttrs}
       >
         <option value="" disabled hidden>
           Choisir…
         </option>
-        {(champ.options ?? []).map((option) => (
+        {(field.options ?? []).map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
@@ -57,18 +57,18 @@ function ChampSaisie({
     )
   }
 
-  const type = champ.kind === 'number' ? 'number' : champ.kind === 'date' ? 'date' : 'text'
-  const defaut = champ.kind === 'date' ? valeurTexte(valeur).slice(0, 10) : valeurTexte(valeur)
+  const type = field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : 'text'
+  const defaultVal = field.kind === 'date' ? textValue(value).slice(0, 10) : textValue(value)
 
   return (
     <input
       id={id}
       type={type}
-      name={champ.name}
-      defaultValue={defaut}
-      required={champ.requis}
+      name={field.name}
+      defaultValue={defaultVal}
+      required={field.required}
       className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
-      {...attrsErreur}
+      {...errorAttrs}
     />
   )
 }
@@ -80,37 +80,37 @@ function ChampSaisie({
 // prochain rendu.
 export function AdminForm<T>({
   resource,
-  valeursInitiales = {},
-  erreurs = {},
+  initialValues = {},
+  errors = {},
   action,
-  libelleSoumettre = 'Enregistrer',
+  submitLabel = 'Enregistrer',
 }: {
   resource: ResourceConfig<T>
-  valeursInitiales?: Record<string, unknown>
-  erreurs?: ErreursValidation
+  initialValues?: Record<string, unknown>
+  errors?: ValidationErrors
   action: string | ((formData: FormData) => void | Promise<void>)
-  libelleSoumettre?: string
+  submitLabel?: string
 }) {
   return (
     <form action={action} className="flex max-w-lg flex-col gap-4">
-      {resource.fields.map((champ) => {
-        const messages = erreurs[champ.name]
-        const enErreur = Boolean(messages?.length)
-        const idErreur = `erreur-${champ.name}`
+      {resource.fields.map((field) => {
+        const messages = errors[field.name]
+        const hasError = Boolean(messages?.length)
+        const errorId = `erreur-${field.name}`
         return (
-          <div key={champ.name} className="flex flex-col gap-1">
-            <label htmlFor={`champ-${champ.name}`} className="text-small text-bark-soft">
-              {champ.label}
-              {champ.requis ? ' *' : ''}
+          <div key={field.name} className="flex flex-col gap-1">
+            <label htmlFor={`champ-${field.name}`} className="text-small text-bark-soft">
+              {field.label}
+              {field.required ? ' *' : ''}
             </label>
-            <ChampSaisie
-              champ={champ}
-              valeur={valeursInitiales[champ.name]}
-              enErreur={enErreur}
-              idErreur={idErreur}
+            <InputField
+              field={field}
+              value={initialValues[field.name]}
+              hasError={hasError}
+              errorId={errorId}
             />
-            {enErreur ? (
-              <div id={idErreur}>
+            {hasError ? (
+              <div id={errorId}>
                 {messages?.map((message) => (
                   <p key={message} role="alert" className="text-small text-bark">
                     {message}
@@ -125,7 +125,7 @@ export function AdminForm<T>({
         type="submit"
         className="self-start rounded border border-taupe/40 bg-sage-deep px-4 py-2 text-shell hover:opacity-90"
       >
-        {libelleSoumettre}
+        {submitLabel}
       </button>
     </form>
   )

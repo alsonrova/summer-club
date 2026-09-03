@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { z } from 'zod'
 import { defineResource } from '@/admin/resource'
-import { creerRessource } from '@/admin/engine/actions'
+import { createResource } from '@/admin/engine/actions'
 
-// creerRessource passe par requireAdmin() (session, next/headers) et recordAudit()
+// createResource passe par requireAdmin() (session, next/headers) et recordAudit()
 // (Prisma) : hors du périmètre de ce test, qui ne porte que sur le retrait des champs
 // système avant l'appel au delegate. On les remplace par de simples doublures — vi.mock
 // est hissé par vitest au-dessus des imports ci-dessus, donc actions.ts reçoit bien ces
@@ -22,7 +22,7 @@ describe('champs système (id, createdAt, updatedAt)', () => {
     expect(resource.fields.map((f) => f.name)).toEqual(['nom'])
   })
 
-  it("creerRessource ne transmet pas 'id' au delegate, même si le schéma lui donne une valeur par défaut", async () => {
+  it("createResource ne transmet pas 'id' au delegate, même si le schéma lui donne une valeur par défaut", async () => {
     const schema = z.object({
       id: z.string().default('id-par-defaut-du-schema'),
       nom: z.string().min(1),
@@ -43,7 +43,7 @@ describe('champs système (id, createdAt, updatedAt)', () => {
       delete: vi.fn(),
     }
 
-    await creerRessource(resource as never, delegate as never, formData)
+    await createResource(resource as never, delegate as never, formData)
 
     expect(donneesRecues).toBeDefined()
     expect(donneesRecues).not.toHaveProperty('id')
