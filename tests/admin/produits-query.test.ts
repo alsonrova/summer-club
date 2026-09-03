@@ -21,19 +21,21 @@ beforeAll(async () => {
   // peut avoir laissé des produits de test en base.
   await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE } } })
 
+  // Un seul aller-retour pour les 25 lignes : la version en boucle (25 `create` séquentiels)
+  // dépassait le délai de garde de 10 s de Vitest sur une machine chargée ou à froid —
+  // 8 fichiers rougissaient d'un coup, symptôme trompeur d'une régression (observé le
+  // 2026-08-30, consigné dans la passation des tâches 1 à 12).
   const total = PRODUITS_PAR_PAGE + 5
-  for (let i = 0; i < total; i++) {
-    await prisma.product.create({
-      data: {
-        slug: `${PREFIXE}${i}`,
-        nom: `Produit pagination ${i}`,
-        description: 'Produit créé uniquement pour vérifier la pagination admin.',
-        categoryId,
-        prixBase: 10000,
-        ordre: i,
-      },
-    })
-  }
+  await prisma.product.createMany({
+    data: Array.from({ length: total }, (_, i) => ({
+      slug: `${PREFIXE}${i}`,
+      nom: `Produit pagination ${i}`,
+      description: 'Produit créé uniquement pour vérifier la pagination admin.',
+      categoryId,
+      prixBase: 10000,
+      ordre: i,
+    })),
+  })
 })
 
 afterAll(async () => {
@@ -124,22 +126,22 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
 
     await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE_ORDRE_CONSTANT } } })
 
+    // Même correctif que le beforeAll du bloc précédent : un seul `createMany` plutôt que
+    // 25 allers-retours séquentiels sous le délai de garde de 10 s de Vitest.
     const total = PRODUITS_PAR_PAGE + 5
-    for (let i = 0; i < total; i++) {
-      await prisma.product.create({
-        data: {
-          slug: `${PREFIXE_ORDRE_CONSTANT}${i}`,
-          nom: `Produit ordre constant ${i}`,
-          description: 'Produit créé uniquement pour vérifier la stabilité de la pagination.',
-          categoryId: categoryIdOrdreConstant,
-          prixBase: 10000,
-          // Valeur constante volontaire : c'est le cas réel, tout produit créé depuis
-          // l'interface a `ordre: 0` (défaut Prisma, jamais exposé au formulaire avant
-          // ce correctif — voir formulaire-produit.tsx).
-          ordre: 0,
-        },
-      })
-    }
+    await prisma.product.createMany({
+      data: Array.from({ length: total }, (_, i) => ({
+        slug: `${PREFIXE_ORDRE_CONSTANT}${i}`,
+        nom: `Produit ordre constant ${i}`,
+        description: 'Produit créé uniquement pour vérifier la stabilité de la pagination.',
+        categoryId: categoryIdOrdreConstant,
+        prixBase: 10000,
+        // Valeur constante volontaire : c'est le cas réel, tout produit créé depuis
+        // l'interface a `ordre: 0` (défaut Prisma, jamais exposé au formulaire avant
+        // ce correctif — voir formulaire-produit.tsx).
+        ordre: 0,
+      })),
+    })
   })
 
   afterAll(async () => {

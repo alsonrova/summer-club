@@ -27,13 +27,25 @@ export default defineConfig({
     // Serveur de production : `next dev` ne repond pas sur cette machine (il demarre
     // sans jamais servir), et tester le build reellement deploye vaut mieux de toute
     // facon. Un `npm run build` doit donc preceder `playwright test`.
-    command: 'npm run start',
-    url: 'http://localhost:3000',
+    //
+    // Port dédié (3456) plutôt que le 3000 par défaut : plusieurs projets cohabitent sur
+    // cette machine, et `reuseExistingServer` faisait tester N'IMPORTE QUEL serveur déjà
+    // présent sur le port — constaté le 2026-09-03, la suite entière a échoué sur la page
+    // d'accueil d'un autre projet qui écoutait sur 3000. BETTER_AUTH_URL doit suivre : Better
+    // Auth le lit depuis l'environnement (auth.ts ne fixe pas de baseURL), et la valeur de
+    // .env pointe sur 3000 ; sans cette surcharge, la vérification d'origine rejetterait
+    // les soumissions du formulaire de connexion. Une variable déjà présente dans
+    // l'environnement du process l'emporte sur .env — vérifié dans le code installé, pas
+    // de mémoire : node_modules/@next/env/dist/index.js, processEnv(), n'applique une clé
+    // de .env que si elle est absente de l'instantané initial de process.env.
+    command: 'npm run start -- --port 3456',
+    url: 'http://localhost:3456',
+    env: { BETTER_AUTH_URL: 'http://localhost:3456' },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:3456',
   },
   projects: [
     {

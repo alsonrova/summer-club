@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**57 entrées** · 13 tâches · Développeur 35 · Auditeur qualité et sécurité 17 · Coordinateur 5
+**58 entrées** · 14 tâches · Développeur 36 · Auditeur qualité et sécurité 17 · Coordinateur 5
 
 ## Vue d'ensemble
 
@@ -68,6 +68,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-08-30 | conventions | Développeur | consigné | — |
 | 2026-08-30 | 12 | Développeur | livré | — |
 | 2026-08-30 | conventions | Développeur | livré | — |
+| 2026-09-03 | dettes | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -621,3 +622,17 @@ Ferme les trois blocages releves en revue sur docs/RENOMMAGE.md. Blocage 1 (peri
 - **Réserve** : Premiere execution de npm test apres les modifications : 5 tests en echec sur 7 fichiers, timeouts dans tests/server/media.test.ts et tests/server/orders.test.ts. C'est le symptome deja diagnostique dans ce depot (demarrage a froid, tests/admin/produits-query.test.ts et ses beforeAll sequentiels), pas une regression de ce travail documentaire. Reexecution a chaud : 243/243. Aucun contournement pose (pas de retry, pas de serialisation, pas de delai).
 - **Réserve** : La fusion des etapes 6 et 7 (plutot que de donner a l'etape 6 seule un critere de vert distinct de tsc/npm test) est un arbitrage documente et explique dans RENOMMAGE.md section 7, pas une demonstration formelle qu'aucune autre decoupe ne fonctionnerait.
 - **Réserve** : npx --no-install tsc --noEmit : aucune sortie, donc aucune erreur — sortie vide confirmee, non recopiee d'un exemple. public/uploads/ verifie : seul .gitkeep present, avant et apres npm test. Les six commandes de comptage publiees (27 fichiers, 304 occurrences, 138 identifiants exportes, 42 identifiants internes, 60 selecteurs e2e, 4 migrations en base) ont ete rejouees et donnent exactement les chiffres ecrits dans les documents.
+
+## Tâche dettes
+
+### 2026-09-03 · Développeur — livré
+
+Résolution des dettes actionnables avant fusion de v1.0 dans main. 1) tests/admin/produits-query.test.ts : les deux beforeAll créent leurs 25 lignes en un seul createMany au lieu de 25 allers-retours séquentiels — le fichier seul passe de 6,5 à 16 s à 1,01 s, sous le délai de garde de 10 s dont le dépassement à froid faisait rougir 8 fichiers d'un coup. 2) deleteProduct (src/server/products.ts), fonction propriétaire de la suppression d'un produit : efface du disque les fichiers de toutes ses photos (fichiers d'abord, lignes ensuite, même raisonnement que supprimerMedia) puis le produit, et tolère l'absence pour que deux passes de nettoyage se croisent. TDD respecté : test écrit d'abord et vu rouge (module manquant), implémentation minimale, puis preuve par mutation faite seule et séquentiellement — effacement disque retiré, le test rougit seul sur l'assertion d'absence disque (1 rouge / 1 vert), restauré 2/2. 3) playwright.config.ts : port dédié 3456 et BETTER_AUTH_URL surchargé dans l'environnement du webServer — reuseExistingServer faisait tester n'importe quel serveur déjà présent sur le port 3000, et la suite entière a échoué sur la page d'accueil d'un AUTRE projet qui y écoutait (snapshot à l'appui). La précédence environnement-sur-.env a été vérifiée dans node_modules/@next/env/dist/index.js (processEnv n'applique une clé de .env que si elle est absente de l'instantané initial), pas de mémoire. Les trois réserves correspondantes de la passation sont fermées, dont une périmée dès sa consignation : orders.test.ts nettoie avant ET après chaque test depuis la passe de correctifs de la tâche 12 (2026-08-29), constat fait en lisant le code, aucun changement nécessaire.
+
+- **Modèle** : claude-fable-5
+- **Tests** : npm test à chaud : Test Files 23 passed (23) ; Tests 243 passed (243). Première exécution à froid : 7 fichiers en échec sur timeouts de hooks (le symptôme documenté), dont le conteneur PostgreSQL arrêté au démarrage de la session (relancé via docker compose). → npm test : Test Files 24 passed (24) ; Tests 245 passed (245). npx --no-install tsc --noEmit : aucune sortie. npm run build : réussi, mêmes onze routes. npx --no-install playwright test : 13 passed (25.0s), sur le port dédié 3456.
+- **Fichiers** : `tests/admin/produits-query.test.ts`, `src/server/products.ts`, `tests/server/products.test.ts`, `playwright.config.ts`, `docs/passation/2026-08-29-v1.0-taches-1-a-12.md`
+- **Réserve** : deleteProduct n'a encore aucun appelant de production : aucun écran de suppression de produit n'existe en V1.0. C'est le cœur sans authentification (même découpe qu'appliquerStatut) que la future action appellera ; son contrat d'effacement disque est tenu par le test et sa preuve par mutation.
+- **Réserve** : e2e/admin-produits.spec.ts garde sa compensation manuelle dupliquée : il ne peut pas importer src/server/ (résolution de l'alias @/* sous Playwright, choix documenté dans le fichier). Elle est idempotente et ne contredit pas deleteProduct.
+- **Réserve** : BETTER_AUTH_URL n'est surchargé que dans l'environnement du webServer Playwright ; .env garde http://localhost:3000 pour l'usage manuel de npm run start.
+- **Réserve** : Hors périmètre, toujours ouverts : le renommage (docs/RENOMMAGE.md), le backlog V1.1/V1.2, PaymentProvider (tâche 17), advanced.ipAddress (tâche 22), l'écran catégories.
