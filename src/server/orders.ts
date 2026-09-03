@@ -157,17 +157,17 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
       if (!variant.product.actif) throw new ProduitIndisponibleError(variant.productId)
       if (variant.stock < quantite) throw new RuptureStockError(variantId)
 
-      const { prixFinal } = resolvePrice({
-        prixBase: variant.product.prixBase + variant.deltaPrix,
+      const { finalPrice } = resolvePrice({
+        basePrice: variant.product.prixBase + variant.deltaPrix,
         productId: variant.productId,
         categoryId: variant.product.categoryId,
-        promotions, maintenant, estMembre: input.estMembre,
+        promotions, now: maintenant, isMember: input.estMembre,
       })
 
       lignesCalculees.push({
         variantId: variant.id,
         nomFige: `${variant.product.nom} — ${variant.libelle}`,
-        prixUnitaireFige: prixFinal,
+        prixUnitaireFige: finalPrice,
         quantite,
       })
     }
@@ -181,7 +181,7 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
 
     const totaux = computeTotals(
       lignesCalculees.map((l) => ({
-        variantId: l.variantId, prixUnitaire: l.prixUnitaireFige, quantite: l.quantite,
+        variantId: l.variantId, unitPrice: l.prixUnitaireFige, quantity: l.quantite,
       })),
       zone?.tarif ?? null,
     )
@@ -197,9 +197,9 @@ export async function creerCommande(input: CommandeInput): Promise<CommandeCreee
         email: input.client.email ?? null,
         adresse: input.client.adresse ?? null,
         zoneId: input.zoneId,
-        sousTotal: totaux.sousTotal,
-        fraisLivraison: totaux.fraisLivraison,
-        remise: totaux.remise,
+        sousTotal: totaux.subtotal,
+        fraisLivraison: totaux.shippingFee,
+        remise: totaux.discount,
         total: totaux.total,
         items: { create: lignesCalculees },
       },

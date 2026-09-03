@@ -79,24 +79,21 @@ function priceAfter(p: PromotionRule, basePrice: number): number {
 }
 
 export function resolvePrice(args: {
-  prixBase: number
+  basePrice: number
   productId: string
   categoryId: string
   promotions: PromotionRule[]
-  maintenant: Date
-  estMembre: boolean
+  now: Date
+  isMember: boolean
 }): EffectivePrice {
-  const {
-    prixBase: basePrice, productId, categoryId, promotions,
-    maintenant: now, estMembre: isMember,
-  } = args
+  const { basePrice, productId, categoryId, promotions, now, isMember } = args
 
   const candidates = promotions
     .filter((p) => isApplicable(p, productId, categoryId, now, isMember))
     .map((p) => ({ promo: p, price: priceAfter(p, basePrice) }))
 
   if (candidates.length === 0) {
-    return { prixInitial: basePrice, prixFinal: basePrice, promotionId: null }
+    return { initialPrice: basePrice, finalPrice: basePrice, promotionId: null }
   }
 
   // Priorité décroissante, puis prix le plus bas pour la cliente.
@@ -105,5 +102,5 @@ export function resolvePrice(args: {
   )
 
   const winner = candidates[0]!
-  return { prixInitial: basePrice, prixFinal: winner.price, promotionId: winner.promo.id }
+  return { initialPrice: basePrice, finalPrice: winner.price, promotionId: winner.promo.id }
 }

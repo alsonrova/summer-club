@@ -493,6 +493,28 @@ indépendants — deux comptent pour `src/admin/` (étape 3), la troisième
 (`src/app/admin/produits/actions.ts`) compte pour `src/app/` (étape 4) : les 13 et les 20
 ci-dessus l'incluent chacun une fois, pour sa déclaration respective.
 
+### 3.7 Propriétés de types et clés de paramètres *(complément du 2026-09-03)*
+
+**Trou découvert à l'étape 1 :** les tables § 3.1 à 3.6 recensent des déclarations de premier
+niveau — jamais les **propriétés** d'un type ou les clés d'un paramètre déstructuré. Or une
+propriété est un identifiant comme un autre, et la règle du propriétaire (2026-09-03,
+`CONVENTIONS.md` § 1) ne souffre aucune exception : un identifiant français rend le code
+invalide.
+
+**Principe :** chaque étape renomme les propriétés des types que sa couche déclare, en
+puisant le vocabulaire dans la table § 2 (les colonnes Prisma) quand la propriété en est le
+miroir. L'exécutant d'une étape **complète la table ci-dessous pour sa couche dans son
+commit** — ce document reste la trace ; un doute se marque ⚠ et se tranche en revue.
+
+Couche `src/domain/` (arbitrée par le coordinateur, consignée au journal) :
+
+| Type ou paramètre | Actuel | Cible |
+| --- | --- | --- |
+| `EffectivePrice` | `prixInitial` / `prixFinal` | `initialPrice` / `finalPrice` — aligné sur `StorefrontProduct` (déjà conforme) |
+| `CartLine` | `prixUnitaire` / `quantite` | `unitPrice` / `quantity` |
+| `CartTotals` | `sousTotal` / `fraisLivraison` / `remise` | `subtotal` / `shippingFee` / `discount` — miroirs des colonnes `Order` (§ 2) : le **type** change dès l'étape 1-bis, les **colonnes** attendent l'étape 6 |
+| `resolvePrice` (clés du paramètre) | `prixBase` / `maintenant` / `estMembre` | `basePrice` / `now` / `isMember` |
+
 ---
 
 ## 4. Fichiers à renommer
@@ -661,6 +683,37 @@ Le plan V1.0 propose `src/app/(boutique)/…` et
 aujourd'hui — mais une URL de webhook communiquée à un prestataire ne doit jamais dépendre
 d'une valeur d'énumération qu'on se réserve le droit de renommer. À découpler au moment de la
 tâche 19.
+
+### 6.9 Les valeurs de `AuditLog.action` sont françaises, stockées, et relues *(complément du 2026-09-03)*
+
+Trou du même ordre que § 6.3, découvert en préparant l'exécution : treize valeurs françaises
+partent en base via `enregistrerAudit`, et **une** est relue comme filtre —
+`src/app/admin/commandes/[id]/page.tsx:51` (`action: 'changement_statut'`). Les basculer dans
+le code sans migrer les lignes existantes couperait l'historique en deux, exactement comme
+pour `resource.name`.
+
+**À faire à l'étape 6 — littéraux du code, filtre de lecture et `UPDATE`, dans le même
+commit :**
+
+| Valeur actuelle | Valeur cible |
+| --- | --- |
+| `creer` | `create` |
+| `modifier` | `update` |
+| `supprimer` | `delete` |
+| `ajustement_stock` | `adjust_stock` |
+| `ajout_media` | `add_media` |
+| `supprimer_media` | `delete_media` |
+| `reordonner_media` | `reorder_media` |
+| `modifier_alt_media` | `update_media_alt` |
+| `definir_photo_principale` | `set_primary_photo` |
+| `changement_statut` | `change_status` |
+| `importer_temoignage` | `import_testimonial` |
+| `epingler_avis` | `pin_review` |
+| `moderer_avis` | `moderate_review` |
+
+*(Cibles alignées sur les noms de fonctions § 3.4 : `deleteMedia`, `reorderMedia`,
+`updateMediaAlt`, `setPrimaryPhoto`… Arbitrage par défaut du coordinateur, consigné au
+journal.)*
 
 ---
 

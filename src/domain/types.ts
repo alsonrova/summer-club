@@ -15,7 +15,7 @@ export type PromotionRule = {
 }
 
 export type EffectivePrice = {
-  prixInitial: number
-  prixFinal: number
+  initialPrice: number
+  finalPrice: number
   promotionId: string | null
 }
