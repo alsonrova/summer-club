@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**72 entrées** · 16 tâches · Développeur 46 · Auditeur qualité et sécurité 20 · Coordinateur 6
+**73 entrées** · 16 tâches · Développeur 46 · Auditeur qualité et sécurité 20 · Coordinateur 7
 
 ## Vue d'ensemble
 
@@ -83,6 +83,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
+| 2026-09-03 | renommage | Coordinateur | validé | — |
 
 ## Tâche 1
 
@@ -787,3 +788,10 @@ Alignement documentaire post-renommage — docs/CONVENTIONS.md (§ 1 sous-sectio
 - **Tests** : npm test : Test Files 25 passed (25), Tests 251 passed (251) → npm test : Test Files 25 passed (25), Tests 251 passed (251) | npx --no-install tsc --noEmit : aucune sortie (exit 0) | commande de détection CONVENTIONS § 1 : aucun résultat (exit 1) | npm run build et playwright non relancés (documentation et commentaires/titre de test seulement, justifié au rapport)
 - **Fichiers** : `docs/CONVENTIONS.md,docs/RENOMMAGE.md,docs/passation/2026-08-29-v1.0-taches-1-a-12.md,CLAUDE.md,tests/server/order-status-service.test.ts,next.config.ts,.superpowers/sdd/renommage-docs-report.md`
 - **Réserve** : npm run build et npx playwright test non relancés : aucun fichier de production ni comportement modifié, seul un titre describe() de test a changé (Vitest, sans effet sur Playwright) ; tsc --noEmit et npm test suffisaient à couvrir le risque réel
+
+### 2026-09-03 · Coordinateur — validé
+
+Clôture du chantier de renommage, exécuté sur ordre du propriétaire (2026-09-03 : « le code n'est pas valide si du français dans le code »). Déroulé conforme à RENOMMAGE.md § 7 : étapes 1 à 5 par couches (domain, server, admin, app+components, 27 git mv), étape 6 en un commit (schéma, migration transactionnelle réécrite à la main en RENAME après rejet du diff Prisma qui générait des DROP, consommateurs, Better Auth), audit final adverse (changes-requested, 4 Importants), commit de correctifs, re-revue (approved), hygiène uploads, alignement documentaire. Arbitrages de coordination consignés et appliqués par défaut faute d'objection, conformément au mode d'emploi du document : § 3.7 (propriétés de types, table complétée couche par couche), § 6.9 (les 13 valeurs de AuditLog.action), et les ⚠ des exécutants (OrderInput.canal→channel ; libellé « Libellé » posé sur variantsResource). Sauvegarde de la base d'avant migration : .superpowers/sdd/backup-avant-etape6.sql (non versionnée). Restent ouverts, consignés dans les entrées d'audit : les signets de filtre du back-office antérieurs au chantier ne filtrent plus (conséquence § 6.1 annoncée, à dire à la propriétaire) ; la connexion réelle en navigateur (§ 7 étape 7) reste à faire par un humain — la connexion par le vrai formulaire sur le build de production est couverte deux fois par Playwright, mais la règle de sécurité de l'assistant lui interdit de saisir lui-même un mot de passe ; durcissement de l'UPDATE § 6.2 et BEGIN/COMMIT explicite laissés à une migration future, la migration appliquée étant sommée.
+
+- **Modèle** : claude-fable-5
+- **Tests** : — → npm test : Tests 251 passed (251). npx --no-install playwright test : 14 passed. tsc --noEmit : aucune sortie. npm run build : 11 routes. prisma migrate diff : No difference detected.
