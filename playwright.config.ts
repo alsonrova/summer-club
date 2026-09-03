@@ -21,7 +21,7 @@ export default defineConfig({
   // configuré, prévu à la tâche 22). Le projet `setup` ci-dessous se connecte UNE seule
   // fois pour toute la suite (e2e/auth.setup.ts) ; les specs qui n'ont pas explicitement
   // besoin de rejouer le parcours de connexion réutilisent cet état via `storageState`
-  // (voir e2e/admin-produits.spec.ts) au lieu de soumettre le formulaire à nouveau.
+  // (voir e2e/admin-products.spec.ts) au lieu de soumettre le formulaire à nouveau.
   // Workers repassés au nombre de cœurs par défaut : la cause du plafond a disparu.
   webServer: {
     // Serveur de production : `next dev` ne repond pas sur cette machine (il demarre

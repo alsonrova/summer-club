@@ -31,6 +31,7 @@ export const variantsResource = defineResource<VariantInput>({
   schema: variantSchema,
   columns: ['label', 'sku', 'stock'],
   labels: {
+    label: 'Libellé',
     priceDelta: 'Écart de prix',
   },
 })

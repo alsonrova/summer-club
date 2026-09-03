@@ -8,7 +8,7 @@ import path from 'node:path'
 // ce qui avait forcé à plafonner Playwright à deux workers (palliatif, pas un correctif du
 // rate limiter lui-même). Ce projet de préparation se connecte UNE seule fois et écrit
 // l'état de session ici ; les specs qui n'ont pas explicitement besoin de rejouer le
-// parcours de connexion (voir e2e/admin-produits.spec.ts) le rechargent via
+// parcours de connexion (voir e2e/admin-products.spec.ts) le rechargent via
 // `test.use({ storageState: ... })` plutôt que de soumettre à nouveau le formulaire.
 //
 // e2e/admin-auth.spec.ts continue, lui, à se connecter via l'écran de connexion pour ses

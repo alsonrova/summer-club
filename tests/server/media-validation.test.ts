@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { validateMediaFile, ACCEPTED_IMAGE_TYPES, MAX_MEDIA_BYTES } from '@/server/media'
 
 // Validation pure (aucune écriture disque, aucune session) : c'est ce qui permet à
-// televerserMedia() de refuser un fichier avant même d'appeler processImage(), et à ce
+// uploadMedia() de refuser un fichier avant même d'appeler processImage(), et à ce
 // test de vérifier ce refus sans passer par une Server Action ni une base de données.
 describe('validateMediaFile', () => {
   it('accepte un JPEG de taille raisonnable', () => {

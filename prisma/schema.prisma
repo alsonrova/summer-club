@@ -95,41 +95,41 @@ model Category {
 }
 
 model Product {
-  id          String    @id @default(cuid())
-  slug        String    @unique
-  name        String
-  description String
-  categoryId  String
-  category    Category  @relation(fields: [categoryId], references: [id])
-  basePrice   Int
-  costPrice   Int       @default(0)
-  active      Boolean   @default(true)
-  displayOrder Int      @default(0)
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  name            String
+  description     String
+  categoryId      String
+  category        Category  @relation(fields: [categoryId], references: [id])
+  basePrice       Int
+  costPrice       Int       @default(0)
+  active          Boolean   @default(true)
+  displayOrder    Int       @default(0)
   metaTitle       String?
   metaDescription String?
-  variants    Variant[]
-  media       Media[]
-  reviews     Review[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  variants        Variant[]
+  media           Media[]
+  reviews         Review[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([active, displayOrder])
   @@index([categoryId])
 }
 
 model Variant {
-  id                String  @id @default(cuid())
+  id                String      @id @default(cuid())
   productId         String
-  product           Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product           Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   label             String
-  sku               String  @unique
-  priceDelta        Int     @default(0)
-  stock             Int     @default(0)
-  lowStockThreshold Int     @default(2)
+  sku               String      @unique
+  priceDelta        Int         @default(0)
+  stock             Int         @default(0)
+  lowStockThreshold Int         @default(2)
   orderItems        OrderItem[]
 
-  @@index([productId])
   @@unique([productId, label])
+  @@index([productId])
 }
 
 model Media {
@@ -163,11 +163,11 @@ enum OrderStatus {
 }
 
 model Order {
-  id            String   @id @default(cuid())
-  reference     String   @unique
-  trackingToken String   @unique
+  id            String        @id @default(cuid())
+  reference     String        @unique
+  trackingToken String        @unique
   channel       Channel
-  status        OrderStatus @default(pending_confirmation)
+  status        OrderStatus   @default(pending_confirmation)
   customerName  String
   phone         String
   email         String?
@@ -176,13 +176,13 @@ model Order {
   address       String?
   subtotal      Int
   shippingFee   Int
-  discount      Int      @default(0)
+  discount      Int           @default(0)
   total         Int
   items         OrderItem[]
   payments      Payment[]
   reviews       Review[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@index([status, createdAt])
 }
@@ -201,15 +201,15 @@ model OrderItem {
 }
 
 model Payment {
-  id             String @id @default(cuid())
+  id             String   @id @default(cuid())
   orderId        String
-  order          Order  @relation(fields: [orderId], references: [id])
+  order          Order    @relation(fields: [orderId], references: [id])
   provider       String
   amount         Int
   status         String
   externalRef    String?
   rawPayload     Json?
-  idempotencyKey String @unique
+  idempotencyKey String   @unique
   createdAt      DateTime @default(now())
 
   @@index([orderId])
@@ -227,7 +227,7 @@ enum PromotionType {
 }
 
 model Promotion {
-  id          String        @id @default(cuid())
+  id          String         @id @default(cuid())
   name        String
   type        PromotionType
   value       Int
@@ -235,12 +235,12 @@ model Promotion {
   targetId    String?
   startsAt    DateTime?
   endsAt      DateTime?
-  weekdays    Int           @default(127)
+  weekdays    Int            @default(127)
   startHour   Int?
   endHour     Int?
-  membersOnly Boolean       @default(false)
-  priority    Int           @default(0)
-  active      Boolean       @default(true)
+  membersOnly Boolean        @default(false)
+  priority    Int            @default(0)
+  active      Boolean        @default(true)
 }
 
 enum ReviewSource {
@@ -255,11 +255,11 @@ enum ReviewStatus {
 }
 
 model Review {
-  id        String @id @default(cuid())
+  id        String       @id @default(cuid())
   productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  product   Product?     @relation(fields: [productId], references: [id])
   orderId   String?
-  order     Order?   @relation(fields: [orderId], references: [id])
+  order     Order?       @relation(fields: [orderId], references: [id])
   rating    Int
   body      String
   author    String

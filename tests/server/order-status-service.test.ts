@@ -6,8 +6,8 @@ import { applyStatus, ForbiddenTransitionError } from '@/server/order-status-ser
 
 // Les tests visent applyStatus : changerStatut n'en est que
 // l'enveloppe authentifiée, et requireAdmin n'a pas de sens hors requête.
-const changeStatus = (id: string, vers: Parameters<typeof applyStatus>[1]) =>
-  applyStatus(id, vers, 'test')
+const changeStatus = (id: string, to: Parameters<typeof applyStatus>[1]) =>
+  applyStatus(id, to, 'test')
 
 let variantId: string
 
@@ -66,7 +66,7 @@ beforeAll(async () => {
     create: {
       slug: PRODUCT_SLUG,
       name: 'Produit de test (statuts)',
-      description: 'Jeu de données réservé à tests/server/statut.test.ts.',
+      description: 'Jeu de données réservé à tests/server/order-status-service.test.ts.',
       categoryId: category.id,
       basePrice: 45000,
       costPrice: 18000,
@@ -239,15 +239,15 @@ describe('applyStatus — accès concurrent sur la même commande', () => {
     ])
 
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
-    const echouees = results.filter(
+    const failed = results.filter(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
     )
-    expect(echouees).toHaveLength(1)
+    expect(failed).toHaveLength(1)
     // La perdante doit être arrêtée par la machine à états après avoir RELU le statut réel,
     // pas par un conflit de sérialisation opaque (P2034 / 40001) qui n'aurait jamais atteint
     // ce contrôle : c'est cette assertion qui empêche la régression du correctif
     // d'isolation (Serializable + FOR UPDATE, cf. src/server/order-status-service.ts).
-    expect(echouees[0]!.reason).toBeInstanceOf(ForbiddenTransitionError)
+    expect(failed[0]!.reason).toBeInstanceOf(ForbiddenTransitionError)
 
     // Un seul recrédit, donc le stock initial — pas 13.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
@@ -314,17 +314,17 @@ describe('applyStatus — journal d\'audit', () => {
     // le ferait pas : sur ce chemin, la fonction lève AVANT l'écriture d'audit, qui n'est
     // jamais atteinte.
     class FailureAfterWrite extends Error {}
-    const transactionReelle = prisma.$transaction.bind(prisma) as (
-      corps: (tx: Prisma.TransactionClient) => Promise<unknown>,
+    const realTransaction = prisma.$transaction.bind(prisma) as (
+      body: (tx: Prisma.TransactionClient) => Promise<unknown>,
       options?: unknown,
     ) => Promise<unknown>
-    const espion = vi.spyOn(prisma, '$transaction')
-    espion.mockImplementation(((
-      corps: (tx: Prisma.TransactionClient) => Promise<unknown>,
+    const transactionSpy = vi.spyOn(prisma, '$transaction')
+    transactionSpy.mockImplementation(((
+      body: (tx: Prisma.TransactionClient) => Promise<unknown>,
       options?: unknown,
     ) =>
-      transactionReelle(async (tx) => {
-        await corps(tx)
+      realTransaction(async (tx) => {
+        await body(tx)
         throw new FailureAfterWrite()
       }, options)) as never)
 
@@ -334,7 +334,7 @@ describe('applyStatus — journal d\'audit', () => {
       ).rejects.toBeInstanceOf(FailureAfterWrite)
     } finally {
       // Restauré même si l'assertion ci-dessus échoue.
-      espion.mockRestore()
+      transactionSpy.mockRestore()
     }
 
     // Assertion bornée à MA commande : le journal d'audit est une table globale.

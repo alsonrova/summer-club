@@ -80,11 +80,11 @@ describe('resolvePrice', () => {
   })
 
   it('ne cumule jamais deux promotions : la plus prioritaire gagne', () => {
-    const faible = base({ id: 'faible', value: 10, priority: 1 })
-    const forte = base({ id: 'forte', value: 30, priority: 5 })
-    const r = resolvePrice(args([faible, forte]))
+    const weak = base({ id: 'weak', value: 10, priority: 1 })
+    const strong = base({ id: 'strong', value: 30, priority: 5 })
+    const r = resolvePrice(args([weak, strong]))
     expect(r.finalPrice).toBe(35000)
-    expect(r.promotionId).toBe('forte')
+    expect(r.promotionId).toBe('strong')
   })
 
   it('à priorité égale, la remise la plus avantageuse pour la cliente gagne', () => {
@@ -105,50 +105,50 @@ describe('resolvePrice — robustesse fuseau et fenêtres horaires', () => {
   it('applique un happy hour qui franchit minuit, à l\'intérieur de la plage', () => {
     const p = base({ startHour: 22, endHour: 2 })
     // 23h00 à Antananarivo (vendredi) = 20h00 UTC (vendredi).
-    const vendredi23h = new Date('2026-08-14T20:00:00Z')
-    expect(resolvePrice(args([p], vendredi23h)).finalPrice).toBe(40000)
+    const friday11pm = new Date('2026-08-14T20:00:00Z')
+    expect(resolvePrice(args([p], friday11pm)).finalPrice).toBe(40000)
 
     // 0h30 à Antananarivo (samedi) = 21h30 UTC (vendredi).
-    const samedi0h30 = new Date('2026-08-14T21:30:00Z')
-    expect(resolvePrice(args([p], samedi0h30)).finalPrice).toBe(40000)
+    const saturday0h30 = new Date('2026-08-14T21:30:00Z')
+    expect(resolvePrice(args([p], saturday0h30)).finalPrice).toBe(40000)
   })
 
   it('ignore un happy hour qui franchit minuit, en dehors de la plage', () => {
     const p = base({ startHour: 22, endHour: 2 })
     // 21h00 à Antananarivo (vendredi) = 18h00 UTC (vendredi).
-    const vendredi21h = new Date('2026-08-14T18:00:00Z')
-    expect(resolvePrice(args([p], vendredi21h)).finalPrice).toBe(50000)
+    const friday9pm = new Date('2026-08-14T18:00:00Z')
+    expect(resolvePrice(args([p], friday9pm)).finalPrice).toBe(50000)
 
     // 2h00 à Antananarivo (samedi) = 23h00 UTC (vendredi).
-    const samedi2h = new Date('2026-08-14T23:00:00Z')
-    expect(resolvePrice(args([p], samedi2h)).finalPrice).toBe(50000)
+    const saturday2am = new Date('2026-08-14T23:00:00Z')
+    expect(resolvePrice(args([p], saturday2am)).finalPrice).toBe(50000)
   })
 
   it('applique une promotion pile à minuit heure locale (heure = 0, pas 24)', () => {
     const p = base({ startHour: 0, endHour: 6 })
     // 0h00 à Antananarivo (samedi) = 21h00 UTC (vendredi).
-    const samediMinuit = new Date('2026-08-14T21:00:00Z')
-    expect(resolvePrice(args([p], samediMinuit)).finalPrice).toBe(40000)
+    const saturdayMidnight = new Date('2026-08-14T21:00:00Z')
+    expect(resolvePrice(args([p], saturdayMidnight)).finalPrice).toBe(40000)
   })
 
   it('ne s\'applique jamais si seule une borne de la plage horaire est renseignée', () => {
-    const debutSeul = base({ startHour: 20, endHour: null })
-    const finSeule = base({ startHour: null, endHour: 22 })
+    const startOnly = base({ startHour: 20, endHour: null })
+    const endOnly = base({ startHour: null, endHour: 22 })
     // 20h00 à Antananarivo (vendredi) = 17h00 UTC (vendredi).
-    const vendredi20h = new Date('2026-08-14T17:00:00Z')
-    expect(resolvePrice(args([debutSeul], vendredi20h)).finalPrice).toBe(50000)
-    expect(resolvePrice(args([finSeule], vendredi20h)).finalPrice).toBe(50000)
+    const friday8pm = new Date('2026-08-14T17:00:00Z')
+    expect(resolvePrice(args([startOnly], friday8pm)).finalPrice).toBe(50000)
+    expect(resolvePrice(args([endOnly], friday8pm)).finalPrice).toBe(50000)
   })
 
   it('la plage horaire normale est inclusive au début et exclusive à la fin', () => {
     const p = base({ startHour: 20, endHour: 22 })
     // 20h00 à Antananarivo (vendredi) = 17h00 UTC (vendredi) : borne de début, appliquée.
-    const vendredi20h = new Date('2026-08-14T17:00:00Z')
-    expect(resolvePrice(args([p], vendredi20h)).finalPrice).toBe(40000)
+    const friday8pm = new Date('2026-08-14T17:00:00Z')
+    expect(resolvePrice(args([p], friday8pm)).finalPrice).toBe(40000)
 
     // 22h00 à Antananarivo (vendredi) = 19h00 UTC (vendredi) : borne de fin, non appliquée.
-    const vendredi22h = new Date('2026-08-14T19:00:00Z')
-    expect(resolvePrice(args([p], vendredi22h)).finalPrice).toBe(50000)
+    const friday10pm = new Date('2026-08-14T19:00:00Z')
+    expect(resolvePrice(args([p], friday10pm)).finalPrice).toBe(50000)
   })
 
   it('scénario combiné : une seule des trois promotions simultanées s\'applique', () => {
@@ -163,9 +163,9 @@ describe('resolvePrice — robustesse fuseau et fenêtres horaires', () => {
       id: 'promoHappyHour', scope: 'all', startHour: 19, endHour: 21, priority: 5, value: 30,
     })
     // 20h00 à Antananarivo (vendredi) = 17h00 UTC (vendredi).
-    const vendredi20h = new Date('2026-08-14T17:00:00Z')
+    const friday8pm = new Date('2026-08-14T17:00:00Z')
     const r = resolvePrice(
-      args([productPromo, categoryPromoOutOfHours, promoHappyHour], vendredi20h),
+      args([productPromo, categoryPromoOutOfHours, promoHappyHour], friday8pm),
     )
     // promoCategorieHorsHeure a la priorité la plus haute mais n'est pas dans sa
     // plage horaire (9h-18h) à 20h : elle est écartée malgré sa priorité.
@@ -178,7 +178,7 @@ describe('resolvePrice — robustesse fuseau et fenêtres horaires', () => {
   it('une fenêtre horaire de largeur nulle ne s\'applique jamais', () => {
     const p = base({ startHour: 10, endHour: 10 })
     // 10h00 à Antananarivo (vendredi) = 07h00 UTC (vendredi).
-    const vendredi10h = new Date('2026-08-14T07:00:00Z')
-    expect(resolvePrice(args([p], vendredi10h)).finalPrice).toBe(50000)
+    const friday10am = new Date('2026-08-14T07:00:00Z')
+    expect(resolvePrice(args([p], friday10am)).finalPrice).toBe(50000)
   })
 })

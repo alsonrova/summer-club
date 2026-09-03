@@ -6,7 +6,7 @@ import {
   type ReviewListDelegate,
 } from '@/app/admin/avis/query'
 
-// Pendant de tests/admin/commandes-query.test.ts pour les avis : vérifie que la liste
+// Pendant de tests/admin/order-query.test.ts pour les avis : vérifie que la liste
 // interroge réellement la base (comptage + skip/take) au lieu de charger toute la table pour
 // la découper en mémoire, que son tri est TOTAL donc déterministe, et que ses deux filtres
 // fonctionnent — y compris `pinned: false`, qu'un `if (filters.pinned)` naïf laisserait
@@ -62,7 +62,7 @@ beforeAll(async () => {
     create: {
       slug: PRODUCT_SLUG,
       name: PRODUCT_NAME,
-      description: 'Jeu de données réservé à tests/admin/avis-query.test.ts.',
+      description: 'Jeu de données réservé à tests/admin/review-query.test.ts.',
       categoryId: category.id,
       basePrice: 45000,
     },
@@ -105,13 +105,13 @@ afterEach(() => {
 
 describe('listReviewsPaginated', () => {
   it('interroge la base avec skip/take plutôt que de charger tous les avis', async () => {
-    const espionFindMany = vi.spyOn(prisma.review, 'findMany')
-    const espionCount = vi.spyOn(prisma.review, 'count')
+    const findManySpy = vi.spyOn(prisma.review, 'findMany')
+    const countSpy = vi.spyOn(prisma.review, 'count')
 
     const result = await listReviewsPaginated(myReviews(), { page: 1 })
 
-    expect(espionCount).toHaveBeenCalled()
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(countSpy).toHaveBeenCalled()
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: REVIEWS_PER_PAGE }),
     )
     expect(result.rows).toHaveLength(REVIEWS_PER_PAGE)
@@ -120,11 +120,11 @@ describe('listReviewsPaginated', () => {
   })
 
   it('décale bien skip sur la seconde page', async () => {
-    const espionFindMany = vi.spyOn(prisma.review, 'findMany')
+    const findManySpy = vi.spyOn(prisma.review, 'findMany')
 
     const result = await listReviewsPaginated(myReviews(), { page: 2 })
 
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({ skip: REVIEWS_PER_PAGE, take: REVIEWS_PER_PAGE }),
     )
     expect(result.rows).toHaveLength(TOTAL - REVIEWS_PER_PAGE)
@@ -136,12 +136,12 @@ describe('listReviewsPaginated', () => {
     // même `createdAt`, mais PostgreSQL renvoie en pratique un ordre stable tant que rien ne
     // le perturbe — un retour en arrière sur le dernier critère de tri ne serait donc pas
     // détecté par les seules lignes obtenues.
-    const espionFindMany = vi.spyOn(prisma.review, 'findMany')
+    const findManySpy = vi.spyOn(prisma.review, 'findMany')
 
     const page1 = await listReviewsPaginated(myReviews(), { page: 1 })
     const page2 = await listReviewsPaginated(myReviews(), { page: 2 })
 
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       }),

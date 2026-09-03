@@ -39,8 +39,11 @@ export const productsResource = defineResource<ProductInput>({
   filters: ['categoryId', 'active'],
   actions: [],
   labels: {
+    name: 'Nom',
     basePrice: 'Prix',
     costPrice: "Prix d'achat",
     categoryId: 'Catégorie',
+    active: 'Actif',
+    displayOrder: 'Ordre',
   },
 })

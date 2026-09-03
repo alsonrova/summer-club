@@ -72,10 +72,10 @@ describe('stockEffect — transitions interdites', () => {
       'preparing', 'shipped', 'ready_for_pickup', 'delivered',
       'cancelled', 'payment_failed',
     ]
-    for (const de of statuses) {
-      for (const vers of statuses) {
-        if (!transitionAllowed(de, vers)) {
-          expect(stockEffect(de, vers)).toBe('none')
+    for (const from of statuses) {
+      for (const to of statuses) {
+        if (!transitionAllowed(from, to)) {
+          expect(stockEffect(from, to)).toBe('none')
         }
       }
     }

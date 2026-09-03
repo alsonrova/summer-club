@@ -110,7 +110,7 @@ describe('deleteProduct', () => {
   })
 
   it('tolère un produit déjà absent, pour que deux passes de nettoyage puissent se croiser', async () => {
-    // Même raisonnement que nettoyerProduitDeTest (e2e/admin-produits.spec.ts) : un
+    // Même raisonnement que cleanUpTestProduct (e2e/admin-products.spec.ts) : un
     // nettoyage avant-test et un nettoyage après-test peuvent viser le même produit ;
     // le second ne doit pas lever.
     await expect(deleteProduct('produit-totalement-inexistant')).resolves.toBeUndefined()

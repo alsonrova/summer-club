@@ -10,7 +10,7 @@ import {
 } from '@/server/reviews'
 import { initialReviewActionState } from '@/app/admin/avis/states'
 
-// Mêmes doublures que tests/admin/produits-actions.test.ts : requireAdmin() lit une session
+// Mêmes doublures que tests/admin/product-actions.test.ts : requireAdmin() lit une session
 // via next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni
 // l'autre n'existe sous Vitest. revalidatePath n'a rien à faire ici, seulement à ne pas lever.
 vi.mock('@/server/auth', () => ({
@@ -71,7 +71,7 @@ beforeAll(async () => {
     create: {
       slug: PRODUCT_SLUG,
       name: 'Produit de test (avis)',
-      description: 'Jeu de données réservé à tests/admin/avis-actions.test.ts.',
+      description: 'Jeu de données réservé à tests/admin/review-actions.test.ts.',
       categoryId: category.id,
       basePrice: 45000,
     },
@@ -89,9 +89,9 @@ afterEach(async () => {
   }
   // Rattrape aussi les avis créés par importTestimonial, dont l'identifiant n'est pas
   // toujours poussé dans idsAvis (un test qui échoue avant).
-  const restants = await prisma.review.findMany({ where: { productId }, select: { id: true } })
-  if (restants.length > 0) {
-    const ids = restants.map((a) => a.id)
+  const remaining = await prisma.review.findMany({ where: { productId }, select: { id: true } })
+  if (remaining.length > 0) {
+    const ids = remaining.map((a) => a.id)
     await prisma.auditLog.deleteMany({ where: { entity: 'Review', entityId: { in: ids } } })
     await prisma.review.deleteMany({ where: { id: { in: ids } } })
   }
@@ -448,8 +448,8 @@ describe("moderateReview — une décision sans effet n'est pas un événement",
 })
 
 describe("actions d'avis — identifiant venu du client", () => {
-  // Même parti pris que côté commandes (tests/admin/commandes-actions.test.ts, « laisse
-  // remonter une panne technique ») et que `televerserMedia` côté produits : un identifiant
+  // Même parti pris que côté commandes (tests/admin/order-actions.test.ts, « laisse
+  // remonter une panne technique ») et que `uploadMedia` côté produits : un identifiant
   // absent de l'interface est forgé, donc un DÉFAUT — pas une situation normale que la
   // propriétaire devrait lire sous le bouton. On ne le valide pas à part : `findUniqueOrThrow`
   // lève P2025, et les adaptateurs de formulaire laissent cette erreur remonter au lieu de

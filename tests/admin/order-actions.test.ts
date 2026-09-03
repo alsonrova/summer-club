@@ -5,7 +5,7 @@ import { OrderError, createOrder } from '@/server/orders'
 import { pathsToRevalidate } from '@/server/order-status-service'
 import { initialStatusChangeState } from '@/app/admin/commandes/states'
 
-// Mêmes doublures que tests/admin/avis-actions.test.ts : requireAdmin() lit une session via
+// Mêmes doublures que tests/admin/review-actions.test.ts : requireAdmin() lit une session via
 // next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni
 // l'autre n'existe sous Vitest.
 vi.mock('@/server/auth', () => ({
@@ -21,16 +21,16 @@ const { changeStatus, changeStatusFromForm } = await import(
 )
 
 // Ce que ce fichier couvre, et que rien ne couvrait : les ACTIONS de commande. Le cœur
-// métier (`applyStatus`) a ses propres tests dans tests/server/statut.test.ts, et la
-// requête de liste dans tests/admin/commandes-query.test.ts — mais l'enveloppe
+// métier (`applyStatus`) a ses propres tests dans tests/server/order-status-service.test.ts,
+// et la requête de liste dans tests/admin/order-query.test.ts — mais l'enveloppe
 // authentifiée et son adaptateur `useActionState` n'étaient exercés qu'en bout-en-bout,
 // sur le chemin heureux. Or c'est précisément là que vivent le garde de type sur le statut
 // et la TRADUCTION EN FRANÇAIS des erreurs métier : deux comportements qu'aucun test
 // n'atteignait.
 
 // Jeu de données propre à ce fichier — ni la déclinaison de seed VAH-45, ni celle de
-// tests/server/statut.test.ts : les fichiers s'exécutent en parallèle (vitest.config.ts) et
-// aucun ne possède les lignes d'un autre.
+// tests/server/order-status-service.test.ts : les fichiers s'exécutent en parallèle
+// (vitest.config.ts) et aucun ne possède les lignes d'un autre.
 const CATEGORY_SLUG = 'test-cmd-actions-categorie'
 const PRODUCT_SLUG = 'test-cmd-actions-produit'
 const SKU = 'CMDACT-45'
@@ -67,7 +67,7 @@ beforeAll(async () => {
     create: {
       slug: PRODUCT_SLUG,
       name: 'Produit de test (actions commandes)',
-      description: 'Jeu de données réservé à tests/admin/commandes-actions.test.ts.',
+      description: 'Jeu de données réservé à tests/admin/order-actions.test.ts.',
       categoryId: category.id,
       basePrice: 45000,
       costPrice: 18000,

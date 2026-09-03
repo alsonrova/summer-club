@@ -18,9 +18,9 @@ function fileFor(mediaPath: string, width: number, ext: 'avif' | 'webp') {
   return path.join(process.cwd(), 'public', `${mediaPath}-${width}.${ext}`)
 }
 
-async function createJpegSource(width: number, height: number, fond: string) {
+async function createJpegSource(width: number, height: number, background: string) {
   return sharp({
-    create: { width: width, height: height, channels: 3, background: fond },
+    create: { width: width, height: height, channels: 3, background },
   }).jpeg().toBuffer()
 }
 

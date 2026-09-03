@@ -20,7 +20,7 @@ import {
 // createVariant/updateMediaAlt/setPrimaryPhoto/deleteMedia) passent par
 // requireAdmin() (session, next/headers) et revalidatePath() (cache App Router) : tous deux
 // exigent un contexte de requête Next.js réel, absent sous Vitest. Même doublure que
-// tests/admin/champs-systeme.test.ts pour requireAdmin ; revalidatePath n'a pas besoin de
+// tests/admin/system-fields.test.ts pour requireAdmin ; revalidatePath n'a pas besoin de
 // faire quoi que ce soit ici, seulement de ne pas lever.
 vi.mock('@/server/auth', () => ({
   requireAdmin: vi.fn().mockResolvedValue({ user: { email: 'admin@test.dev' } }),
@@ -65,25 +65,25 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 // VAH-45) : tests/server/orders.test.ts mute cette même variante en parallèle (vitest
 // exécute les fichiers de test simultanément contre la même base), et les deux suites se
 // marchaient dessus quand celle-ci réutilisait VAH-45.
-const PREFIXE = 'admintest-'
+const PREFIX = 'admintest-'
 let categoryId: string
 let productId: string
 let variantId: string
 
 beforeAll(async () => {
-  await prisma.variant.deleteMany({ where: { sku: { startsWith: PREFIXE } } })
-  await prisma.media.deleteMany({ where: { product: { slug: { startsWith: PREFIXE } } } })
-  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE } } })
-  await prisma.category.deleteMany({ where: { slug: `${PREFIXE}categorie` } })
+  await prisma.variant.deleteMany({ where: { sku: { startsWith: PREFIX } } })
+  await prisma.media.deleteMany({ where: { product: { slug: { startsWith: PREFIX } } } })
+  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIX } } })
+  await prisma.category.deleteMany({ where: { slug: `${PREFIX}categorie` } })
 
   const category = await prisma.category.create({
-    data: { slug: `${PREFIXE}categorie`, name: 'Catégorie de test admin' },
+    data: { slug: `${PREFIX}categorie`, name: 'Catégorie de test admin' },
   })
   categoryId = category.id
 
   const product = await prisma.product.create({
     data: {
-      slug: `${PREFIXE}produit`,
+      slug: `${PREFIX}produit`,
       name: 'Produit de test admin',
       description: 'Produit créé uniquement pour les tests des actions admin.',
       categoryId,
@@ -93,16 +93,16 @@ beforeAll(async () => {
   productId = product.id
 
   const variant = await prisma.variant.create({
-    data: { productId, label: 'Unique', sku: `${PREFIXE}sku`, stock: 5 },
+    data: { productId, label: 'Unique', sku: `${PREFIX}sku`, stock: 5 },
   })
   variantId = variant.id
 })
 
 afterAll(async () => {
-  await prisma.variant.deleteMany({ where: { sku: { startsWith: PREFIXE } } })
+  await prisma.variant.deleteMany({ where: { sku: { startsWith: PREFIX } } })
   await prisma.media.deleteMany({ where: { productId } })
-  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE } } })
-  await prisma.category.deleteMany({ where: { slug: `${PREFIXE}categorie` } })
+  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIX } } })
+  await prisma.category.deleteMany({ where: { slug: `${PREFIX}categorie` } })
   // Chaque test qui écrit un journal d'audit sur une entité qu'il crée lui-même supprime
   // déjà cette ligne (voir chaque `it` ci-dessous) ; cette dernière passe ne couvre que
   // l'entité fixe partagée par tout le fichier (productId/variantId), pour ne laisser
@@ -235,9 +235,9 @@ describe('uploadMedia', () => {
     // L'erreur réelle (celle de sharp) reste journalisée côté serveur : sans elle, un
     // disque plein et un fichier corrompu se ressembleraient dans les journaux.
     expect(journal).toHaveBeenCalledTimes(1)
-    const appel = journal.mock.calls[0]
-    expect(String(appel?.[0])).toMatch(/uploadMedia/)
-    const context = appel?.[1] as { productId: string; error: unknown }
+    const call = journal.mock.calls[0]
+    expect(String(call?.[0])).toMatch(/uploadMedia/)
+    const context = call?.[1] as { productId: string; error: unknown }
     expect(context.productId).toBe(productId)
     expect(context.error).toBeInstanceOf(UnreadableImageError)
     expect((context.error as UnreadableImageError).cause).toBeInstanceOf(Error)
@@ -261,11 +261,11 @@ describe('uploadMedia', () => {
     const fd = new FormData()
     fd.set('file', new File([image], 'photo.jpg', { type: 'image/jpeg' }))
 
-    const panne = Object.assign(new Error('ENOSPC: no space left on device, write'), {
+    const technicalFailure = Object.assign(new Error('ENOSPC: no space left on device, write'), {
       code: 'ENOSPC',
     })
     // Désarmé par l'afterEach de ce fichier, y compris si une assertion échoue plus bas.
-    writeControl.error = panne
+    writeControl.error = technicalFailure
 
     const state = await uploadMedia(productId, { error: null }, fd)
 
@@ -278,7 +278,7 @@ describe('uploadMedia', () => {
     expect(journal).toHaveBeenCalledTimes(1)
     const context = journal.mock.calls[0]?.[1] as { productId: string; error: unknown }
     expect(context.productId).toBe(productId)
-    expect(context.error).toBe(panne)
+    expect(context.error).toBe(technicalFailure)
     expect(context.error).not.toBeInstanceOf(UnreadableImageError)
   })
 })
@@ -319,7 +319,7 @@ describe('reorderMedia', () => {
 
 describe('createProduct (chemin nominal)', () => {
   it('crée le produit en base et écrit un journal d’audit', async () => {
-    const slug = `${PREFIXE}bracelet-nominal`
+    const slug = `${PREFIX}bracelet-nominal`
     const data = formData({
       name: 'Bracelet Test Nominal',
       slug,
@@ -355,7 +355,7 @@ describe('createProduct (chemin nominal)', () => {
   })
 
   it('refuse un slug déjà utilisé par un autre produit avec un message dédié', async () => {
-    const slug = `${PREFIXE}slug-en-double`
+    const slug = `${PREFIX}slug-en-double`
     const existing = await prisma.product.create({
       data: {
         slug,
@@ -394,7 +394,7 @@ describe('createProduct (chemin nominal)', () => {
 // refuse ensuite (vide ou fait uniquement d'espaces) — l'incohérence que le correctif ferme.
 describe('createProduct — normalisation du nom (.trim())', () => {
   it('normalise un nom entouré d’espaces avant de l’écrire en base', async () => {
-    const slug = `${PREFIXE}nom-entoure-espaces`
+    const slug = `${PREFIX}nom-entoure-espaces`
     const data = formData({
       name: '  Bracelet Espaces  ',
       slug,
@@ -418,7 +418,7 @@ describe('createProduct — normalisation du nom (.trim())', () => {
   })
 
   it('refuse un nom uniquement composé d’espaces', async () => {
-    const slug = `${PREFIXE}nom-espaces-seuls`
+    const slug = `${PREFIX}nom-espaces-seuls`
     const data = formData({
       name: '   ',
       slug,
@@ -443,7 +443,7 @@ describe('updateProduct (chemin nominal)', () => {
   it('met à jour le produit et écrit un journal symétrique (mêmes clés avant/après)', async () => {
     const product = await prisma.product.create({
       data: {
-        slug: `${PREFIXE}modif-produit`,
+        slug: `${PREFIX}modif-produit`,
         name: 'Produit à modifier',
         description: 'Produit créé uniquement pour tester le chemin nominal de updateProduct.',
         categoryId,
@@ -454,7 +454,7 @@ describe('updateProduct (chemin nominal)', () => {
 
     const data = formData({
       name: 'Produit modifié',
-      slug: `${PREFIXE}modif-produit`,
+      slug: `${PREFIX}modif-produit`,
       description: 'Produit créé uniquement pour tester updateProduct, désormais modifié.',
       categoryId,
       basePrice: '25000',
@@ -493,9 +493,9 @@ describe('updateProduct (chemin nominal)', () => {
   })
 
   it('refuse un slug déjà utilisé par un autre produit avec un message dédié', async () => {
-    const autre = await prisma.product.create({
+    const other = await prisma.product.create({
       data: {
-        slug: `${PREFIXE}modif-collision-cible`,
+        slug: `${PREFIX}modif-collision-cible`,
         name: 'Produit cible',
         description: 'Produit dont le slug sera revendiqué par un autre.',
         categoryId,
@@ -504,7 +504,7 @@ describe('updateProduct (chemin nominal)', () => {
     })
     const product = await prisma.product.create({
       data: {
-        slug: `${PREFIXE}modif-collision-source`,
+        slug: `${PREFIX}modif-collision-source`,
         name: 'Produit source',
         description: 'Produit dont on tente de changer le slug pour celui d’un autre.',
         categoryId,
@@ -514,7 +514,7 @@ describe('updateProduct (chemin nominal)', () => {
 
     const data = formData({
       name: 'Produit source',
-      slug: `${PREFIXE}modif-collision-cible`,
+      slug: `${PREFIX}modif-collision-cible`,
       description: 'Produit dont on tente de changer le slug pour celui d’un autre.',
       categoryId,
       basePrice: '10000',
@@ -531,13 +531,13 @@ describe('updateProduct (chemin nominal)', () => {
     expect(state.success).toBe(false)
     expect(state.errors.slug?.[0]).toMatch(/slug.*déjà utilisé/)
 
-    await prisma.product.deleteMany({ where: { id: { in: [autre.id, product.id] } } })
+    await prisma.product.deleteMany({ where: { id: { in: [other.id, product.id] } } })
   })
 })
 
 describe('createVariant', () => {
   it('crée la déclinaison en base et écrit un journal d’audit (chemin nominal)', async () => {
-    const sku = `${PREFIXE}sku-L`
+    const sku = `${PREFIX}sku-L`
     const state = await createVariant(
       productId,
       { success: false, errors: {}, initialValues: {} },
@@ -561,7 +561,7 @@ describe('createVariant', () => {
   })
 
   it('accepte un écart de prix négatif tant que le prix de vente résultant reste positif', async () => {
-    const sku = `${PREFIXE}sku-S`
+    const sku = `${PREFIX}sku-S`
     // productId a prixBase: 10000 (fixture ci-dessus) ; -500 donne un prix résultant de
     // 9500, toujours positif.
     const state = await createVariant(
@@ -579,7 +579,7 @@ describe('createVariant', () => {
   })
 
   it('refuse un prix de vente résultant nul ou négatif', async () => {
-    const sku = `${PREFIXE}sku-gratuit`
+    const sku = `${PREFIX}sku-gratuit`
     const state = await createVariant(
       productId,
       { success: false, errors: {}, initialValues: {} },
@@ -596,8 +596,8 @@ describe('createVariant', () => {
     const state = await createVariant(
       productId,
       { success: false, errors: {}, initialValues: {} },
-      // `${PREFIXE}sku` est déjà pris par la fixture `variantId` créée dans beforeAll.
-      formData({ label: 'Libellé sans rapport', sku: `${PREFIXE}sku`, priceDelta: '0', stock: '1' }),
+      // `${PREFIX}sku` est déjà pris par la fixture `variantId` créée dans beforeAll.
+      formData({ label: 'Libellé sans rapport', sku: `${PREFIX}sku`, priceDelta: '0', stock: '1' }),
     )
     expect(state.success).toBe(false)
     expect(state.errors.sku?.[0]).toMatch(/SKU.*déjà utilisé/)
@@ -610,7 +610,7 @@ describe('createVariant', () => {
       { success: false, errors: {}, initialValues: {} },
       // 'Unique' est déjà le libellé de la fixture `variantId` créée dans beforeAll, pour
       // ce même produit.
-      formData({ label: 'Unique', sku: `${PREFIXE}sku-libelle-dup`, priceDelta: '0', stock: '1' }),
+      formData({ label: 'Unique', sku: `${PREFIX}sku-libelle-dup`, priceDelta: '0', stock: '1' }),
     )
     expect(state.success).toBe(false)
     expect(state.errors.label?.[0]).toMatch(/libellé.*existe déjà/)
@@ -680,9 +680,9 @@ describe('uploadMedia (chemin nominal)', () => {
     // fichier ne possède pas, et l'exiger vide (« il ne reste que .gitkeep ») entrait en
     // collision avec tests/server/media.test.ts, qui y écrit ses propres fichiers au même
     // moment — d'où la sérialisation de toute la suite Vitest, désormais retirée.
-    const prefixe = `${path.basename(media.path)}-`
+    const prefix = `${path.basename(media.path)}-`
     const entries = await readdir(path.join(process.cwd(), 'public', 'uploads'))
-    expect(entries.filter((entry) => entry.startsWith(prefixe))).toEqual([])
+    expect(entries.filter((entry) => entry.startsWith(prefix))).toEqual([])
 
     // uploadMedia ('add_media') et deleteMedia ('delete_media') ont chacune
     // écrit leur propre ligne de journal pour ce media.id : les deux doivent disparaître,

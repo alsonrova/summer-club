@@ -10,15 +10,15 @@ import { CHANNELS, isChannel } from '@/admin/resources/orders'
 // Les commandes de ce fichier portent toutes ce préfixe de référence, et c'est par lui
 // qu'elles sont sélectionnées ET nettoyées : aucun `deleteMany()` sans filtre, aucun
 // comptage global. Les fichiers de test s'exécutent en parallèle (vitest.config.ts).
-const PREFIXE = 'PAGCMD-'
+const PREFIX = 'PAGCMD-'
 const TOTAL = ORDERS_PER_PAGE + 5
 
 // Horodatage identique pour toutes les commandes : c'est le cas réel qui casse un tri sur
 // `createdAt` seul (une rafale de commandes, un import). Voir le test de stabilité ci-dessous.
-const MEME_INSTANT = new Date('2026-08-01T10:00:00.000Z')
+const SAME_INSTANT = new Date('2026-08-01T10:00:00.000Z')
 
 async function purge() {
-  await prisma.order.deleteMany({ where: { reference: { startsWith: PREFIXE } } })
+  await prisma.order.deleteMany({ where: { reference: { startsWith: PREFIX } } })
 }
 
 beforeAll(async () => {
@@ -28,8 +28,8 @@ beforeAll(async () => {
   for (let i = 0; i < TOTAL; i++) {
     await prisma.order.create({
       data: {
-        reference: `${PREFIXE}${String(i).padStart(4, '0')}`,
-        trackingToken: `token-${PREFIXE}${i}`,
+        reference: `${PREFIX}${String(i).padStart(4, '0')}`,
+        trackingToken: `token-${PREFIX}${i}`,
         channel: i % 2 === 0 ? 'whatsapp' : 'cash_on_delivery',
         status: i % 3 === 0 ? 'confirmed' : 'pending_confirmation',
         customerName: `Cliente ${i}`,
@@ -37,7 +37,7 @@ beforeAll(async () => {
         subtotal: 45000,
         shippingFee: 0,
         total: 45000,
-        createdAt: MEME_INSTANT,
+        createdAt: SAME_INSTANT,
       },
     })
   }
@@ -57,16 +57,16 @@ afterEach(() => {
 
 describe('listOrdersPaginated', () => {
   it('interroge la base avec skip/take plutôt que de charger toutes les commandes', async () => {
-    const espionFindMany = vi.spyOn(prisma.order, 'findMany')
-    const espionCount = vi.spyOn(prisma.order, 'count')
+    const findManySpy = vi.spyOn(prisma.order, 'findMany')
+    const countSpy = vi.spyOn(prisma.order, 'count')
 
     const result = await listOrdersPaginated(prisma.order, {
       page: 1,
-      filters: { reference: PREFIXE },
+      filters: { reference: PREFIX },
     })
 
-    expect(espionCount).toHaveBeenCalled()
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(countSpy).toHaveBeenCalled()
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: ORDERS_PER_PAGE }),
     )
     expect(result.rows).toHaveLength(ORDERS_PER_PAGE)
@@ -79,16 +79,16 @@ describe('listOrdersPaginated', () => {
     // partagent le même `createdAt`, mais PostgreSQL renvoie en pratique un ordre stable
     // tant que rien ne le perturbe — un retour en arrière sur le second critère de tri ne
     // serait donc pas détecté par les seules lignes obtenues.
-    const espionFindMany = vi.spyOn(prisma.order, 'findMany')
+    const findManySpy = vi.spyOn(prisma.order, 'findMany')
 
     const page1 = await listOrdersPaginated(prisma.order, {
-      page: 1, filters: { reference: PREFIXE },
+      page: 1, filters: { reference: PREFIX },
     })
     const page2 = await listOrdersPaginated(prisma.order, {
-      page: 2, filters: { reference: PREFIXE },
+      page: 2, filters: { reference: PREFIX },
     })
 
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
     )
 
@@ -102,10 +102,10 @@ describe('listOrdersPaginated', () => {
 
   it('filtre par statut', async () => {
     const expected = await prisma.order.count({
-      where: { reference: { startsWith: PREFIXE }, status: 'confirmed' },
+      where: { reference: { startsWith: PREFIX }, status: 'confirmed' },
     })
     const result = await listOrdersPaginated(prisma.order, {
-      page: 1, filters: { reference: PREFIXE, status: 'confirmed' },
+      page: 1, filters: { reference: PREFIX, status: 'confirmed' },
     })
     expect(result.total).toBe(expected)
     expect(result.rows.every((l) => l.status === 'confirmed')).toBe(true)
@@ -113,7 +113,7 @@ describe('listOrdersPaginated', () => {
 
   it('filtre par canal', async () => {
     const result = await listOrdersPaginated(prisma.order, {
-      page: 1, filters: { reference: PREFIXE, channel: 'whatsapp' },
+      page: 1, filters: { reference: PREFIX, channel: 'whatsapp' },
     })
     expect(result.rows.length).toBeGreaterThan(0)
     expect(result.rows.every((l) => l.channel === 'whatsapp')).toBe(true)
@@ -124,12 +124,12 @@ describe('listOrdersPaginated', () => {
       page: 1, filters: { reference: 'pagcmd-0007' },
     })
     expect(result.total).toBe(1)
-    expect(result.rows[0]?.reference).toBe(`${PREFIXE}0007`)
+    expect(result.rows[0]?.reference).toBe(`${PREFIX}0007`)
   })
 
   it('ramène une page demandée hors bornes à la dernière page existante', async () => {
     const result = await listOrdersPaginated(prisma.order, {
-      page: 999, filters: { reference: PREFIXE },
+      page: 999, filters: { reference: PREFIX },
     })
     expect(result.page).toBe(result.totalPages)
     expect(result.rows.length).toBeGreaterThan(0)

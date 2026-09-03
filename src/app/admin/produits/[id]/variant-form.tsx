@@ -22,8 +22,8 @@ function FieldErrors({ id, messages }: { id: string; messages: string[] | undefi
   )
 }
 
-// Formulaire hand-écrit, dans le même esprit que ProductForm (../formulaire-
-// produit.tsx) : validation serveur seule source de vérité (pas de `required` HTML),
+// Formulaire hand-écrit, dans le même esprit que ProductForm (../product-form.tsx) :
+// validation serveur seule source de vérité (pas de `required` HTML),
 // messages d'erreur affichés sans rechargement via useActionState. `basePrice` sert
 // uniquement à rappeler le calcul déjà affiché dans le tableau des déclinaisons
 // existantes ; l'action serveur (createVariant) revalide ce même calcul, ce texte

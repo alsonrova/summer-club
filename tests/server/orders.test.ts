@@ -20,8 +20,8 @@ async function variantTest(stock: number) {
 // test ne l'emploie : il sert de clé de propriété pour le nettoyage et pour les comptages
 // ci-dessous. Sans cette borne, ce fichier vidait la table Order entière et comptait les
 // commandes de tout le monde — deux façons d'agir sur un état global qu'il ne possède pas,
-// alors que vitest exécute les fichiers en parallèle (voir tests/server/statut.test.ts,
-// qui a rendu la collision mesurable).
+// alors que vitest exécute les fichiers en parallèle (voir
+// tests/server/order-status-service.test.ts, qui a rendu la collision mesurable).
 const CUSTOMER = 'Test'
 
 const client = { customerName: CUSTOMER, phone: '0320000000' }
@@ -114,24 +114,24 @@ describe('createOrder', () => {
 
   it('ne survend jamais sous accès concurrent', async () => {
     const variantId = await variantTest(1)
-    const tentative = () => createOrder({
+    const attempt = () => createOrder({
       lines: [{ variantId, quantity: 1 }], channel: 'cash_on_delivery',
       client, zoneId: null, isMember: false,
     })
-    const results = await Promise.allSettled([tentative(), tentative(), tentative()])
-    const reussies = results.filter((r) => r.status === 'fulfilled')
-    expect(reussies).toHaveLength(1)
+    const results = await Promise.allSettled([attempt(), attempt(), attempt()])
+    const succeeded = results.filter((r) => r.status === 'fulfilled')
+    expect(succeeded).toHaveLength(1)
     // Les tentatives perdantes doivent échouer précisément sur une rupture
     // de stock constatée par le contrôle métier, pas sur un conflit de
     // sérialisation opaque (P2034 / erreur 40001) qui n'aurait jamais
     // atteint ce contrôle : c'est cette assertion qui empêche la
     // régression du correctif d'isolation (Serializable + FOR UPDATE).
-    const echouees = results.filter(
+    const failed = results.filter(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
     )
-    expect(echouees).toHaveLength(2)
-    for (const echec of echouees) {
-      expect(echec.reason).toBeInstanceOf(OutOfStockError)
+    expect(failed).toHaveLength(2)
+    for (const failure of failed) {
+      expect(failure.reason).toBeInstanceOf(OutOfStockError)
     }
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(0)
@@ -139,13 +139,13 @@ describe('createOrder', () => {
 
   it('sert les deux clientes concurrentes quand le stock le permet (non-régression : ne doit pas rejeter à tort sur conflit de sérialisation)', async () => {
     const variantId = await variantTest(5)
-    const tentative = () => createOrder({
+    const attempt = () => createOrder({
       lines: [{ variantId, quantity: 1 }], channel: 'cash_on_delivery',
       client, zoneId: null, isMember: false,
     })
-    const results = await Promise.allSettled([tentative(), tentative()])
-    const reussies = results.filter((r) => r.status === 'fulfilled')
-    expect(reussies).toHaveLength(2)
+    const results = await Promise.allSettled([attempt(), attempt()])
+    const succeeded = results.filter((r) => r.status === 'fulfilled')
+    expect(succeeded).toHaveLength(2)
     const v = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(v.stock).toBe(3)
   })

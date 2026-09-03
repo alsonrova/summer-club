@@ -99,6 +99,39 @@ async function prepareOrder(
   return { order, variantId: variant.id }
 }
 
+/**
+ * Crée une seconde commande sur la déclinaison d'une commande déjà préparée par
+ * `prepareOrder` — pour un test qui a besoin de deux commandes distinguables par leur
+ * statut, sans recréer tout un catalogue (produit/catégorie/déclinaison) pour la seconde.
+ */
+async function prepareSecondOrder(
+  reference: string,
+  variantId: string,
+  options: { channel: 'whatsapp' | 'cash_on_delivery'; status: 'pending_confirmation' | 'cancelled'; quantity: number },
+) {
+  return prisma.order.create({
+    data: {
+      reference,
+      trackingToken: `token-${reference}`,
+      channel: options.channel,
+      status: options.status,
+      customerName: 'Cliente e2e',
+      phone: '0320000000',
+      subtotal: 45000 * options.quantity,
+      shippingFee: 0,
+      total: 45000 * options.quantity,
+      items: {
+        create: {
+          variantId,
+          nameSnapshot: `Produit ${reference} — Unique`,
+          unitPriceSnapshot: 45000,
+          quantity: options.quantity,
+        },
+      },
+    },
+  })
+}
+
 test.beforeEach(async ({}, testInfo) => {
   await cleanUp(testKey(testInfo))
 })
@@ -125,6 +158,46 @@ test('la liste retrouve une commande par sa référence et ouvre sa fiche', asyn
   await expect(page.getByRole('heading', { name: `Commande ${key}` })).toBeVisible()
   // Les lignes sont figées à la commande : le nom conservé, pas celui du catalogue courant.
   await expect(page.getByText(`Produit ${key} — Unique`)).toBeVisible()
+})
+
+// AdminTable.filterParams (src/admin/engine/table.tsx) fait vivre deux vocabulaires côte à
+// côte : les champs du schéma sont anglais (`status`, `channel`) mais l'adresse reste
+// française (`?statut=`, `?canal=`), parce qu'un être humain la lit, la recopie et la
+// prononce (docs/CONVENTIONS.md § 1). Rien ne couvrait ce mappage avant ce test — le seul
+// test qui cliquait « Filtrer » (ci-dessus) ne renseignait que « Référence », dont le nom de
+// paramètre est identique en français et en anglais et ne peut donc pas trahir un mappage
+// cassé. Ce test choisit délibérément le filtre `statut`, dont le nom de paramètre DIFFÈRE
+// du nom de champ (`status`), et vérifie à la fois l'URL produite et l'effet réel sur les
+// lignes affichées.
+test('le filtre par statut écrit `statut` (français) avec la valeur anglaise dans l\'URL, et restreint la liste', async ({ page }, testInfo) => {
+  const key = testKey(testInfo)
+  const otherReference = `${key}-B`
+  const { variantId } = await prepareOrder(key, {
+    channel: 'cash_on_delivery', status: 'cancelled', stock: 5, quantity: 1,
+  })
+  // Même déclinaison, référence et statut distincts : la commande à exclure du filtre.
+  await prepareSecondOrder(otherReference, variantId, {
+    channel: 'cash_on_delivery', status: 'pending_confirmation', quantity: 1,
+  })
+
+  await page.goto('/admin/commandes')
+  // Le filtre `Référence` borne aux deux commandes de CE test (toutes deux commencent par
+  // `key`) : sans lui, filtrer par seul statut mêlerait les commandes `cancelled` d'autres
+  // tests s'exécutant en parallèle, et l'assertion de visibilité ci-dessous deviendrait
+  // instable — chaque test ne possède que SES données (voir cleanUp ci-dessus).
+  await page.getByLabel('Référence').fill(key)
+  await page.getByLabel('Statut').selectOption({ label: 'Annulée' })
+  await page.getByRole('button', { name: 'Filtrer' }).click()
+
+  // Le nom du paramètre reste français (`statut`), sa valeur est la valeur d'énumération
+  // anglaise (`cancelled`) : c'est exactement ce que filterParams={{ status: 'statut', … }}
+  // doit produire. Si la prop disparaît, le <select> émettrait `?status=cancelled` — un
+  // paramètre que la page ne relit jamais (elle lit `sp.statut`) — et ce filtre resterait
+  // muet : ni erreur, ni ligne rouge ailleurs, juste un filtrage qui ne fait plus rien.
+  expect(new URL(page.url()).searchParams.get('statut')).toBe('cancelled')
+
+  await expect(page.getByRole('link', { name: key, exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: otherReference, exact: true })).toHaveCount(0)
 })
 
 test('confirmer une commande WhatsApp décrémente le stock', async ({ page }, testInfo) => {

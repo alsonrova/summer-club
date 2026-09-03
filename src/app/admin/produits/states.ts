@@ -25,7 +25,7 @@ export type SimpleActionState = {
 export const initialSimpleActionState: SimpleActionState = { error: null }
 
 // Même forme que ProductFormState ci-dessus (succès, erreurs par champ, valeurs à
-// restituer) : le formulaire de création de déclinaison (formulaire-declinaison.tsx) suit
+// restituer) : le formulaire de création de déclinaison (variant-form.tsx) suit
 // le même patron useActionState que ProductForm, sur son propre schéma.
 export type VariantFormState = {
   success: boolean

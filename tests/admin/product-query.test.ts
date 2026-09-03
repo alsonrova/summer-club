@@ -6,7 +6,7 @@ import { listProductsPaginated, PRODUCTS_PER_PAGE } from '@/app/admin/produits/q
 // que de charger tout le catalogue en mémoire pour le découper ensuite en JavaScript — un
 // piège explicitement signalé pour cette tâche (AdminTable est un composant de
 // présentation, la pagination reste à écrire).
-const PREFIXE = 'pagtest-'
+const PREFIX = 'pagtest-'
 let categoryId: string
 
 beforeAll(async () => {
@@ -19,7 +19,7 @@ beforeAll(async () => {
 
   // Nettoyage défensif : une exécution précédente interrompue (Ctrl-C, crash worker)
   // peut avoir laissé des produits de test en base.
-  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE } } })
+  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIX } } })
 
   // Un seul aller-retour pour les 25 lignes : la version en boucle (25 `create` séquentiels)
   // dépassait le délai de garde de 10 s de Vitest sur une machine chargée ou à froid —
@@ -28,7 +28,7 @@ beforeAll(async () => {
   const total = PRODUCTS_PER_PAGE + 5
   await prisma.product.createMany({
     data: Array.from({ length: total }, (_, i) => ({
-      slug: `${PREFIXE}${i}`,
+      slug: `${PREFIX}${i}`,
       name: `Produit pagination ${i}`,
       description: 'Produit créé uniquement pour vérifier la pagination admin.',
       categoryId,
@@ -39,7 +39,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE } } })
+  await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIX } } })
   await prisma.category.delete({ where: { id: categoryId } })
   await prisma.$disconnect()
 })
@@ -54,16 +54,16 @@ afterEach(() => {
 
 describe('listProductsPaginated', () => {
   it('interroge la base avec skip/take plutôt que de charger tout le catalogue', async () => {
-    const espionFindMany = vi.spyOn(prisma.product, 'findMany')
-    const espionCount = vi.spyOn(prisma.product, 'count')
+    const findManySpy = vi.spyOn(prisma.product, 'findMany')
+    const countSpy = vi.spyOn(prisma.product, 'count')
 
     const result = await listProductsPaginated(prisma.product, {
       page: 1,
       filters: { categoryId },
     })
 
-    expect(espionCount).toHaveBeenCalled()
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(countSpy).toHaveBeenCalled()
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: PRODUCTS_PER_PAGE }),
     )
     expect(result.rows).toHaveLength(PRODUCTS_PER_PAGE)
@@ -105,7 +105,7 @@ describe('listProductsPaginated', () => {
 
 // Reproduit le cas réel plutôt que celui, artificiel, du bloc ci-dessus : un produit créé
 // depuis l'interface d'administration n'a aucune raison de porter un `ordre` distinct — le
-// formulaire par défaut à 0 (voir formulaire-produit.tsx). Avec cette clé de tri
+// formulaire par défaut à 0 (voir product-form.tsx). Avec cette clé de tri
 // intégralement constante, `orderBy: { ordre: 'asc' }` seul ne garantit aucun ordre stable
 // entre deux requêtes PostgreSQL : `skip`/`take` peut alors dupliquer une ligne d'une page
 // à l'autre et en oublier une autre. Ce bloc vérifie qu'aucune ligne ne se retrouve sur
@@ -113,8 +113,8 @@ describe('listProductsPaginated', () => {
 // second critère de tri déterministe (`id`), pas via des valeurs d'`ordre` distinctes que
 // l'interface ne produit jamais.
 describe('listProductsPaginated avec un `ordre` identique pour tous les produits (cas réel)', () => {
-  const PREFIXE_ORDRE_CONSTANT = 'pagtest-ordre-constant-'
-  let categoryIdOrdreConstant: string
+  const CONSTANT_ORDER_PREFIX = 'pagtest-ordre-constant-'
+  let constantOrderCategoryId: string
 
   beforeAll(async () => {
     const category = await prisma.category.upsert({
@@ -122,31 +122,31 @@ describe('listProductsPaginated avec un `ordre` identique pour tous les produits
       update: {},
       create: { slug: 'pagination-test-ordre-constant', name: 'Pagination Test Ordre Constant', displayOrder: 98 },
     })
-    categoryIdOrdreConstant = category.id
+    constantOrderCategoryId = category.id
 
-    await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE_ORDRE_CONSTANT } } })
+    await prisma.product.deleteMany({ where: { slug: { startsWith: CONSTANT_ORDER_PREFIX } } })
 
     // Même correctif que le beforeAll du bloc précédent : un seul `createMany` plutôt que
     // 25 allers-retours séquentiels sous le délai de garde de 10 s de Vitest.
     const total = PRODUCTS_PER_PAGE + 5
     await prisma.product.createMany({
       data: Array.from({ length: total }, (_, i) => ({
-        slug: `${PREFIXE_ORDRE_CONSTANT}${i}`,
+        slug: `${CONSTANT_ORDER_PREFIX}${i}`,
         name: `Produit ordre constant ${i}`,
         description: 'Produit créé uniquement pour vérifier la stabilité de la pagination.',
-        categoryId: categoryIdOrdreConstant,
+        categoryId: constantOrderCategoryId,
         basePrice: 10000,
         // Valeur constante volontaire : c'est le cas réel, tout produit créé depuis
         // l'interface a `ordre: 0` (défaut Prisma, jamais exposé au formulaire avant
-        // ce correctif — voir formulaire-produit.tsx).
+        // ce correctif — voir product-form.tsx).
         displayOrder: 0,
       })),
     })
   })
 
   afterAll(async () => {
-    await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE_ORDRE_CONSTANT } } })
-    await prisma.category.delete({ where: { id: categoryIdOrdreConstant } })
+    await prisma.product.deleteMany({ where: { slug: { startsWith: CONSTANT_ORDER_PREFIX } } })
+    await prisma.category.delete({ where: { id: constantOrderCategoryId } })
   })
 
   it("ne duplique et n'oublie aucune ligne entre deux pages quand `ordre` est identique pour tous les produits", async () => {
@@ -155,18 +155,18 @@ describe('listProductsPaginated avec un `ordre` identique pour tous les produits
     // pratique un ordre stable tant que rien ne le perturbe — un retour en arrière sur le
     // second critère de tri ne serait donc pas détecté. Assertion sur la clé de tri
     // réellement transmise à Prisma, pas seulement sur les lignes obtenues.
-    const espionFindMany = vi.spyOn(prisma.product, 'findMany')
+    const findManySpy = vi.spyOn(prisma.product, 'findMany')
 
     const page1 = await listProductsPaginated(prisma.product, {
       page: 1,
-      filters: { categoryId: categoryIdOrdreConstant },
+      filters: { categoryId: constantOrderCategoryId },
     })
     const page2 = await listProductsPaginated(prisma.product, {
       page: 2,
-      filters: { categoryId: categoryIdOrdreConstant },
+      filters: { categoryId: constantOrderCategoryId },
     })
 
-    expect(espionFindMany).toHaveBeenCalledWith(
+    expect(findManySpy).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] }),
     )
 
@@ -182,7 +182,7 @@ describe('listProductsPaginated avec un `ordre` identique pour tous les produits
     }
     // ...et l'ensemble des deux pages couvre bien tous les produits créés, sans doublon ni
     // absent.
-    const tousLesIds = new Set([...idsPage1, ...idsPage2])
-    expect(tousLesIds.size).toBe(PRODUCTS_PER_PAGE + 5)
+    const allIds = new Set([...idsPage1, ...idsPage2])
+    expect(allIds.size).toBe(PRODUCTS_PER_PAGE + 5)
   })
 })
