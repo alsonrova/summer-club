@@ -3,23 +3,23 @@ import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import { formatAriary } from '@/domain/money'
 import {
-  modifierProduit,
-  ajusterStock,
-  televerserMedia,
-  reordonnerMedia,
-  creerDeclinaison,
-  modifierAltMedia,
-  definirPhotoPrincipale,
-  supprimerMedia,
+  updateProduct,
+  adjustStock,
+  uploadMedia,
+  reorderMedia,
+  createVariant,
+  updateMediaAlt,
+  setPrimaryPhoto,
+  deleteMedia,
 } from '../actions'
-import { etatFormulaireProduitInitial } from '../etats'
-import { FormulaireProduit } from '../formulaire-produit'
-import { FormulaireStock } from './formulaire-stock'
-import { FormulaireMedia } from './formulaire-media'
-import { FormulaireDeclinaison } from './formulaire-declinaison'
-import { MediaCarte } from './media-carte'
+import { initialProductFormState } from '../etats'
+import { ProductForm } from '../formulaire-produit'
+import { StockForm } from './formulaire-stock'
+import { MediaForm } from './formulaire-media'
+import { VariantForm } from './formulaire-declinaison'
+import { MediaCard } from './media-carte'
 
-export default async function FicheProduitPage({
+export default async function ProductDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
@@ -27,7 +27,7 @@ export default async function FicheProduitPage({
   await requireAdmin()
   const { id } = await params
 
-  const [produit, categories] = await Promise.all([
+  const [product, categories] = await Promise.all([
     prisma.product.findUnique({
       where: { id },
       include: {
@@ -38,27 +38,27 @@ export default async function FicheProduitPage({
     prisma.category.findMany({ orderBy: { ordre: 'asc' }, select: { id: true, nom: true } }),
   ])
 
-  if (!produit) notFound()
+  if (!product) notFound()
 
-  const modifierCeProduit = modifierProduit.bind(null, produit.id)
-  const televerserPourCeProduit = televerserMedia.bind(null, produit.id)
-  const creerDeclinaisonPourCeProduit = creerDeclinaison.bind(null, produit.id)
+  const updateThisProduct = updateProduct.bind(null, product.id)
+  const uploadForThisProduct = uploadMedia.bind(null, product.id)
+  const createVariantForThisProduct = createVariant.bind(null, product.id)
 
   return (
     <div className="flex flex-col gap-10">
       <div>
-        <h1 className="mb-6 font-display text-2xl font-light text-bark">{produit.nom}</h1>
-        <FormulaireProduit
-          action={modifierCeProduit}
-          etatInitial={{ ...etatFormulaireProduitInitial, valeursInitiales: produit }}
+        <h1 className="mb-6 font-display text-2xl font-light text-bark">{product.nom}</h1>
+        <ProductForm
+          action={updateThisProduct}
+          initialState={{ ...initialProductFormState, initialValues: product }}
           categories={categories}
-          libelleSoumettre="Enregistrer"
+          submitLabel="Enregistrer"
         />
       </div>
 
       <section>
         <h2 className="mb-3 font-display text-xl font-light text-bark">Déclinaisons</h2>
-        {produit.variants.length === 0 ? (
+        {product.variants.length === 0 ? (
           <p className="text-bark-soft">Aucune déclinaison pour ce produit.</p>
         ) : (
           <table className="w-full border-collapse text-left">
@@ -71,18 +71,18 @@ export default async function FicheProduitPage({
               </tr>
             </thead>
             <tbody>
-              {produit.variants.map((variant) => (
+              {product.variants.map((variant) => (
                 <tr key={variant.id} className="border-b border-taupe/40">
                   <td className="px-3 py-2 text-bark">{variant.libelle}</td>
                   <td className="px-3 py-2 text-bark">{variant.sku}</td>
                   <td className="px-3 py-2 text-bark tabular-nums">
-                    {formatAriary(produit.prixBase + variant.deltaPrix)}
+                    {formatAriary(product.prixBase + variant.deltaPrix)}
                   </td>
                   <td className="px-3 py-2">
-                    <FormulaireStock
-                      action={ajusterStock.bind(null, variant.id)}
-                      stockActuel={variant.stock}
-                      seuilAlerte={variant.seuilAlerte}
+                    <StockForm
+                      action={adjustStock.bind(null, variant.id)}
+                      currentStock={variant.stock}
+                      lowStockThreshold={variant.seuilAlerte}
                     />
                   </td>
                 </tr>
@@ -91,7 +91,7 @@ export default async function FicheProduitPage({
           </table>
         )}
 
-        <FormulaireDeclinaison action={creerDeclinaisonPourCeProduit} prixBase={produit.prixBase} />
+        <VariantForm action={createVariantForThisProduct} basePrice={product.prixBase} />
       </section>
 
       <section>
@@ -106,16 +106,16 @@ export default async function FicheProduitPage({
           lumière.
         </p>
 
-        {produit.media.length > 0 ? (
+        {product.media.length > 0 ? (
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {produit.media.map((media) => (
-              <MediaCarte
+            {product.media.map((media) => (
+              <MediaCard
                 key={media.id}
                 media={media}
-                actionReordonner={reordonnerMedia.bind(null, media.id)}
-                actionAlt={modifierAltMedia.bind(null, media.id)}
-                actionPrincipale={definirPhotoPrincipale.bind(null, media.id)}
-                actionSupprimer={supprimerMedia.bind(null, media.id)}
+                reorderAction={reorderMedia.bind(null, media.id)}
+                altAction={updateMediaAlt.bind(null, media.id)}
+                primaryAction={setPrimaryPhoto.bind(null, media.id)}
+                deleteAction={deleteMedia.bind(null, media.id)}
               />
             ))}
           </div>
@@ -123,7 +123,7 @@ export default async function FicheProduitPage({
           <p className="mb-6 text-bark-soft">Aucune photo pour ce produit.</p>
         )}
 
-        <FormulaireMedia action={televerserPourCeProduit} />
+        <MediaForm action={uploadForThisProduct} />
       </section>
     </div>
   )

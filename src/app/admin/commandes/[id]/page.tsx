@@ -5,23 +5,23 @@ import { prisma } from '@/server/db'
 import { formatAriary } from '@/domain/money'
 import { transitionsFrom, type OrderStatus } from '@/domain/order-status'
 import { TRANSITION_LABELS, channelLabel, statusLabel } from '@/admin/resources/orders'
-import { changerStatutDepuisFormulaire } from '../actions'
-import { BoutonsStatut } from './boutons-statut'
+import { changeStatusFromForm } from '../actions'
+import { StatusButtons } from './boutons-statut'
 
 // `avant`/`apres` du journal d'audit sont des colonnes Json : Prisma les rend en
 // `JsonValue`, dont rien ne garantit la forme à la relecture (une trace ancienne, une
 // future action qui journaliserait autre chose). On extrait prudemment.
-function statutDeTrace(valeur: Prisma.JsonValue | null): string | null {
-  if (valeur === null || typeof valeur !== 'object' || Array.isArray(valeur)) return null
-  const statut = (valeur as Record<string, unknown>)['statut']
-  return typeof statut === 'string' ? statut : null
+function statusFromTrace(value: Prisma.JsonValue | null): string | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const status = (value as Record<string, unknown>)['statut']
+  return typeof status === 'string' ? status : null
 }
 
-function dateHeure(valeur: Date): string {
-  return valeur.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+function formatDateTime(value: Date): string {
+  return value.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-function Ligne({ libelle, children }: { libelle: string; children: React.ReactNode }) {
+function DetailRow({ libelle, children }: { libelle: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
       <dt className="text-small text-bark-soft">{libelle}</dt>
@@ -30,7 +30,7 @@ function Ligne({ libelle, children }: { libelle: string; children: React.ReactNo
   )
 }
 
-export default async function FicheCommandePage({
+export default async function OrderDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
@@ -38,7 +38,7 @@ export default async function FicheCommandePage({
   await requireAdmin()
   const { id } = await params
 
-  const [commande, historique] = await Promise.all([
+  const [order, history] = await Promise.all([
     prisma.order.findUnique({
       where: { id },
       // `items` porte les valeurs FIGÉES à la commande (nomFige, prixUnitaireFige) : on
@@ -53,36 +53,36 @@ export default async function FicheCommandePage({
     }),
   ])
 
-  if (!commande) notFound()
+  if (!order) notFound()
 
-  const statut = commande.statut as OrderStatus
-  const transitions = transitionsFrom(statut).map((vers) => ({
-    vers,
-    libelle: TRANSITION_LABELS[vers],
-    action: changerStatutDepuisFormulaire.bind(null, commande.id, vers),
+  const status = order.statut as OrderStatus
+  const transitions = transitionsFrom(status).map((to) => ({
+    to,
+    label: TRANSITION_LABELS[to],
+    action: changeStatusFromForm.bind(null, order.id, to),
   }))
 
   return (
     <div className="flex flex-col gap-10">
       <div>
         <h1 className="font-display text-2xl font-light text-bark">
-          Commande {commande.reference}
+          Commande {order.reference}
         </h1>
         <p className="mt-1 text-bark-soft">
-          {statusLabel(statut)} · {channelLabel(commande.canal)} · {dateHeure(commande.createdAt)}
+          {statusLabel(status)} · {channelLabel(order.canal)} · {formatDateTime(order.createdAt)}
         </p>
       </div>
 
       <section>
         <h2 className="mb-3 font-display text-xl font-light text-bark">Cliente</h2>
         <dl className="grid gap-4 sm:grid-cols-2">
-          <Ligne libelle="Nom">{commande.clientNom}</Ligne>
-          <Ligne libelle="Téléphone">{commande.tel}</Ligne>
-          <Ligne libelle="Adresse e-mail">{commande.email ?? '—'}</Ligne>
-          <Ligne libelle="Adresse de livraison">{commande.adresse ?? '—'}</Ligne>
-          <Ligne libelle="Zone de livraison">
-            {commande.zone ? `${commande.zone.nom} — ${commande.zone.delai}` : '—'}
-          </Ligne>
+          <DetailRow libelle="Nom">{order.clientNom}</DetailRow>
+          <DetailRow libelle="Téléphone">{order.tel}</DetailRow>
+          <DetailRow libelle="Adresse e-mail">{order.email ?? '—'}</DetailRow>
+          <DetailRow libelle="Adresse de livraison">{order.adresse ?? '—'}</DetailRow>
+          <DetailRow libelle="Zone de livraison">
+            {order.zone ? `${order.zone.nom} — ${order.zone.delai}` : '—'}
+          </DetailRow>
         </dl>
       </section>
 
@@ -99,7 +99,7 @@ export default async function FicheCommandePage({
               </tr>
             </thead>
             <tbody>
-              {commande.items.map((item) => (
+              {order.items.map((item) => (
                 <tr key={item.id} className="border-b border-taupe/40">
                   <td className="px-3 py-2 text-bark">{item.nomFige}</td>
                   <td className="px-3 py-2 text-bark tabular-nums">
@@ -118,44 +118,44 @@ export default async function FicheCommandePage({
         <dl className="mt-4 grid gap-2 sm:max-w-xs">
           <div className="flex justify-between">
             <dt className="text-bark-soft">Sous-total</dt>
-            <dd className="text-bark tabular-nums">{formatAriary(commande.sousTotal)}</dd>
+            <dd className="text-bark tabular-nums">{formatAriary(order.sousTotal)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-bark-soft">Livraison</dt>
-            <dd className="text-bark tabular-nums">{formatAriary(commande.fraisLivraison)}</dd>
+            <dd className="text-bark tabular-nums">{formatAriary(order.fraisLivraison)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-bark-soft">Remise</dt>
-            <dd className="text-bark tabular-nums">{formatAriary(commande.remise)}</dd>
+            <dd className="text-bark tabular-nums">{formatAriary(order.remise)}</dd>
           </div>
           <div className="flex justify-between border-t border-taupe/40 pt-2">
             <dt className="text-bark">Total</dt>
-            <dd className="text-bark tabular-nums">{formatAriary(commande.total)}</dd>
+            <dd className="text-bark tabular-nums">{formatAriary(order.total)}</dd>
           </div>
         </dl>
       </section>
 
       <section>
         <h2 className="mb-3 font-display text-xl font-light text-bark">Changer le statut</h2>
-        <BoutonsStatut transitions={transitions} />
+        <StatusButtons transitions={transitions} />
       </section>
 
       <section>
         <h2 className="mb-3 font-display text-xl font-light text-bark">Historique</h2>
-        {historique.length === 0 ? (
+        {history.length === 0 ? (
           <p className="text-bark-soft">
             Aucun changement de statut depuis la création de la commande.
           </p>
         ) : (
           <ol className="flex flex-col gap-2">
-            {historique.map((trace) => {
-              const de = statutDeTrace(trace.avant)
-              const vers = statutDeTrace(trace.apres)
+            {history.map((trace) => {
+              const from = statusFromTrace(trace.avant)
+              const to = statusFromTrace(trace.apres)
               return (
                 <li key={trace.id} className="text-bark">
-                  <span className="tabular-nums text-bark-soft">{dateHeure(trace.createdAt)}</span>
+                  <span className="tabular-nums text-bark-soft">{formatDateTime(trace.createdAt)}</span>
                   {' — '}
-                  {de ? statusLabel(de) : '?'} → {vers ? statusLabel(vers) : '?'}
+                  {from ? statusLabel(from) : '?'} → {to ? statusLabel(to) : '?'}
                   {' · '}
                   <span className="text-bark-soft">{trace.acteur}</span>
                 </li>

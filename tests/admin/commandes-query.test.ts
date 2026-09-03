@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { prisma } from '@/server/db'
-import { listerCommandesPaginees, COMMANDES_PAR_PAGE } from '@/app/admin/commandes/query'
+import { listOrdersPaginated, ORDERS_PER_PAGE } from '@/app/admin/commandes/query'
 import { CHANNELS, isChannel } from '@/admin/resources/orders'
 
 // Vérifie que la liste des commandes interroge réellement la base (skip/take + comptage)
@@ -11,7 +11,7 @@ import { CHANNELS, isChannel } from '@/admin/resources/orders'
 // qu'elles sont sélectionnées ET nettoyées : aucun `deleteMany()` sans filtre, aucun
 // comptage global. Les fichiers de test s'exécutent en parallèle (vitest.config.ts).
 const PREFIXE = 'PAGCMD-'
-const TOTAL = COMMANDES_PAR_PAGE + 5
+const TOTAL = ORDERS_PER_PAGE + 5
 
 // Horodatage identique pour toutes les commandes : c'est le cas réel qui casse un tri sur
 // `createdAt` seul (une rafale de commandes, un import). Voir le test de stabilité ci-dessous.
@@ -55,21 +55,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('listerCommandesPaginees', () => {
+describe('listOrdersPaginated', () => {
   it('interroge la base avec skip/take plutôt que de charger toutes les commandes', async () => {
     const espionFindMany = vi.spyOn(prisma.order, 'findMany')
     const espionCount = vi.spyOn(prisma.order, 'count')
 
-    const resultat = await listerCommandesPaginees(prisma.order, {
+    const resultat = await listOrdersPaginated(prisma.order, {
       page: 1,
-      filtres: { reference: PREFIXE },
+      filters: { reference: PREFIXE },
     })
 
     expect(espionCount).toHaveBeenCalled()
     expect(espionFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 0, take: COMMANDES_PAR_PAGE }),
+      expect.objectContaining({ skip: 0, take: ORDERS_PER_PAGE }),
     )
-    expect(resultat.lignes).toHaveLength(COMMANDES_PAR_PAGE)
+    expect(resultat.rows).toHaveLength(ORDERS_PER_PAGE)
     expect(resultat.total).toBe(TOTAL)
     expect(resultat.totalPages).toBe(2)
   })
@@ -81,21 +81,21 @@ describe('listerCommandesPaginees', () => {
     // serait donc pas détecté par les seules lignes obtenues.
     const espionFindMany = vi.spyOn(prisma.order, 'findMany')
 
-    const page1 = await listerCommandesPaginees(prisma.order, {
-      page: 1, filtres: { reference: PREFIXE },
+    const page1 = await listOrdersPaginated(prisma.order, {
+      page: 1, filters: { reference: PREFIXE },
     })
-    const page2 = await listerCommandesPaginees(prisma.order, {
-      page: 2, filtres: { reference: PREFIXE },
+    const page2 = await listOrdersPaginated(prisma.order, {
+      page: 2, filters: { reference: PREFIXE },
     })
 
     expect(espionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
     )
 
-    expect(page1.lignes).toHaveLength(COMMANDES_PAR_PAGE)
-    expect(page2.lignes).toHaveLength(5)
+    expect(page1.rows).toHaveLength(ORDERS_PER_PAGE)
+    expect(page2.rows).toHaveLength(5)
 
-    const ids = [...page1.lignes.map((l) => l.id), ...page2.lignes.map((l) => l.id)]
+    const ids = [...page1.rows.map((l) => l.id), ...page2.rows.map((l) => l.id)]
     // Ni doublon d'une page à l'autre, ni ligne oubliée.
     expect(new Set(ids).size).toBe(TOTAL)
   })
@@ -104,40 +104,40 @@ describe('listerCommandesPaginees', () => {
     const attendu = await prisma.order.count({
       where: { reference: { startsWith: PREFIXE }, statut: 'confirmee' },
     })
-    const resultat = await listerCommandesPaginees(prisma.order, {
-      page: 1, filtres: { reference: PREFIXE, statut: 'confirmee' },
+    const resultat = await listOrdersPaginated(prisma.order, {
+      page: 1, filters: { reference: PREFIXE, status: 'confirmee' },
     })
     expect(resultat.total).toBe(attendu)
-    expect(resultat.lignes.every((l) => l.statut === 'confirmee')).toBe(true)
+    expect(resultat.rows.every((l) => l.statut === 'confirmee')).toBe(true)
   })
 
   it('filtre par canal', async () => {
-    const resultat = await listerCommandesPaginees(prisma.order, {
-      page: 1, filtres: { reference: PREFIXE, canal: 'whatsapp' },
+    const resultat = await listOrdersPaginated(prisma.order, {
+      page: 1, filters: { reference: PREFIXE, channel: 'whatsapp' },
     })
-    expect(resultat.lignes.length).toBeGreaterThan(0)
-    expect(resultat.lignes.every((l) => l.canal === 'whatsapp')).toBe(true)
+    expect(resultat.rows.length).toBeGreaterThan(0)
+    expect(resultat.rows.every((l) => l.canal === 'whatsapp')).toBe(true)
   })
 
   it('retrouve une commande par un fragment de référence, sans respect de la casse', async () => {
-    const resultat = await listerCommandesPaginees(prisma.order, {
-      page: 1, filtres: { reference: 'pagcmd-0007' },
+    const resultat = await listOrdersPaginated(prisma.order, {
+      page: 1, filters: { reference: 'pagcmd-0007' },
     })
     expect(resultat.total).toBe(1)
-    expect(resultat.lignes[0]?.reference).toBe(`${PREFIXE}0007`)
+    expect(resultat.rows[0]?.reference).toBe(`${PREFIXE}0007`)
   })
 
   it('ramène une page demandée hors bornes à la dernière page existante', async () => {
-    const resultat = await listerCommandesPaginees(prisma.order, {
-      page: 999, filtres: { reference: PREFIXE },
+    const resultat = await listOrdersPaginated(prisma.order, {
+      page: 999, filters: { reference: PREFIXE },
     })
     expect(resultat.page).toBe(resultat.totalPages)
-    expect(resultat.lignes.length).toBeGreaterThan(0)
+    expect(resultat.rows.length).toBeGreaterThan(0)
   })
 })
 
 // `isChannel` vit auprès de `CHANNELS` (src/admin/resources/orders.ts), comme `isOrderStatus` vit
-// auprès de `ORDER_STATUSES` et `estStatutAvis` auprès de `STATUTS_AVIS` : une seule façon de
+// auprès de `ORDER_STATUSES` et `isReviewStatus` auprès de `REVIEW_STATUSES` : une seule façon de
 // valider une valeur d'énumération venue du client dans ce projet. Il est testé ici parce
 // que c'est le filtre de CETTE liste qu'il protège.
 describe('isChannel', () => {

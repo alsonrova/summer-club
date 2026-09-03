@@ -1,4 +1,4 @@
-import { BoutonDeconnexion } from '@/components/bouton-deconnexion'
+import { SignOutButton } from '@/components/bouton-deconnexion'
 
 // Atteinte par requireAdmin() quand une session valide n'a pas le rôle `admin` (ex. un
 // compte `membre`). Volontairement distincte de /connexion : rediriger un utilisateur déjà
@@ -7,7 +7,7 @@ import { BoutonDeconnexion } from '@/components/bouton-deconnexion'
 // `forbidden()` de Next.js aurait été l'option idiomatique, mais elle nécessite le drapeau
 // expérimental `experimental.authInterrupts` (voir node_modules/next/dist/docs/01-app/
 // 03-api-reference/04-functions/forbidden.md) : on reste donc sur cette page dédiée.
-export default function AccesRefusePage() {
+export default function AccessDeniedPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-sand px-6">
       <div className="w-full max-w-sm rounded-lg border border-taupe/40 bg-shell p-8 text-center">
@@ -16,7 +16,7 @@ export default function AccesRefusePage() {
           Cette section est réservée aux administrateurs. Votre compte ne dispose pas des
           droits nécessaires.
         </p>
-        <BoutonDeconnexion />
+        <SignOutButton />
       </div>
     </div>
   )

@@ -1,9 +1,9 @@
 'use client'
 
 import { useActionState, useId } from 'react'
-import type { EtatFormulaireTemoignage } from './etats'
+import type { TestimonialFormState } from './etats'
 
-function Erreurs({ messages, id }: { messages: string[] | undefined; id: string }) {
+function FieldErrors({ messages, id }: { messages: string[] | undefined; id: string }) {
   if (!messages || messages.length === 0) return null
   return (
     <p id={id} role="alert" className="text-small text-bark">
@@ -14,59 +14,59 @@ function Erreurs({ messages, id }: { messages: string[] | undefined; id: string 
 
 /**
  * Saisie d'un témoignage reçu hors du site. Aucun champ « source » : un témoignage saisi
- * ici est toujours `importe` (voir importerTemoignage) — le badge « Achat vérifié » ne
+ * ici est toujours `importe` (voir importTestimonial) — le badge « Achat vérifié » ne
  * s'obtient qu'en passant réellement commande.
  */
-export function FormulaireTemoignage({
+export function TestimonialForm({
   action,
-  produits,
+  products,
 }: {
   action: (
-    etatPrecedent: EtatFormulaireTemoignage,
+    previousState: TestimonialFormState,
     formData: FormData,
-  ) => Promise<EtatFormulaireTemoignage>
-  produits: { id: string; nom: string }[]
+  ) => Promise<TestimonialFormState>
+  products: { id: string; nom: string }[]
 }) {
-  const [etat, soumettre, enCours] = useActionState<EtatFormulaireTemoignage, FormData>(action, {
-    succes: false,
-    erreurs: {},
-    valeursInitiales: {},
+  const [state, submit, isPending] = useActionState<TestimonialFormState, FormData>(action, {
+    success: false,
+    errors: {},
+    initialValues: {},
   })
-  const prefixe = useId()
+  const prefix = useId()
 
-  const valeur = (nom: string) => {
-    const v = etat.valeursInitiales[nom]
+  const value = (name: string) => {
+    const v = state.initialValues[name]
     return v === undefined || v === null ? '' : String(v)
   }
 
   return (
-    <form action={soumettre} className="flex flex-col gap-4 sm:max-w-xl">
+    <form action={submit} className="flex flex-col gap-4 sm:max-w-xl">
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefixe}-auteur`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-auteur`} className="text-small text-bark-soft">
           Autrice
         </label>
         <input
-          id={`${prefixe}-auteur`}
+          id={`${prefix}-auteur`}
           name="auteur"
           type="text"
-          defaultValue={valeur('auteur')}
-          aria-invalid={etat.erreurs['auteur'] ? true : undefined}
-          aria-describedby={etat.erreurs['auteur'] ? `${prefixe}-auteur-erreur` : undefined}
+          defaultValue={value('auteur')}
+          aria-invalid={state.errors['auteur'] ? true : undefined}
+          aria-describedby={state.errors['auteur'] ? `${prefix}-auteur-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <Erreurs messages={etat.erreurs['auteur']} id={`${prefixe}-auteur-erreur`} />
+        <FieldErrors messages={state.errors['auteur']} id={`${prefix}-auteur-erreur`} />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefixe}-note`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-note`} className="text-small text-bark-soft">
           Note
         </label>
         <select
-          id={`${prefixe}-note`}
+          id={`${prefix}-note`}
           name="note"
-          defaultValue={valeur('note') || '5'}
-          aria-invalid={etat.erreurs['note'] ? true : undefined}
-          aria-describedby={etat.erreurs['note'] ? `${prefixe}-note-erreur` : undefined}
+          defaultValue={value('note') || '5'}
+          aria-invalid={state.errors['note'] ? true : undefined}
+          aria-describedby={state.errors['note'] ? `${prefix}-note-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         >
           {[5, 4, 3, 2, 1].map((n) => (
@@ -75,56 +75,56 @@ export function FormulaireTemoignage({
             </option>
           ))}
         </select>
-        <Erreurs messages={etat.erreurs['note']} id={`${prefixe}-note-erreur`} />
+        <FieldErrors messages={state.errors['note']} id={`${prefix}-note-erreur`} />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefixe}-produit`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-produit`} className="text-small text-bark-soft">
           Produit
         </label>
         <select
-          id={`${prefixe}-produit`}
+          id={`${prefix}-produit`}
           name="productId"
-          defaultValue={valeur('productId')}
-          aria-invalid={etat.erreurs['productId'] ? true : undefined}
-          aria-describedby={etat.erreurs['productId'] ? `${prefixe}-produit-erreur` : undefined}
+          defaultValue={value('productId')}
+          aria-invalid={state.errors['productId'] ? true : undefined}
+          aria-describedby={state.errors['productId'] ? `${prefix}-produit-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         >
           <option value="">Aucun produit en particulier</option>
-          {produits.map((produit) => (
-            <option key={produit.id} value={produit.id}>
-              {produit.nom}
+          {products.map((product) => (
+            <option key={product.id} value={product.id}>
+              {product.nom}
             </option>
           ))}
         </select>
-        <Erreurs messages={etat.erreurs['productId']} id={`${prefixe}-produit-erreur`} />
+        <FieldErrors messages={state.errors['productId']} id={`${prefix}-produit-erreur`} />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefixe}-texte`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-texte`} className="text-small text-bark-soft">
           Témoignage
         </label>
         <textarea
-          id={`${prefixe}-texte`}
+          id={`${prefix}-texte`}
           name="texte"
           rows={3}
-          defaultValue={valeur('texte')}
-          aria-invalid={etat.erreurs['texte'] ? true : undefined}
-          aria-describedby={etat.erreurs['texte'] ? `${prefixe}-texte-erreur` : undefined}
+          defaultValue={value('texte')}
+          aria-invalid={state.errors['texte'] ? true : undefined}
+          aria-describedby={state.errors['texte'] ? `${prefix}-texte-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <Erreurs messages={etat.erreurs['texte']} id={`${prefixe}-texte-erreur`} />
+        <FieldErrors messages={state.errors['texte']} id={`${prefix}-texte-erreur`} />
       </div>
 
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={enCours}
+          disabled={isPending}
           className="rounded border border-taupe/40 bg-sage-deep px-4 py-2 text-shell hover:opacity-90 disabled:opacity-60"
         >
-          {enCours ? 'Enregistrement…' : 'Importer le témoignage'}
+          {isPending ? 'Enregistrement…' : 'Importer le témoignage'}
         </button>
-        {etat.succes ? (
+        {state.success ? (
           <span role="status" className="text-small text-bark-soft">
             Témoignage importé.
           </span>

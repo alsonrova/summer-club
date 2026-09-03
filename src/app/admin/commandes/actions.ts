@@ -10,7 +10,7 @@ import {
 } from '@/server/order-status-service'
 import { isOrderStatus, type OrderStatus } from '@/domain/order-status'
 import { statusLabel } from '@/admin/resources/orders'
-import type { EtatChangementStatut } from './etats'
+import type { StatusChangeState } from './etats'
 
 // Convention de sécurité (voir src/server/auth.ts) : un layout ne protège ni les Server
 // Actions ni les Route Handlers. Chaque action ci-dessous appelle requireAdmin() elle-même,
@@ -24,27 +24,27 @@ import type { EtatChangementStatut } from './etats'
  * Le cœur métier vit dans src/server/order-status-service.ts, sans authentification, parce
  * que le webhook de paiement (tâche 19) l'appellera aussi et n'est pas un administrateur.
  */
-export async function changerStatut(orderId: string, vers: OrderStatus) {
+export async function changeStatus(orderId: string, to: OrderStatus) {
   const session = await requireAdmin()
 
-  // `vers` arrive du client : une Server Action exportée est une route publique, protégée
+  // `to` arrive du client : une Server Action exportée est une route publique, protégée
   // par requireAdmin() mais pas typée à l'exécution. La machine à états rejetterait déjà une
   // valeur inconnue (`transitionAllowed` renvoie faux), mais mieux vaut la refuser ici,
   // avant qu'elle n'atteigne l'énumération PostgreSQL, avec un message compréhensible.
-  if (!isOrderStatus(vers)) {
-    throw new Error(`Statut inconnu : ${String(vers)}`)
+  if (!isOrderStatus(to)) {
+    throw new Error(`Statut inconnu : ${String(to)}`)
   }
 
-  const commande = await applyStatus(orderId, vers, session.user.email)
+  const order = await applyStatus(orderId, to, session.user.email)
 
   // `applyStatus` n'invalide rien elle-même (elle doit rester appelable hors requête,
   // cf. son commentaire) : c'est ici, dans une vraie requête, qu'on le fait — en suivant la
   // liste qu'elle publie, pour n'en oublier aucun.
-  for (const chemin of pathsToRevalidate(orderId)) {
-    revalidatePath(chemin)
+  for (const path of pathsToRevalidate(orderId)) {
+    revalidatePath(path)
   }
 
-  return commande
+  return order
 }
 
 /**
@@ -57,33 +57,33 @@ export async function changerStatut(orderId: string, vers: OrderStatus) {
  * Tout le reste est relevé tel quel — y compris la redirection de requireAdmin(), qui
  * s'implémente par un throw et ne doit surtout pas être avalée ici.
  */
-export async function changerStatutDepuisFormulaire(
+export async function changeStatusFromForm(
   orderId: string,
-  vers: OrderStatus,
-  _etatPrecedent: EtatChangementStatut,
+  to: OrderStatus,
+  _previousState: StatusChangeState,
   _formData: FormData,
-): Promise<EtatChangementStatut> {
+): Promise<StatusChangeState> {
   await requireAdmin()
 
   try {
-    await changerStatut(orderId, vers)
-  } catch (erreur) {
-    if (erreur instanceof OutOfStockError) {
+    await changeStatus(orderId, to)
+  } catch (error) {
+    if (error instanceof OutOfStockError) {
       return {
-        erreur:
+        error:
           "Stock insuffisant pour confirmer cette commande : la pièce est partie entre-temps. "
           + 'Réapprovisionnez la déclinaison concernée, ou annulez la commande.',
       }
     }
-    if (erreur instanceof ForbiddenTransitionError) {
+    if (error instanceof ForbiddenTransitionError) {
       return {
-        erreur:
-          `Cette commande est passée à « ${statusLabel(erreur.from)} » entre-temps : `
-          + `« ${statusLabel(erreur.to)} » n'est plus possible. Rechargez la page.`,
+        error:
+          `Cette commande est passée à « ${statusLabel(error.from)} » entre-temps : `
+          + `« ${statusLabel(error.to)} » n'est plus possible. Rechargez la page.`,
       }
     }
-    throw erreur
+    throw error
   }
 
-  return { erreur: null }
+  return { error: null }
 }

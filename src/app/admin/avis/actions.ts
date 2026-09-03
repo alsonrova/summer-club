@@ -12,8 +12,8 @@ import {
   InvalidReviewStatusError,
 } from '@/server/reviews'
 import type { ValidationErrors } from '@/admin/engine/actions'
-import { estStatutModeration, type StatutModeration } from './query'
-import type { EtatActionAvis, EtatFormulaireTemoignage } from './etats'
+import { isModerationStatus, type ModerationStatus } from './query'
+import type { ReviewActionState, TestimonialFormState } from './etats'
 
 // Convention de sécurité (voir src/server/auth.ts) : chaque Server Action appelle
 // requireAdmin() elle-même, en première instruction.
@@ -21,15 +21,15 @@ import type { EtatActionAvis, EtatFormulaireTemoignage } from './etats'
 // Convention sur les IDENTIFIANTS, alignée sur ce qui existe déjà côté commandes et côté
 // produits — et donc DÉLIBÉRÉMENT pas une troisième façon de faire.
 //
-// Les quatre appels Prisma d'`epinglerAvis` et de `modererAvis` (`findUniqueOrThrow` puis
+// Les quatre appels Prisma de `pinReview` et de `moderateReview` (`findUniqueOrThrow` puis
 // `update`, dans chacune) reçoivent `id` du client sans le valider à part. Ce n'est pas un
 // oubli : un identifiant d'avis est un `cuid` qui n'existe nulle part dans l'interface
 // autrement que copié d'une ligne réellement affichée. Un identifiant absent de l'interface
 // est donc forgé — c'est un DÉFAUT, pas une faute de saisie que la propriétaire pourrait
 // corriger. `findUniqueOrThrow` lève alors P2025, l'action s'interrompt, et les adaptateurs
 // de formulaire ci-dessous laissent cette erreur REMONTER au lieu de la traduire : c'est le
-// même parti pris que `televerserMedia` (src/app/admin/produits/actions.ts, « un identifiant
-// absent de l'interface, donc forgé ») et que `changerStatut` côté commandes, dont le test
+// même parti pris que `uploadMedia` (src/app/admin/produits/actions.ts, « un identifiant
+// absent de l'interface, donc forgé ») et que `changeStatus` côté commandes, dont le test
 // « laisse remonter une panne technique au lieu de la déguiser en message métier » fixe la
 // règle. Un `z.cuid()` de plus n'ajouterait rien : il refuserait les mêmes appels, un cran
 // plus tôt, avec un message que personne ne doit jamais lire.
@@ -38,7 +38,7 @@ import type { EtatActionAvis, EtatFormulaireTemoignage } from './etats'
 // atteindre la base et y produire une erreur brute (voir les gardes ci-dessous), alors qu'un
 // identifiant inconnu n'y produit qu'un « enregistrement introuvable » sans ambiguïté.
 
-const temoignageSchema = z.object({
+const testimonialSchema = z.object({
   productId: z.string().nullable(),
   note: z.number().int().min(1, 'La note va de 1 à 5').max(5, 'La note va de 1 à 5'),
   texte: z.string().trim().min(5, 'Le témoignage doit faire au moins cinq caractères'),
@@ -46,7 +46,7 @@ const temoignageSchema = z.object({
 })
 
 /** Chemins dont le rendu dépend des avis : page d'accueil (avis épinglés) et vitrine. */
-function revaliderAvis() {
+function revalidateReviewPaths() {
   revalidatePath('/')
   revalidatePath('/boutique')
   revalidatePath('/admin/avis')
@@ -65,38 +65,38 @@ function revaliderAvis() {
  * `statut: 'publie'` en revanche : la propriétaire vient de saisir ce texte elle-même, le
  * faire repasser par sa propre file de modération n'aurait aucun sens.
  */
-export async function importerTemoignage(donnees: unknown) {
+export async function importTestimonial(input: unknown) {
   const session = await requireAdmin()
-  const valide = temoignageSchema.parse(donnees)
+  const validated = testimonialSchema.parse(input)
 
   // Vérifié avant l'écriture : un productId absent produirait sinon une violation de clé
   // étrangère (P2003) brute au lieu d'un message lisible.
-  if (valide.productId !== null) {
-    const produit = await prisma.product.findUnique({ where: { id: valide.productId } })
-    if (!produit) throw new ProductNotFoundError(valide.productId)
+  if (validated.productId !== null) {
+    const product = await prisma.product.findUnique({ where: { id: validated.productId } })
+    if (!product) throw new ProductNotFoundError(validated.productId)
   }
 
-  const avis = await prisma.review.create({
-    data: { ...valide, source: 'importe', statut: 'publie' },
+  const review = await prisma.review.create({
+    data: { ...validated, source: 'importe', statut: 'publie' },
   })
 
   await recordAudit({
     actor: session.user.email,
     action: 'importer_temoignage',
     entity: 'Review',
-    entityId: avis.id,
-    after: { auteur: avis.auteur, note: avis.note, source: avis.source, statut: avis.statut },
+    entityId: review.id,
+    after: { auteur: review.auteur, note: review.note, source: review.source, statut: review.statut },
   })
 
-  revaliderAvis()
-  return avis
+  revalidateReviewPaths()
+  return review
 }
 
 /**
  * Bascule la mise en avant d'un avis sur la page d'accueil.
  *
  * L'invariant « un avis non publié ne s'épingle pas » est appliqué ICI, et pas seulement
- * dans <ActionsAvis> qui masque le bouton : cette fonction est exportée d'un fichier
+ * dans <ReviewActions> qui masque le bouton : cette fonction est exportée d'un fichier
  * `'use server'`, c'est donc un point d'entrée POST à part entière, et un garde-fou posé
  * dans un composant client ne protège rien. Le scénario n'a rien de théorique — deux
  * onglets ouverts sur la liste des avis publiés, l'onglet B rejette un avis, l'onglet A
@@ -104,54 +104,54 @@ export async function importerTemoignage(donnees: unknown) {
  * n'apparaîtrait nulle part.
  *
  * Le DÉPUNAISAGE (`epingle` faux) reste toujours permis, quel que soit le statut : il
- * ramène vers l'état cohérent — c'est d'ailleurs ce que fait `modererAvis` en rejetant.
+ * ramène vers l'état cohérent — c'est d'ailleurs ce que fait `moderateReview` en rejetant.
  * L'interdire enfermerait un avis déjà épinglé hors vitrine.
  *
- * IDEMPOTENTE, comme `modererAvis` : voir le garde en fin de fonction.
+ * IDEMPOTENTE, comme `moderateReview` : voir le garde en fin de fonction.
  */
-export async function epinglerAvis(id: string, epingle: boolean) {
+export async function pinReview(id: string, pinned: boolean) {
   const session = await requireAdmin()
 
-  // `epingle` arrive du client, exactement comme `statut` dans `modererAvis` juste en
+  // `pinned` arrive du client, exactement comme `status` dans `moderateReview` juste en
   // dessous : même genre de point d'entrée POST, même absence de typage à l'exécution, donc
   // même garde — en première instruction utile, avant même la lecture. Sans lui, `'oui'`
   // (truthy) franchit l'invariant « seul un avis publié s'épingle » comme un vrai `true`,
   // `undefined` (falsy) le franchit par la porte du dépunaisage, et c'est `prisma.review
   // .update` qui échoue, en `PrismaClientValidationError` brute sous les yeux de
   // l'administratrice.
-  if (typeof epingle !== 'boolean') {
-    throw new InvalidPinError(String(epingle))
+  if (typeof pinned !== 'boolean') {
+    throw new InvalidPinError(String(pinned))
   }
 
-  const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
+  const before = await prisma.review.findUniqueOrThrow({ where: { id } })
 
-  if (epingle && avant.statut !== 'publie') {
-    throw new ReviewNotPublishedError(avant.statut)
+  if (pinned && before.statut !== 'publie') {
+    throw new ReviewNotPublishedError(before.statut)
   }
 
-  // IDEMPOTENTE, comme `modererAvis` : une bascule qui ne bascule rien n'écrit rien et ne
+  // IDEMPOTENTE, comme `moderateReview` : une bascule qui ne bascule rien n'écrit rien et ne
   // journalise rien. Le bouton étant lié à `!avis.epingle`, deux onglets affichant tous deux
   // un avis non épinglé envoient tous deux `true` — le second n'épinglait rien mais inscrivait
   // quand même « epingle: true → true » au journal, c'est-à-dire un changement qui n'a pas eu
   // lieu. APRÈS l'invariant, jamais avant : un avis épinglé hors vitrine est justement l'état
   // que l'invariant existe pour empêcher, on ne le confirme pas en silence.
-  if (avant.epingle === epingle) {
-    return avant
+  if (before.epingle === pinned) {
+    return before
   }
 
-  const avis = await prisma.review.update({ where: { id }, data: { epingle } })
+  const review = await prisma.review.update({ where: { id }, data: { epingle: pinned } })
 
   await recordAudit({
     actor: session.user.email,
     action: 'epingler_avis',
     entity: 'Review',
     entityId: id,
-    before: { epingle: avant.epingle },
-    after: { epingle: avis.epingle },
+    before: { epingle: before.epingle },
+    after: { epingle: review.epingle },
   })
 
-  revaliderAvis()
-  return avis
+  revalidateReviewPaths()
+  return review
 }
 
 /**
@@ -161,7 +161,7 @@ export async function epinglerAvis(id: string, epingle: boolean) {
  * la vitrine créerait un état incohérent que la page d'accueil devrait rattraper seule.
  *
  * IDEMPOTENTE : une décision qui ne change rien n'écrit rien et ne journalise rien. C'est
- * l'équivalent serveur des deux garde-fous de <ActionsAvis>, qui n'offre pas « Publier » sur
+ * l'équivalent serveur des deux garde-fous de <ReviewActions>, qui n'offre pas « Publier » sur
  * un avis déjà publié ni « Rejeter » sur un avis déjà rejeté. Ils ne vivaient jusqu'ici que
  * dans le composant client, donc nulle part : un onglet resté sur un rendu périmé les
  * contourne, et le journal d'audit — seule mémoire de ce qui est arrivé à un avis —
@@ -171,31 +171,31 @@ export async function epinglerAvis(id: string, epingle: boolean) {
  * épinglé (état que le dépunaisage au rejet existe justement pour empêcher) doit encore
  * pouvoir être ramené à la cohérence par un second rejet.
  */
-export async function modererAvis(id: string, statut: StatutModeration) {
+export async function moderateReview(id: string, status: ModerationStatus) {
   const session = await requireAdmin()
 
-  // `statut` arrive du client : même parti pris que `changerStatut` côté commandes
+  // `status` arrive du client : même parti pris que `changeStatus` côté commandes
   // (src/app/admin/commandes/actions.ts). Sans ce refus, une valeur forgée traverse
   // l'action et remonte en `PrismaClientValidationError` brute depuis l'énumération
   // PostgreSQL — « Invalid value for argument `statut`. Expected StatutAvis. » — jusque
   // sous les yeux de l'administratrice. `en_attente` est refusé lui aussi : c'est l'état
   // d'entrée de la file, pas une décision de modération.
-  if (!estStatutModeration(statut)) {
-    throw new InvalidReviewStatusError(String(statut))
+  if (!isModerationStatus(status)) {
+    throw new InvalidReviewStatusError(String(status))
   }
 
-  const avant = await prisma.review.findUniqueOrThrow({ where: { id } })
+  const before = await prisma.review.findUniqueOrThrow({ where: { id } })
 
   // L'état visé, calculé une fois : il sert à décider s'il y a quelque chose à faire, puis à
   // le faire. Deux expressions séparées finiraient par diverger.
-  const epingleCible = statut === 'rejete' ? false : avant.epingle
-  if (avant.statut === statut && avant.epingle === epingleCible) {
-    return avant
+  const targetPinned = status === 'rejete' ? false : before.epingle
+  if (before.statut === status && before.epingle === targetPinned) {
+    return before
   }
 
-  const avis = await prisma.review.update({
+  const review = await prisma.review.update({
     where: { id },
-    data: { statut, epingle: epingleCible },
+    data: { statut: status, epingle: targetPinned },
   })
 
   await recordAudit({
@@ -203,12 +203,12 @@ export async function modererAvis(id: string, statut: StatutModeration) {
     action: 'moderer_avis',
     entity: 'Review',
     entityId: id,
-    before: { statut: avant.statut, epingle: avant.epingle },
-    after: { statut: avis.statut, epingle: avis.epingle },
+    before: { statut: before.statut, epingle: before.epingle },
+    after: { statut: review.statut, epingle: review.epingle },
   })
 
-  revaliderAvis()
-  return avis
+  revalidateReviewPaths()
+  return review
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ export async function modererAvis(id: string, statut: StatutModeration) {
 // <form>.
 // ---------------------------------------------------------------------------
 
-function valeursSoumises(formData: FormData): Record<string, unknown> {
+function submittedValues(formData: FormData): Record<string, unknown> {
   return {
     productId: String(formData.get('productId') ?? ''),
     note: String(formData.get('note') ?? ''),
@@ -228,102 +228,102 @@ function valeursSoumises(formData: FormData): Record<string, unknown> {
   }
 }
 
-export async function importerTemoignageDepuisFormulaire(
-  _etatPrecedent: EtatFormulaireTemoignage,
+export async function importTestimonialFromForm(
+  _previousState: TestimonialFormState,
   formData: FormData,
-): Promise<EtatFormulaireTemoignage> {
+): Promise<TestimonialFormState> {
   await requireAdmin()
 
-  const productIdBrut = String(formData.get('productId') ?? '')
-  const noteBrute = String(formData.get('note') ?? '')
+  const rawProductId = String(formData.get('productId') ?? '')
+  const rawNote = String(formData.get('note') ?? '')
 
-  const donnees = {
+  const input = {
     // Le <select> renvoie la chaîne vide pour « Aucun produit en particulier » : la colonne
     // Prisma, elle, veut null.
-    productId: productIdBrut === '' ? null : productIdBrut,
-    note: noteBrute === '' ? Number.NaN : Number(noteBrute),
+    productId: rawProductId === '' ? null : rawProductId,
+    note: rawNote === '' ? Number.NaN : Number(rawNote),
     texte: String(formData.get('texte') ?? ''),
     auteur: String(formData.get('auteur') ?? ''),
   }
 
-  const analyse = temoignageSchema.safeParse(donnees)
-  if (!analyse.success) {
-    const erreurs: ValidationErrors = {}
-    for (const probleme of analyse.error.issues) {
-      const cle = probleme.path.length > 0 ? String(probleme.path[0]) : '_racine'
-      ;(erreurs[cle] ??= []).push(probleme.message)
+  const parsed = testimonialSchema.safeParse(input)
+  if (!parsed.success) {
+    const errors: ValidationErrors = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.length > 0 ? String(issue.path[0]) : '_racine'
+      ;(errors[key] ??= []).push(issue.message)
     }
-    return { succes: false, erreurs, valeursInitiales: valeursSoumises(formData) }
+    return { success: false, errors, initialValues: submittedValues(formData) }
   }
 
   try {
-    await importerTemoignage(analyse.data)
-  } catch (erreur) {
+    await importTestimonial(parsed.data)
+  } catch (error) {
     // Seul cas attendu ici : le produit choisi a été supprimé entre l'affichage du
     // formulaire et son envoi. Tout le reste remonte (y compris la redirection de
     // requireAdmin(), qui s'implémente par un throw).
-    if (erreur instanceof ProductNotFoundError) {
+    if (error instanceof ProductNotFoundError) {
       return {
-        succes: false,
-        erreurs: { productId: ["Ce produit n'existe plus. Rechargez la page."] },
-        valeursInitiales: valeursSoumises(formData),
+        success: false,
+        errors: { productId: ["Ce produit n'existe plus. Rechargez la page."] },
+        initialValues: submittedValues(formData),
       }
     }
-    throw erreur
+    throw error
   }
 
-  return { succes: true, erreurs: {}, valeursInitiales: {} }
+  return { success: true, errors: {}, initialValues: {} }
 }
 
-export async function epinglerAvisDepuisFormulaire(
+export async function pinReviewFromForm(
   id: string,
-  epingle: boolean,
-  _etatPrecedent: EtatActionAvis,
+  pinned: boolean,
+  _previousState: ReviewActionState,
   _formData: FormData,
-): Promise<EtatActionAvis> {
+): Promise<ReviewActionState> {
   await requireAdmin()
 
   try {
-    await epinglerAvis(id, epingle)
-  } catch (erreur) {
+    await pinReview(id, pinned)
+  } catch (error) {
     // Seul cas attendu ici : l'avis a changé de statut depuis le rendu de la page (un autre
     // onglet, la propriétaire elle-même). C'est une situation normale, qui doit se lire en
     // français sous le bouton — pas une panne. Tout le reste remonte, y compris la
     // redirection de requireAdmin(), qui s'implémente par un throw.
-    if (erreur instanceof ReviewNotPublishedError) {
+    if (error instanceof ReviewNotPublishedError) {
       return {
-        erreur:
+        error:
           "Cet avis n'est pas publié : seul un avis en vitrine peut être épinglé sur la "
           + "page d'accueil. Rechargez la page.",
       }
     }
     // Même traduction que celle du statut forgé côté modération : ni valeur brute, ni nom de
     // classe d'erreur sous les yeux de la propriétaire.
-    if (erreur instanceof InvalidPinError) {
-      return { erreur: "Cette action d'épinglage est inconnue. Rechargez la page." }
+    if (error instanceof InvalidPinError) {
+      return { error: "Cette action d'épinglage est inconnue. Rechargez la page." }
     }
-    throw erreur
+    throw error
   }
 
-  return { erreur: null }
+  return { error: null }
 }
 
-export async function modererAvisDepuisFormulaire(
+export async function moderateReviewFromForm(
   id: string,
-  statut: StatutModeration,
-  _etatPrecedent: EtatActionAvis,
+  status: ModerationStatus,
+  _previousState: ReviewActionState,
   _formData: FormData,
-): Promise<EtatActionAvis> {
+): Promise<ReviewActionState> {
   await requireAdmin()
 
   try {
-    await modererAvis(id, statut)
-  } catch (erreur) {
-    if (erreur instanceof InvalidReviewStatusError) {
-      return { erreur: 'Cette décision de modération est inconnue. Rechargez la page.' }
+    await moderateReview(id, status)
+  } catch (error) {
+    if (error instanceof InvalidReviewStatusError) {
+      return { error: 'Cette décision de modération est inconnue. Rechargez la page.' }
     }
-    throw erreur
+    throw error
   }
 
-  return { erreur: null }
+  return { error: null }
 }

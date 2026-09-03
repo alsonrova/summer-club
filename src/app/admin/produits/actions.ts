@@ -16,9 +16,9 @@ import { validateFormData, formDataToObject } from '@/admin/engine/actions'
 import { productsResource } from '@/admin/resources/products'
 import { variantsResource } from '@/admin/resources/variants'
 import type {
-  EtatFormulaireProduit,
-  EtatFormulaireDeclinaison,
-  EtatActionSimple,
+  ProductFormState,
+  VariantFormState,
+  SimpleActionState,
 } from './etats'
 
 // Convention d'administration (voir src/server/auth.ts) : un layout ne protège ni les
@@ -33,99 +33,99 @@ import type {
 // de retour consommées par useActionState côté client, pas levées avec throw — lever ne
 // convient qu'aux erreurs réellement inattendues (ex. findUniqueOrThrow sur un id forgé).
 //
-// EtatFormulaireProduit/EtatActionSimple (et leurs valeurs initiales) vivent dans ./etats.ts,
+// ProductFormState/SimpleActionState (et leurs valeurs initiales) vivent dans ./etats.ts,
 // pas ici : un fichier 'use server' ne peut exporter que des fonctions async (voir
 // https://nextjs.org/docs/messages/invalid-use-server-value).
 
 // Borne haute d'un entier PostgreSQL (colonnes `Int`) : les champs validés directement ici
-// (pas via un schéma Zod — `ajusterStock`/`reordonnerMedia` analysent `FormData` à la main)
+// (pas via un schéma Zod — `adjustStock`/`reorderMedia` analysent `FormData` à la main)
 // doivent la respecter tout autant que ceux de productSchema/variantSchema, sous peine de
 // laisser passer une valeur que Prisma refuserait avec une erreur non gérée.
-const ENTIER_POSTGRES_MAX = 2147483647
+const POSTGRES_INT_MAX = 2147483647
 
-export async function creerProduit(
-  _etatPrecedent: EtatFormulaireProduit,
+export async function createProduct(
+  _previousState: ProductFormState,
   formData: FormData,
-): Promise<EtatFormulaireProduit> {
+): Promise<ProductFormState> {
   const session = await requireAdmin()
-  const resultat = validateFormData(productsResource, formData)
+  const result = validateFormData(productsResource, formData)
 
-  if (!resultat.success) {
+  if (!result.success) {
     return {
-      succes: false,
-      erreurs: resultat.errors,
-      valeursInitiales: formDataToObject(formData, productsResource),
+      success: false,
+      errors: result.errors,
+      initialValues: formDataToObject(formData, productsResource),
     }
   }
 
-  let produit
+  let product
   try {
-    produit = await prisma.product.create({ data: resultat.data })
-  } catch (erreur) {
-    if (isUniqueViolation(erreur, 'slug')) {
+    product = await prisma.product.create({ data: result.data })
+  } catch (error) {
+    if (isUniqueViolation(error, 'slug')) {
       return {
-        succes: false,
-        erreurs: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
-        valeursInitiales: formDataToObject(formData, productsResource),
+        success: false,
+        errors: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
+        initialValues: formDataToObject(formData, productsResource),
       }
     }
-    throw erreur
+    throw error
   }
 
   await recordAudit({
     actor: session.user.email,
     action: 'creer',
     entity: 'produits',
-    entityId: produit.id,
-    after: resultat.data,
+    entityId: product.id,
+    after: result.data,
   })
 
   // Le catalogue public lit ces mêmes produits : sans cette invalidation, une création
   // resterait invisible en boutique jusqu'à l'expiration naturelle du cache.
   revalidatePath('/boutique')
   revalidatePath('/admin/produits')
-  redirect(`/admin/produits/${produit.id}`)
+  redirect(`/admin/produits/${product.id}`)
 }
 
-export async function modifierProduit(
+export async function updateProduct(
   productId: string,
-  _etatPrecedent: EtatFormulaireProduit,
+  _previousState: ProductFormState,
   formData: FormData,
-): Promise<EtatFormulaireProduit> {
+): Promise<ProductFormState> {
   const session = await requireAdmin()
-  const resultat = validateFormData(productsResource, formData)
+  const result = validateFormData(productsResource, formData)
 
-  if (!resultat.success) {
+  if (!result.success) {
     return {
-      succes: false,
-      erreurs: resultat.errors,
-      valeursInitiales: formDataToObject(formData, productsResource),
+      success: false,
+      errors: result.errors,
+      initialValues: formDataToObject(formData, productsResource),
     }
   }
 
-  const avantComplet = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
-  // Restreint aux mêmes clés que `resultat.data` (les champs réellement modifiés) :
-  // sans ce filtrage, `avant` porterait aussi des dates et des colonnes absentes du
-  // formulaire, rendant `avant`/`apres` non comparables champ à champ dans le journal
+  const fullBefore = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
+  // Restreint aux mêmes clés que `result.data` (les champs réellement modifiés) :
+  // sans ce filtrage, `before` porterait aussi des dates et des colonnes absentes du
+  // formulaire, rendant `before`/`after` non comparables champ à champ dans le journal
   // d'audit — alors que c'est précisément sa raison d'être.
-  const avantMemesClefs = Object.fromEntries(
-    Object.keys(resultat.data).map((cle) => [
-      cle,
-      (avantComplet as Record<string, unknown>)[cle],
+  const beforeSameKeys = Object.fromEntries(
+    Object.keys(result.data).map((key) => [
+      key,
+      (fullBefore as Record<string, unknown>)[key],
     ]),
   )
 
   try {
-    await prisma.product.update({ where: { id: productId }, data: resultat.data })
-  } catch (erreur) {
-    if (isUniqueViolation(erreur, 'slug')) {
+    await prisma.product.update({ where: { id: productId }, data: result.data })
+  } catch (error) {
+    if (isUniqueViolation(error, 'slug')) {
       return {
-        succes: false,
-        erreurs: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
-        valeursInitiales: formDataToObject(formData, productsResource),
+        success: false,
+        errors: { slug: ['Ce slug est déjà utilisé par un autre produit.'] },
+        initialValues: formDataToObject(formData, productsResource),
       }
     }
-    throw erreur
+    throw error
   }
 
   await recordAudit({
@@ -133,66 +133,66 @@ export async function modifierProduit(
     action: 'modifier',
     entity: 'produits',
     entityId: productId,
-    before: avantMemesClefs,
-    after: resultat.data,
+    before: beforeSameKeys,
+    after: result.data,
   })
 
   revalidatePath('/boutique')
   revalidatePath(`/admin/produits/${productId}`)
 
-  return { succes: true, erreurs: {}, valeursInitiales: resultat.data }
+  return { success: true, errors: {}, initialValues: result.data }
 }
 
-export async function creerDeclinaison(
+export async function createVariant(
   productId: string,
-  _etatPrecedent: EtatFormulaireDeclinaison,
+  _previousState: VariantFormState,
   formData: FormData,
-): Promise<EtatFormulaireDeclinaison> {
+): Promise<VariantFormState> {
   const session = await requireAdmin()
-  const resultat = validateFormData(variantsResource, formData)
+  const result = validateFormData(variantsResource, formData)
 
-  if (!resultat.success) {
+  if (!result.success) {
     return {
-      succes: false,
-      erreurs: resultat.errors,
-      valeursInitiales: formDataToObject(formData, variantsResource),
+      success: false,
+      errors: result.errors,
+      initialValues: formDataToObject(formData, variantsResource),
     }
   }
 
-  const produit = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
-  const prixResultant = produit.prixBase + resultat.data.deltaPrix
-  if (prixResultant <= 0) {
+  const product = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
+  const resultingPrice = product.prixBase + result.data.deltaPrix
+  if (resultingPrice <= 0) {
     return {
-      succes: false,
-      erreurs: {
+      success: false,
+      errors: {
         deltaPrix: ['Le prix de vente résultant (prix de base + écart) doit être positif.'],
       },
-      valeursInitiales: formDataToObject(formData, variantsResource),
+      initialValues: formDataToObject(formData, variantsResource),
     }
   }
 
   let variant
   try {
-    variant = await prisma.variant.create({ data: { productId, ...resultat.data } })
-  } catch (erreur) {
+    variant = await prisma.variant.create({ data: { productId, ...result.data } })
+  } catch (error) {
     // Deux contraintes d'unicité distinctes sur Variant (voir prisma/schema.prisma) :
     // `sku` (globale) et `(productId, libelle)` (par produit). Sans les distinguer,
     // la propriétaire verrait une erreur technique au premier doublon.
-    if (isUniqueViolation(erreur, 'sku')) {
+    if (isUniqueViolation(error, 'sku')) {
       return {
-        succes: false,
-        erreurs: { sku: ['Ce SKU est déjà utilisé par une autre déclinaison.'] },
-        valeursInitiales: formDataToObject(formData, variantsResource),
+        success: false,
+        errors: { sku: ['Ce SKU est déjà utilisé par une autre déclinaison.'] },
+        initialValues: formDataToObject(formData, variantsResource),
       }
     }
-    if (isUniqueViolation(erreur, 'libelle')) {
+    if (isUniqueViolation(error, 'libelle')) {
       return {
-        succes: false,
-        erreurs: { libelle: ['Une déclinaison avec ce libellé existe déjà pour ce produit.'] },
-        valeursInitiales: formDataToObject(formData, variantsResource),
+        success: false,
+        errors: { libelle: ['Une déclinaison avec ce libellé existe déjà pour ce produit.'] },
+        initialValues: formDataToObject(formData, variantsResource),
       }
     }
-    throw erreur
+    throw error
   }
 
   await recordAudit({
@@ -200,38 +200,38 @@ export async function creerDeclinaison(
     action: 'creer',
     entity: 'Variant',
     entityId: variant.id,
-    after: resultat.data,
+    after: result.data,
   })
 
   revalidatePath('/boutique')
   revalidatePath(`/admin/produits/${productId}`)
 
-  return { succes: true, erreurs: {}, valeursInitiales: {} }
+  return { success: true, errors: {}, initialValues: {} }
 }
 
-export async function ajusterStock(
+export async function adjustStock(
   variantId: string,
-  _etatPrecedent: EtatActionSimple,
+  _previousState: SimpleActionState,
   formData: FormData,
-): Promise<EtatActionSimple> {
+): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
-  const brut = formData.get('stock')
-  const nouveauStock = Number(brut)
+  const raw = formData.get('stock')
+  const newStock = Number(raw)
   if (
-    brut === null ||
-    brut === '' ||
-    !Number.isInteger(nouveauStock) ||
-    nouveauStock < 0 ||
-    nouveauStock > ENTIER_POSTGRES_MAX
+    raw === null ||
+    raw === '' ||
+    !Number.isInteger(newStock) ||
+    newStock < 0 ||
+    newStock > POSTGRES_INT_MAX
   ) {
-    return { erreur: 'Le stock doit être un entier positif ou nul.' }
+    return { error: 'Le stock doit être un entier positif ou nul.' }
   }
 
-  const avant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
-  const apres = await prisma.variant.update({
+  const before = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
+  const after = await prisma.variant.update({
     where: { id: variantId },
-    data: { stock: nouveauStock },
+    data: { stock: newStock },
   })
 
   // Seule trace qui permettra plus tard de comprendre un écart d'inventaire : l'ancienne
@@ -241,31 +241,31 @@ export async function ajusterStock(
     action: 'ajustement_stock',
     entity: 'Variant',
     entityId: variantId,
-    before: { stock: avant.stock },
-    after: { stock: apres.stock },
+    before: { stock: before.stock },
+    after: { stock: after.stock },
   })
 
   revalidatePath('/boutique')
-  revalidatePath(`/admin/produits/${avant.productId}`)
+  revalidatePath(`/admin/produits/${before.productId}`)
 
-  return { erreur: null }
+  return { error: null }
 }
 
-export async function televerserMedia(
+export async function uploadMedia(
   productId: string,
-  _etatPrecedent: EtatActionSimple,
+  _previousState: SimpleActionState,
   formData: FormData,
-): Promise<EtatActionSimple> {
+): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
-  const fichier = formData.get('fichier')
-  if (!(fichier instanceof File) || fichier.size === 0) {
-    return { erreur: 'Aucun fichier sélectionné.' }
+  const file = formData.get('fichier')
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: 'Aucun fichier sélectionné.' }
   }
 
-  const erreurValidation = validateMediaFile(fichier)
-  if (erreurValidation) {
-    return { erreur: erreurValidation }
+  const validationError = validateMediaFile(file)
+  if (validationError) {
+    return { error: validationError }
   }
 
   // Nom du produit lu avant tout traitement : il sert de texte alternatif de départ (voir
@@ -275,12 +275,12 @@ export async function televerserMedia(
   // les fautes de saisie que la propriétaire peut corriger, pas un identifiant absent de
   // l'interface, donc forgé. L'intérêt de placer cette lecture ici est de sortir avant
   // d'écrire six fichiers que plus aucune ligne ne référencerait.
-  const produit = await prisma.product.findUniqueOrThrow({
+  const product = await prisma.product.findUniqueOrThrow({
     where: { id: productId },
     select: { nom: true },
   })
 
-  const buffer = Buffer.from(await fichier.arrayBuffer())
+  const buffer = Buffer.from(await file.arrayBuffer())
   // processImage assainit le nom et y ajoute elle-même un suffixe aléatoire d'unicité :
   // inutile d'horodater ici, et surtout ne jamais lui passer le nom envoyé par le
   // navigateur (fichier.name) — seul l'identifiant du produit, déjà validé, lui est confié.
@@ -290,38 +290,38 @@ export async function televerserMedia(
   // processImage : conformément à la conception « erreurs retournées, pas levées » de ce
   // fichier, on l'attrape ici plutôt que de laisser l'action entière planter avec une
   // trace technique.
-  let chemin: string
+  let imagePath: string
   try {
-    ;({ chemin } = await processImage(buffer, productId))
-  } catch (erreur) {
+    ;({ chemin: imagePath } = await processImage(buffer, productId))
+  } catch (error) {
     // Journalisé dans tous les cas, avec l'erreur réelle : sans cette trace, un disque
     // plein ou des droits refusés sur public/uploads seraient indiscernables côté serveur
     // d'un fichier corrompu, donc indiagnosticables.
-    console.error('[televerserMedia] échec du traitement de l’image', { productId, erreur })
+    console.error('[uploadMedia] échec du traitement de l’image', { productId, error })
 
     // Seul le vrai échec de décodage (UnreadableImageError, levée par le seul encodage —
     // voir src/server/media.ts) mérite d'être imputé au fichier envoyé.
-    if (erreur instanceof UnreadableImageError) {
+    if (error instanceof UnreadableImageError) {
       return {
-        erreur:
+        error:
           "Cette image n'a pas pu être lue. Vérifiez qu'il s'agit bien d'une photo JPEG, PNG, WebP ou AVIF.",
       }
     }
     // Tout le reste (écriture disque impossible, dossier inaccessible) est une panne du
     // serveur : le dire, plutôt que de laisser croire que la photo est en cause.
     return {
-      erreur:
+      error:
         "Le téléversement a échoué pour une raison technique. Réessayez ; si le problème persiste, prévenez votre développeur.",
     }
   }
 
-  const compte = await prisma.media.count({ where: { productId } })
+  const count = await prisma.media.count({ where: { productId } })
   const media = await prisma.media.create({
     data: {
       productId,
-      chemin,
+      chemin: imagePath,
       // Texte alternatif de départ dérivé du nom du produit, jamais la chaîne vide :
-      // modifierAltMedia refuse un alt vide, une photo fraîchement téléversée se
+      // updateMediaAlt refuse un alt vide, une photo fraîchement téléversée se
       // retrouvait donc dans un état que l'éditeur interdit de reproduire, et partait en
       // vitrine sans texte alternatif (accessibilité, référencement). Rendre le champ
       // obligatoire au téléversement aurait été l'autre option : écartée parce qu'elle
@@ -330,9 +330,9 @@ export async function televerserMedia(
       // modifiable — garantit le même invariant sans friction. Le nom seul, sans préfixe
       // « Photo de » : l'élément <img> annonce déjà qu'il s'agit d'une image, le répéter
       // dans l'alt est une redondance que les lecteurs d'écran font entendre deux fois.
-      alt: produit.nom,
-      position: compte,
-      isPrimary: compte === 0,
+      alt: product.nom,
+      position: count,
+      isPrimary: count === 0,
     },
   })
 
@@ -341,40 +341,40 @@ export async function televerserMedia(
     action: 'ajout_media',
     entity: 'Media',
     entityId: media.id,
-    after: { chemin },
+    after: { chemin: imagePath },
   })
 
   revalidatePath('/boutique')
   revalidatePath(`/admin/produits/${productId}`)
 
-  return { erreur: null }
+  return { error: null }
 }
 
 // Pas de glisser-déposer (écran hors périmètre de cette tâche, voir le plan) : un simple
 // ordre numérique suffit pour réordonner les photos d'un produit.
-export async function reordonnerMedia(
+export async function reorderMedia(
   mediaId: string,
-  _etatPrecedent: EtatActionSimple,
+  _previousState: SimpleActionState,
   formData: FormData,
-): Promise<EtatActionSimple> {
+): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
-  const brut = formData.get('position')
-  const nouvellePosition = Number(brut)
+  const raw = formData.get('position')
+  const newPosition = Number(raw)
   if (
-    brut === null ||
-    brut === '' ||
-    !Number.isInteger(nouvellePosition) ||
-    nouvellePosition < 0 ||
-    nouvellePosition > ENTIER_POSTGRES_MAX
+    raw === null ||
+    raw === '' ||
+    !Number.isInteger(newPosition) ||
+    newPosition < 0 ||
+    newPosition > POSTGRES_INT_MAX
   ) {
-    return { erreur: 'La position doit être un entier positif ou nul.' }
+    return { error: 'La position doit être un entier positif ou nul.' }
   }
 
-  const avant = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
-  const apres = await prisma.media.update({
+  const before = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
+  const after = await prisma.media.update({
     where: { id: mediaId },
-    data: { position: nouvellePosition },
+    data: { position: newPosition },
   })
 
   await recordAudit({
@@ -382,30 +382,30 @@ export async function reordonnerMedia(
     action: 'reordonner_media',
     entity: 'Media',
     entityId: mediaId,
-    before: { position: avant.position },
-    after: { position: apres.position },
+    before: { position: before.position },
+    after: { position: after.position },
   })
 
   revalidatePath('/boutique')
-  revalidatePath(`/admin/produits/${avant.productId}`)
+  revalidatePath(`/admin/produits/${before.productId}`)
 
-  return { erreur: null }
+  return { error: null }
 }
 
-export async function modifierAltMedia(
+export async function updateMediaAlt(
   mediaId: string,
-  _etatPrecedent: EtatActionSimple,
+  _previousState: SimpleActionState,
   formData: FormData,
-): Promise<EtatActionSimple> {
+): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
-  const brut = formData.get('alt')
-  const alt = typeof brut === 'string' ? brut.trim() : ''
+  const raw = formData.get('alt')
+  const alt = typeof raw === 'string' ? raw.trim() : ''
   if (alt === '') {
-    return { erreur: 'Le texte alternatif est requis.' }
+    return { error: 'Le texte alternatif est requis.' }
   }
 
-  const avant = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
+  const before = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
   await prisma.media.update({ where: { id: mediaId }, data: { alt } })
 
   await recordAudit({
@@ -413,21 +413,21 @@ export async function modifierAltMedia(
     action: 'modifier_alt_media',
     entity: 'Media',
     entityId: mediaId,
-    before: { alt: avant.alt },
+    before: { alt: before.alt },
     after: { alt },
   })
 
   revalidatePath('/boutique')
-  revalidatePath(`/admin/produits/${avant.productId}`)
+  revalidatePath(`/admin/produits/${before.productId}`)
 
-  return { erreur: null }
+  return { error: null }
 }
 
-export async function definirPhotoPrincipale(
+export async function setPrimaryPhoto(
   mediaId: string,
-  _etatPrecedent: EtatActionSimple,
+  _previousState: SimpleActionState,
   _formData: FormData,
-): Promise<EtatActionSimple> {
+): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
   const media = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
@@ -456,14 +456,14 @@ export async function definirPhotoPrincipale(
   revalidatePath('/boutique')
   revalidatePath(`/admin/produits/${media.productId}`)
 
-  return { erreur: null }
+  return { error: null }
 }
 
-export async function supprimerMedia(
+export async function deleteMedia(
   mediaId: string,
-  _etatPrecedent: EtatActionSimple,
+  _previousState: SimpleActionState,
   _formData: FormData,
-): Promise<EtatActionSimple> {
+): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
   const media = await prisma.media.findUniqueOrThrow({ where: { id: mediaId } })
@@ -479,12 +479,12 @@ export async function supprimerMedia(
     // Un produit qui a des photos en a exactement une principale : si celle qu'on vient
     // de supprimer l'était, la suivante (par position) prend le relais.
     if (media.isPrimary) {
-      const suivante = await tx.media.findFirst({
+      const next = await tx.media.findFirst({
         where: { productId: media.productId },
         orderBy: { position: 'asc' },
       })
-      if (suivante) {
-        await tx.media.update({ where: { id: suivante.id }, data: { isPrimary: true } })
+      if (next) {
+        await tx.media.update({ where: { id: next.id }, data: { isPrimary: true } })
       }
     }
   })
@@ -500,5 +500,5 @@ export async function supprimerMedia(
   revalidatePath('/boutique')
   revalidatePath(`/admin/produits/${media.productId}`)
 
-  return { erreur: null }
+  return { error: null }
 }

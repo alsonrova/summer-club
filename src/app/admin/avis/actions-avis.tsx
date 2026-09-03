@@ -1,40 +1,40 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { EtatActionAvis } from './etats'
+import type { ReviewActionState } from './etats'
 
-type ActionAvis = (
-  etatPrecedent: EtatActionAvis,
+type ReviewAction = (
+  previousState: ReviewActionState,
   formData: FormData,
-) => Promise<EtatActionAvis>
+) => Promise<ReviewActionState>
 
-function BoutonAction({
+function ActionButton({
   action,
-  libelle,
-  primaire = false,
+  label,
+  primary = false,
 }: {
-  action: ActionAvis
-  libelle: string
-  primaire?: boolean
+  action: ReviewAction
+  label: string
+  primary?: boolean
 }) {
-  const [etat, soumettre, enCours] = useActionState(action, { erreur: null })
+  const [state, submit, isPending] = useActionState(action, { error: null })
 
   return (
-    <form action={soumettre} className="inline-flex flex-col gap-1">
+    <form action={submit} className="inline-flex flex-col gap-1">
       <button
         type="submit"
-        disabled={enCours}
+        disabled={isPending}
         className={
-          primaire
+          primary
             ? 'rounded border border-taupe/40 bg-sage-deep px-3 py-1 text-small text-shell hover:opacity-90 disabled:opacity-60'
             : 'rounded border border-taupe/40 bg-shell px-3 py-1 text-small text-bark-soft hover:text-bark disabled:opacity-60'
         }
       >
-        {enCours ? '…' : libelle}
+        {isPending ? '…' : label}
       </button>
-      {etat.erreur ? (
+      {state.error ? (
         <span role="alert" className="text-small text-bark">
-          {etat.erreur}
+          {state.error}
         </span>
       ) : null}
     </form>
@@ -46,27 +46,27 @@ function BoutonAction({
  * « publier » un avis déjà publié, ni d'épingler un avis qui n'est pas en vitrine — un
  * avis épinglé mais non publié n'apparaîtrait nulle part, sans que rien ne l'explique.
  */
-export function ActionsAvis({
-  publier,
-  rejeter,
-  basculerEpingle,
-  statut,
-  epingle,
+export function ReviewActions({
+  publish,
+  reject,
+  togglePinned,
+  status,
+  pinned,
 }: {
-  publier: ActionAvis
-  rejeter: ActionAvis
-  basculerEpingle: ActionAvis
-  statut: 'en_attente' | 'publie' | 'rejete'
-  epingle: boolean
+  publish: ReviewAction
+  reject: ReviewAction
+  togglePinned: ReviewAction
+  status: 'en_attente' | 'publie' | 'rejete'
+  pinned: boolean
 }) {
   return (
     <div className="flex flex-wrap items-start gap-2">
-      {statut !== 'publie' ? <BoutonAction action={publier} libelle="Publier" primaire /> : null}
-      {statut !== 'rejete' ? <BoutonAction action={rejeter} libelle="Rejeter" /> : null}
-      {statut === 'publie' ? (
-        <BoutonAction
-          action={basculerEpingle}
-          libelle={epingle ? "Retirer de l'accueil" : "Épingler à l'accueil"}
+      {status !== 'publie' ? <ActionButton action={publish} label="Publier" primary /> : null}
+      {status !== 'rejete' ? <ActionButton action={reject} label="Rejeter" /> : null}
+      {status === 'publie' ? (
+        <ActionButton
+          action={togglePinned}
+          label={pinned ? "Retirer de l'accueil" : "Épingler à l'accueil"}
         />
       ) : null}
     </div>

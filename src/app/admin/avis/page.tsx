@@ -4,38 +4,38 @@ import type { StatutAvis } from '@prisma/client'
 import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import {
-  epinglerAvisDepuisFormulaire,
-  importerTemoignageDepuisFormulaire,
-  modererAvisDepuisFormulaire,
+  pinReviewFromForm,
+  importTestimonialFromForm,
+  moderateReviewFromForm,
 } from './actions'
 import {
-  estStatutAvis,
-  listerAvisPagines,
-  LIBELLES_SOURCE_AVIS,
-  LIBELLES_STATUT_AVIS,
-  STATUTS_AVIS,
+  isReviewStatus,
+  listReviewsPaginated,
+  REVIEW_SOURCE_LABELS,
+  REVIEW_STATUS_LABELS,
+  REVIEW_STATUSES,
 } from './query'
-import { ActionsAvis } from './actions-avis'
-import { FormulaireTemoignage } from './formulaire-temoignage'
+import { ReviewActions } from './actions-avis'
+import { TestimonialForm } from './formulaire-temoignage'
 
-function versPageValide(valeur: string | undefined): number {
-  const n = Number(valeur)
+function toValidPage(value: string | undefined): number {
+  const n = Number(value)
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1
 }
 
-function versStatutAvis(valeur: string | undefined): StatutAvis | undefined {
-  return estStatutAvis(valeur) ? valeur : undefined
+function toReviewStatus(value: string | undefined): StatutAvis | undefined {
+  return isReviewStatus(value) ? value : undefined
 }
 
-function urlListe(statut: string, page?: number): Route {
+function listUrl(status: string, page?: number): Route {
   const params = new URLSearchParams()
-  if (statut) params.set('statut', statut)
+  if (status) params.set('statut', status)
   if (page && page > 1) params.set('page', String(page))
   const qs = params.toString()
   return (qs ? `/admin/avis?${qs}` : '/admin/avis') as Route
 }
 
-export default async function AvisPage({
+export default async function ReviewsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -43,16 +43,16 @@ export default async function AvisPage({
   await requireAdmin()
 
   const sp = await searchParams
-  const statut = versStatutAvis(typeof sp.statut === 'string' ? sp.statut : undefined)
-  const page = versPageValide(typeof sp.page === 'string' ? sp.page : undefined)
+  const status = toReviewStatus(typeof sp.statut === 'string' ? sp.statut : undefined)
+  const page = toValidPage(typeof sp.page === 'string' ? sp.page : undefined)
 
-  const [resultat, produits, compteEnAttente] = await Promise.all([
-    listerAvisPagines(prisma.review, { page, filtres: { statut } }),
+  const [result, products, pendingCount] = await Promise.all([
+    listReviewsPaginated(prisma.review, { page, filters: { status } }),
     prisma.product.findMany({ orderBy: { nom: 'asc' }, select: { id: true, nom: true } }),
     prisma.review.count({ where: { statut: 'en_attente' } }),
   ])
 
-  const { lignes, page: pageCourante, totalPages, total } = resultat
+  const { rows, page: currentPage, totalPages, total } = result
 
   return (
     <div className="flex flex-col gap-10">
@@ -60,24 +60,24 @@ export default async function AvisPage({
         <div className="mb-2 flex items-baseline justify-between gap-4">
           <h1 className="font-display text-2xl font-light text-bark">Avis</h1>
           <p className="text-small text-bark-soft tabular-nums">
-            {total} avis · {compteEnAttente} en attente
+            {total} avis · {pendingCount} en attente
           </p>
         </div>
 
         <nav className="flex flex-wrap gap-3 text-small">
           <Link
-            href={urlListe('')}
-            className={statut === undefined ? 'text-bark underline' : 'text-bark-soft underline'}
+            href={listUrl('')}
+            className={status === undefined ? 'text-bark underline' : 'text-bark-soft underline'}
           >
             Tous
           </Link>
-          {STATUTS_AVIS.map((valeur) => (
+          {REVIEW_STATUSES.map((value) => (
             <Link
-              key={valeur}
-              href={urlListe(valeur)}
-              className={statut === valeur ? 'text-bark underline' : 'text-bark-soft underline'}
+              key={value}
+              href={listUrl(value)}
+              className={status === value ? 'text-bark underline' : 'text-bark-soft underline'}
             >
-              {LIBELLES_STATUT_AVIS[valeur]}
+              {REVIEW_STATUS_LABELS[value]}
             </Link>
           ))}
         </nav>
@@ -99,35 +99,35 @@ export default async function AvisPage({
               </tr>
             </thead>
             <tbody>
-              {lignes.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-3 py-6 text-center text-bark-soft">
                     Aucun avis.
                   </td>
                 </tr>
               ) : (
-                lignes.map((avis) => (
-                  <tr key={avis.id} className="border-b border-taupe/40 align-top">
-                    <td className="px-3 py-2 text-bark">{avis.auteur}</td>
-                    <td className="px-3 py-2 text-bark tabular-nums">{avis.note} / 5</td>
-                    <td className="max-w-md px-3 py-2 text-bark">{avis.texte}</td>
-                    <td className="px-3 py-2 text-bark">{avis.produit ?? '—'}</td>
-                    <td className="px-3 py-2 text-bark">{LIBELLES_SOURCE_AVIS[avis.source]}</td>
-                    <td className="px-3 py-2 text-bark">{LIBELLES_STATUT_AVIS[avis.statut]}</td>
+                rows.map((review) => (
+                  <tr key={review.id} className="border-b border-taupe/40 align-top">
+                    <td className="px-3 py-2 text-bark">{review.author}</td>
+                    <td className="px-3 py-2 text-bark tabular-nums">{review.rating} / 5</td>
+                    <td className="max-w-md px-3 py-2 text-bark">{review.body}</td>
+                    <td className="px-3 py-2 text-bark">{review.product ?? '—'}</td>
+                    <td className="px-3 py-2 text-bark">{REVIEW_SOURCE_LABELS[review.source]}</td>
+                    <td className="px-3 py-2 text-bark">{REVIEW_STATUS_LABELS[review.status]}</td>
                     {/* Une colonne dédiée plutôt qu'un libellé noyé dans les actions : la
                         question « lesquels sont épinglés ? » doit se lire d'un coup d'œil,
                         en balayant une seule colonne. */}
-                    <td className="px-3 py-2 text-bark">{avis.epingle ? 'Épinglé' : '—'}</td>
+                    <td className="px-3 py-2 text-bark">{review.pinned ? 'Épinglé' : '—'}</td>
                     <td className="px-3 py-2">
-                      <ActionsAvis
-                        statut={avis.statut}
-                        epingle={avis.epingle}
-                        publier={modererAvisDepuisFormulaire.bind(null, avis.id, 'publie')}
-                        rejeter={modererAvisDepuisFormulaire.bind(null, avis.id, 'rejete')}
-                        basculerEpingle={epinglerAvisDepuisFormulaire.bind(
+                      <ReviewActions
+                        status={review.status}
+                        pinned={review.pinned}
+                        publish={moderateReviewFromForm.bind(null, review.id, 'publie')}
+                        reject={moderateReviewFromForm.bind(null, review.id, 'rejete')}
+                        togglePinned={pinReviewFromForm.bind(
                           null,
-                          avis.id,
-                          !avis.epingle,
+                          review.id,
+                          !review.pinned,
                         )}
                       />
                     </td>
@@ -140,18 +140,18 @@ export default async function AvisPage({
 
         {totalPages > 1 ? (
           <nav className="mt-4 flex items-center gap-4 text-small text-bark-soft">
-            {pageCourante > 1 ? (
-              <Link href={urlListe(statut ?? '', pageCourante - 1)} className="underline">
+            {currentPage > 1 ? (
+              <Link href={listUrl(status ?? '', currentPage - 1)} className="underline">
                 Précédent
               </Link>
             ) : (
               <span className="opacity-40">Précédent</span>
             )}
             <span className="tabular-nums">
-              Page {pageCourante} / {totalPages}
+              Page {currentPage} / {totalPages}
             </span>
-            {pageCourante < totalPages ? (
-              <Link href={urlListe(statut ?? '', pageCourante + 1)} className="underline">
+            {currentPage < totalPages ? (
+              <Link href={listUrl(status ?? '', currentPage + 1)} className="underline">
                 Suivant
               </Link>
             ) : (
@@ -170,9 +170,9 @@ export default async function AvisPage({
           publié comme « Importé » : le badge « Achat vérifié » reste réservé aux avis
           laissés par une cliente à partir de sa propre commande livrée.
         </p>
-        <FormulaireTemoignage
-          action={importerTemoignageDepuisFormulaire}
-          produits={produits}
+        <TestimonialForm
+          action={importTestimonialFromForm}
+          products={products}
         />
       </section>
     </div>

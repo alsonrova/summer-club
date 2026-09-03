@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**65 entrées** · 16 tâches · Développeur 41 · Auditeur qualité et sécurité 18 · Coordinateur 6
+**66 entrées** · 16 tâches · Développeur 42 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -72,6 +72,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | 13 | Développeur | livré | — |
 | 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | 13 | Coordinateur | livré | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
@@ -708,3 +709,13 @@ Etape 1 bis - applique RENOMMAGE.md section 3.7 (arbitree par le coordinateur) :
 - **Modèle** : claude-sonnet-5
 - **Tests** : npm test : Tests 249 passed (249) → npm test : Test Files 25 passed (25), Tests 249 passed (249)
 - **Fichiers** : `docs/RENOMMAGE.md`, `src/admin/engine/actions.ts`, `src/admin/engine/csv.ts`, `src/admin/engine/form.tsx`, `src/admin/engine/table.tsx`, `src/admin/resource.ts`, `src/admin/resources/orders.ts`, `src/admin/resources/products.ts`, `src/admin/resources/variants.ts`, `src/app/admin/avis/actions.ts`, `src/app/admin/avis/etats.ts`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/commandes/page.tsx`, `src/app/admin/commandes/query.ts`, `src/app/admin/produits/actions.ts`, `src/app/admin/produits/etats.ts`, `src/app/admin/produits/formulaire-produit.tsx`, `src/app/admin/produits/page.tsx`, `src/app/admin/produits/query.ts`, `tests/admin/champs-systeme.test.ts`, `tests/admin/commandes-query.test.ts`, `tests/admin/csv-nombres.test.ts`, `tests/admin/csv.test.ts`
+
+### 2026-09-03 · Développeur — livré
+
+Étape 4 — src/app/ et src/components/ renommés en anglais (§ 3.4 + § 3.6-app : PRODUITS_PAR_PAGE/COMMANDES_PAR_PAGE/AVIS_PAR_PAGE, Filtres*/Ligne*/Delegate*, listerXPagines, creerProduit/modifierProduit/creerDeclinaison/ajusterStock/televerserMedia/supprimerMedia/reordonnerMedia/modifierAltMedia/definirPhotoPrincipale, changerStatut(DepuisFormulaire), epinglerAvis/modererAvis/importerTemoignage(DepuisFormulaire), les six Etat*/…FormState, FormulaireProduit/Declinaison/Stock/Media/Temoignage, MediaCarte, BoutonsStatut, ActionsAvis, BoutonDeconnexion, plus les 20 déclarations internes § 3.6-app) ; consommateurs alignés dans tests/ (6 fichiers) ; § 3.7 complété pour cette couche, avec deux frontières documentées ⚠ : OrderListRow/ProductListRow gardent leurs champs français (clientNom/tel/canal/statut, nom/prixBase/prixAchat/actif/ordre) parce qu'ils sont passés tels quels en prop rows à <AdminTable resource=…> dont le générique T est lié à OrderListInput/ProductInput (miroir Prisma, étape 6) — renommer ces champs casse tsc, vérifié dans les deux sens. Trou d'audit supplémentaire découvert et corrigé dans le même commit : huit fonctions de page 'export default async function NomPage' échappaient au motif de la commande d'inventaire du § 3 (qui ne capture pas 'export default') — AvisPage/CommandesPage/FicheCommandePage/NouveauProduitPage/ProduitsPage/FicheProduitPage/AccesRefusePage/ConnexionPage renommées, consigné en § 3.7.
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : npm test : Test Files 25 passed (25), Tests 249 passed (249) → npm test : Test Files 25 passed (25), Tests 249 passed (249) (un run intermédiaire a rougi sur un timeout de 5000ms dans tests/server/products.test.ts > deleteProduct — symptôme de charge machine documenté en § 6.4/§ 7.4 de CONVENTIONS.md et RENOMMAGE.md, non lié au diff ; re-exécuté seul, vert)
+- **Fichiers** : `src/app/acces-refuse/page.tsx`, `src/app/admin/avis/actions-avis.tsx`, `src/app/admin/avis/actions.ts`, `src/app/admin/avis/etats.ts`, `src/app/admin/avis/formulaire-temoignage.tsx`, `src/app/admin/avis/page.tsx`, `src/app/admin/avis/query.ts`, `src/app/admin/commandes/[id]/boutons-statut.tsx`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/commandes/etats.ts`, `src/app/admin/commandes/page.tsx`, `src/app/admin/commandes/query.ts`, `src/app/admin/layout.tsx`, `src/app/admin/produits/[id]/formulaire-declinaison.tsx`, `src/app/admin/produits/[id]/formulaire-media.tsx`, `src/app/admin/produits/[id]/formulaire-stock.tsx`, `src/app/admin/produits/[id]/media-carte.tsx`, `src/app/admin/produits/[id]/page.tsx`, `src/app/admin/produits/actions.ts`, `src/app/admin/produits/etats.ts`, `src/app/admin/produits/formulaire-produit.tsx`, `src/app/admin/produits/nouveau/page.tsx`, `src/app/admin/produits/page.tsx`, `src/app/admin/produits/query.ts`, `src/app/connexion/page.tsx`, `src/components/bouton-deconnexion.tsx`, `tests/admin/avis-actions.test.ts`, `tests/admin/avis-query.test.ts`, `tests/admin/commandes-actions.test.ts`, `tests/admin/commandes-query.test.ts`, `tests/admin/produits-actions.test.ts`, `tests/admin/produits-query.test.ts`, `docs/RENOMMAGE.md`
+- **Réserve** : tests/server/statut.test.ts déclare son propre helper local 'changerStatut' (alias de applyStatus, non exporté, sans lien avec src/app/admin/commandes/actions.ts) : hors périmètre de l'étape 4 (fichier de la couche src/server/, étape 2), volontairement non touché — seul un identifiant que CETTE tâche introduit ou réécrit doit être anglais (CONVENTIONS.md § 1).
+- **Réserve** : Commentaires de src/admin/, src/server/ et de tests/e2e hors périmètre nommant encore d'anciens identifiants (televerserMedia, changerStatut, modererAvis…) laissés tels quels : ce sont des commentaires (français, conforme § 1), dans des fichiers déjà livrés aux étapes 2/3 ou hors périmètre de celle-ci — pas du code.

@@ -1,31 +1,31 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { EtatChangementStatut } from '../etats'
+import type { StatusChangeState } from '../etats'
 
 type ActionTransition = (
-  etatPrecedent: EtatChangementStatut,
+  previousState: StatusChangeState,
   formData: FormData,
-) => Promise<EtatChangementStatut>
+) => Promise<StatusChangeState>
 
 // Un bouton par transition, chacun dans son propre <form> avec son propre état : le message
 // d'erreur s'affiche alors sous le bouton qui a échoué, et non dans un bandeau commun où
 // la propriétaire devrait deviner lequel des cinq boutons l'a produit.
-function BoutonTransition({ action, libelle }: { action: ActionTransition; libelle: string }) {
-  const [etat, soumettre, enCours] = useActionState(action, { erreur: null })
+function TransitionButton({ action, label }: { action: ActionTransition; label: string }) {
+  const [state, submit, isPending] = useActionState(action, { error: null })
 
   return (
-    <form action={soumettre} className="flex flex-col gap-1">
+    <form action={submit} className="flex flex-col gap-1">
       <button
         type="submit"
-        disabled={enCours}
+        disabled={isPending}
         className="rounded border border-taupe/40 bg-shell px-4 py-2 text-bark-soft hover:text-bark disabled:opacity-60"
       >
-        {enCours ? 'En cours…' : libelle}
+        {isPending ? 'En cours…' : label}
       </button>
-      {etat.erreur ? (
+      {state.error ? (
         <span role="alert" className="max-w-xs text-small text-bark">
-          {etat.erreur}
+          {state.error}
         </span>
       ) : null}
     </form>
@@ -37,10 +37,10 @@ function BoutonTransition({ action, libelle }: { action: ActionTransition; libel
  * de `transitionsFrom`, côté serveur) : un bouton qui mène à une erreur est un défaut
  * d'interface. Une commande livrée ou annulée n'en propose donc aucun.
  */
-export function BoutonsStatut({
+export function StatusButtons({
   transitions,
 }: {
-  transitions: { vers: string; libelle: string; action: ActionTransition }[]
+  transitions: { to: string; label: string; action: ActionTransition }[]
 }) {
   if (transitions.length === 0) {
     return (
@@ -54,10 +54,10 @@ export function BoutonsStatut({
   return (
     <div className="flex flex-wrap items-start gap-3">
       {transitions.map((transition) => (
-        <BoutonTransition
-          key={transition.vers}
+        <TransitionButton
+          key={transition.to}
           action={transition.action}
-          libelle={transition.libelle}
+          label={transition.label}
         />
       ))}
     </div>

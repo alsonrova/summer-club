@@ -1,12 +1,12 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { EtatFormulaireProduit } from './etats'
+import type { ProductFormState } from './etats'
 
-type Categorie = { id: string; nom: string }
+type CategoryOption = { id: string; nom: string }
 
-function texteInitial(valeurs: Record<string, unknown>, nom: string): string {
-  const v = valeurs[nom]
+function initialText(values: Record<string, unknown>, name: string): string {
+  const v = values[name]
   return v === undefined || v === null ? '' : String(v)
 }
 
@@ -14,7 +14,7 @@ function texteInitial(valeurs: Record<string, unknown>, nom: string): string {
 // même câblage que InputField dans src/admin/engine/form.tsx, pour qu'un lecteur d'écran
 // annonce l'erreur au moment où il atteint le champ, pas seulement quand elle apparaît
 // visuellement.
-function ChampErreurs({ id, messages }: { id: string; messages: string[] | undefined }) {
+function FieldErrors({ id, messages }: { id: string; messages: string[] | undefined }) {
   if (!messages?.length) return null
   return (
     <div id={id}>
@@ -42,35 +42,35 @@ function ChampErreurs({ id, messages }: { id: string; messages: string[] | undef
 // est la seule source de vérité affichée. Un `required` natif bloquerait la soumission
 // avant même d'atteindre le serveur, empêchant d'afficher les messages français dédiés en
 // dessous de chaque champ.
-export function FormulaireProduit({
+export function ProductForm({
   action,
-  etatInitial,
+  initialState,
   categories,
-  libelleSoumettre,
+  submitLabel,
 }: {
-  action: (etatPrecedent: EtatFormulaireProduit, formData: FormData) => Promise<EtatFormulaireProduit>
-  etatInitial: EtatFormulaireProduit
-  categories: Categorie[]
-  libelleSoumettre: string
+  action: (previousState: ProductFormState, formData: FormData) => Promise<ProductFormState>
+  initialState: ProductFormState
+  categories: CategoryOption[]
+  submitLabel: string
 }) {
-  const [etat, soumettre, enCours] = useActionState(action, etatInitial)
-  const v = etat.valeursInitiales
+  const [state, submit, isPending] = useActionState(action, initialState)
+  const v = state.initialValues
 
-  const categorieParDefaut = texteInitial(v, 'categoryId') || (categories[0]?.id ?? '')
-  const prixAchatParDefaut = texteInitial(v, 'prixAchat') || '0'
-  const ordreParDefaut = texteInitial(v, 'ordre') || '0'
-  const actifParDefaut = v.actif === undefined ? true : Boolean(v.actif)
+  const defaultCategoryId = initialText(v, 'categoryId') || (categories[0]?.id ?? '')
+  const defaultCostPrice = initialText(v, 'prixAchat') || '0'
+  const defaultDisplayOrder = initialText(v, 'ordre') || '0'
+  const defaultActive = v.actif === undefined ? true : Boolean(v.actif)
 
-  const nomEnErreur = Boolean(etat.erreurs.nom?.length)
-  const slugEnErreur = Boolean(etat.erreurs.slug?.length)
-  const descriptionEnErreur = Boolean(etat.erreurs.description?.length)
-  const categoryIdEnErreur = Boolean(etat.erreurs.categoryId?.length)
-  const prixBaseEnErreur = Boolean(etat.erreurs.prixBase?.length)
-  const prixAchatEnErreur = Boolean(etat.erreurs.prixAchat?.length)
-  const ordreEnErreur = Boolean(etat.erreurs.ordre?.length)
+  const nameHasError = Boolean(state.errors.nom?.length)
+  const slugHasError = Boolean(state.errors.slug?.length)
+  const descriptionHasError = Boolean(state.errors.description?.length)
+  const categoryIdHasError = Boolean(state.errors.categoryId?.length)
+  const basePriceHasError = Boolean(state.errors.prixBase?.length)
+  const costPriceHasError = Boolean(state.errors.prixAchat?.length)
+  const displayOrderHasError = Boolean(state.errors.ordre?.length)
 
   return (
-    <form action={soumettre} className="flex max-w-lg flex-col gap-4">
+    <form action={submit} className="flex max-w-lg flex-col gap-4">
       <div className="flex flex-col gap-1">
         <label htmlFor="produit-nom" className="text-small text-bark-soft">
           Nom
@@ -79,12 +79,12 @@ export function FormulaireProduit({
           id="produit-nom"
           name="nom"
           type="text"
-          defaultValue={texteInitial(v, 'nom')}
-          aria-invalid={nomEnErreur || undefined}
-          aria-describedby={nomEnErreur ? 'produit-nom-erreur' : undefined}
+          defaultValue={initialText(v, 'nom')}
+          aria-invalid={nameHasError || undefined}
+          aria-describedby={nameHasError ? 'produit-nom-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <ChampErreurs id="produit-nom-erreur" messages={etat.erreurs.nom} />
+        <FieldErrors id="produit-nom-erreur" messages={state.errors.nom} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -95,13 +95,13 @@ export function FormulaireProduit({
           id="produit-slug"
           name="slug"
           type="text"
-          defaultValue={texteInitial(v, 'slug')}
-          aria-invalid={slugEnErreur || undefined}
-          aria-describedby={slugEnErreur ? 'produit-slug-erreur' : undefined}
+          defaultValue={initialText(v, 'slug')}
+          aria-invalid={slugHasError || undefined}
+          aria-describedby={slugHasError ? 'produit-slug-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
         <p className="text-small text-bark-soft">Minuscules, chiffres et tirets uniquement.</p>
-        <ChampErreurs id="produit-slug-erreur" messages={etat.erreurs.slug} />
+        <FieldErrors id="produit-slug-erreur" messages={state.errors.slug} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -112,12 +112,12 @@ export function FormulaireProduit({
           id="produit-description"
           name="description"
           rows={4}
-          defaultValue={texteInitial(v, 'description')}
-          aria-invalid={descriptionEnErreur || undefined}
-          aria-describedby={descriptionEnErreur ? 'produit-description-erreur' : undefined}
+          defaultValue={initialText(v, 'description')}
+          aria-invalid={descriptionHasError || undefined}
+          aria-describedby={descriptionHasError ? 'produit-description-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <ChampErreurs id="produit-description-erreur" messages={etat.erreurs.description} />
+        <FieldErrors id="produit-description-erreur" messages={state.errors.description} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -127,19 +127,19 @@ export function FormulaireProduit({
         <select
           id="produit-categoryId"
           name="categoryId"
-          defaultValue={categorieParDefaut}
-          aria-invalid={categoryIdEnErreur || undefined}
-          aria-describedby={categoryIdEnErreur ? 'produit-categoryId-erreur' : undefined}
+          defaultValue={defaultCategoryId}
+          aria-invalid={categoryIdHasError || undefined}
+          aria-describedby={categoryIdHasError ? 'produit-categoryId-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         >
           {categories.length === 0 ? <option value="">Aucune catégorie disponible</option> : null}
-          {categories.map((categorie) => (
-            <option key={categorie.id} value={categorie.id}>
-              {categorie.nom}
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.nom}
             </option>
           ))}
         </select>
-        <ChampErreurs id="produit-categoryId-erreur" messages={etat.erreurs.categoryId} />
+        <FieldErrors id="produit-categoryId-erreur" messages={state.errors.categoryId} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -150,12 +150,12 @@ export function FormulaireProduit({
           id="produit-prixBase"
           name="prixBase"
           type="number"
-          defaultValue={texteInitial(v, 'prixBase')}
-          aria-invalid={prixBaseEnErreur || undefined}
-          aria-describedby={prixBaseEnErreur ? 'produit-prixBase-erreur' : undefined}
+          defaultValue={initialText(v, 'prixBase')}
+          aria-invalid={basePriceHasError || undefined}
+          aria-describedby={basePriceHasError ? 'produit-prixBase-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
-        <ChampErreurs id="produit-prixBase-erreur" messages={etat.erreurs.prixBase} />
+        <FieldErrors id="produit-prixBase-erreur" messages={state.errors.prixBase} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -166,12 +166,12 @@ export function FormulaireProduit({
           id="produit-prixAchat"
           name="prixAchat"
           type="number"
-          defaultValue={prixAchatParDefaut}
-          aria-invalid={prixAchatEnErreur || undefined}
-          aria-describedby={prixAchatEnErreur ? 'produit-prixAchat-erreur' : undefined}
+          defaultValue={defaultCostPrice}
+          aria-invalid={costPriceHasError || undefined}
+          aria-describedby={costPriceHasError ? 'produit-prixAchat-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
-        <ChampErreurs id="produit-prixAchat-erreur" messages={etat.erreurs.prixAchat} />
+        <FieldErrors id="produit-prixAchat-erreur" messages={state.errors.prixAchat} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -182,16 +182,16 @@ export function FormulaireProduit({
           id="produit-ordre"
           name="ordre"
           type="number"
-          defaultValue={ordreParDefaut}
-          aria-invalid={ordreEnErreur || undefined}
-          aria-describedby={ordreEnErreur ? 'produit-ordre-erreur' : undefined}
+          defaultValue={defaultDisplayOrder}
+          aria-invalid={displayOrderHasError || undefined}
+          aria-describedby={displayOrderHasError ? 'produit-ordre-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
         <p className="text-small text-bark-soft">
           Détermine la position du produit dans la vitrine ; les valeurs les plus basses
           apparaissent en premier.
         </p>
-        <ChampErreurs id="produit-ordre-erreur" messages={etat.erreurs.ordre} />
+        <FieldErrors id="produit-ordre-erreur" messages={state.errors.ordre} />
       </div>
 
       <div className="flex items-center gap-2">
@@ -199,7 +199,7 @@ export function FormulaireProduit({
           id="produit-actif"
           name="actif"
           type="checkbox"
-          defaultChecked={actifParDefaut}
+          defaultChecked={defaultActive}
           className="h-4 w-4 rounded border-taupe/40"
         />
         <label htmlFor="produit-actif" className="text-small text-bark-soft">
@@ -207,7 +207,7 @@ export function FormulaireProduit({
         </label>
       </div>
 
-      {etat.succes ? (
+      {state.success ? (
         <p role="status" className="text-small text-bark-soft">
           Modifications enregistrées.
         </p>
@@ -215,10 +215,10 @@ export function FormulaireProduit({
 
       <button
         type="submit"
-        disabled={enCours}
+        disabled={isPending}
         className="self-start rounded border border-taupe/40 bg-sage-deep px-4 py-2 text-shell hover:opacity-90 disabled:opacity-60"
       >
-        {libelleSoumettre}
+        {submitLabel}
       </button>
     </form>
   )

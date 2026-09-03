@@ -8,7 +8,7 @@ import {
   ProductNotFoundError,
   InvalidReviewStatusError,
 } from '@/server/reviews'
-import { etatActionAvisInitial } from '@/app/admin/avis/etats'
+import { initialReviewActionState } from '@/app/admin/avis/etats'
 
 // Mêmes doublures que tests/admin/produits-actions.test.ts : requireAdmin() lit une session
 // via next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni
@@ -21,11 +21,11 @@ vi.mock('next/cache', () => ({
 }))
 
 const {
-  importerTemoignage,
-  epinglerAvis,
-  epinglerAvisDepuisFormulaire,
-  modererAvis,
-  modererAvisDepuisFormulaire,
+  importTestimonial,
+  pinReview,
+  pinReviewFromForm,
+  moderateReview,
+  moderateReviewFromForm,
 } = await import('@/app/admin/avis/actions')
 
 const SLUG_CATEGORIE = 'test-avis-categorie'
@@ -87,7 +87,7 @@ afterEach(async () => {
     await prisma.review.deleteMany({ where: { id: { in: idsAvis } } })
     idsAvis.length = 0
   }
-  // Rattrape aussi les avis créés par importerTemoignage, dont l'identifiant n'est pas
+  // Rattrape aussi les avis créés par importTestimonial, dont l'identifiant n'est pas
   // toujours poussé dans idsAvis (un test qui échoue avant).
   const restants = await prisma.review.findMany({ where: { productId }, select: { id: true } })
   if (restants.length > 0) {
@@ -103,9 +103,9 @@ afterAll(async () => {
   await prisma.$disconnect()
 })
 
-describe('importerTemoignage', () => {
+describe('importTestimonial', () => {
   it("crée l'avis en source « importe », jamais « verifie »", async () => {
-    const avis = await importerTemoignage({
+    const avis = await importTestimonial({
       productId,
       note: 5,
       texte: 'Reçu par WhatsApp, recopié à la main.',
@@ -125,7 +125,7 @@ describe('importerTemoignage', () => {
   it("ignore un « source: verifie » glissé dans les données d'entrée", async () => {
     // Le schéma Zod ne déclare pas `source` : zod retire les clés inconnues, et l'action
     // fixe la valeur elle-même. Sans cela, un appelant pourrait fabriquer le badge.
-    const avis = await importerTemoignage({
+    const avis = await importTestimonial({
       productId,
       note: 5,
       texte: 'Tentative de forge du badge de vérification.',
@@ -141,7 +141,7 @@ describe('importerTemoignage', () => {
   })
 
   it('accepte un témoignage sans produit rattaché', async () => {
-    const avis = await importerTemoignage({
+    const avis = await importTestimonial({
       productId: null,
       note: 4,
       texte: 'Un mot laissé en boutique, sans produit précis.',
@@ -153,17 +153,17 @@ describe('importerTemoignage', () => {
 
   it('refuse une note hors de 1..5 et un texte trop court', async () => {
     await expect(
-      importerTemoignage({ productId, note: 6, texte: 'Correct assez', auteur: AUTEUR }),
+      importTestimonial({ productId, note: 6, texte: 'Correct assez', auteur: AUTEUR }),
     ).rejects.toThrow()
     await expect(
-      importerTemoignage({ productId, note: 5, texte: 'ok', auteur: AUTEUR }),
+      importTestimonial({ productId, note: 5, texte: 'ok', auteur: AUTEUR }),
     ).rejects.toThrow()
     expect(await prisma.review.count({ where: { productId } })).toBe(0)
   })
 
   it("refuse un produit inexistant avec un message français, pas une violation de clé étrangère", async () => {
     await expect(
-      importerTemoignage({
+      importTestimonial({
         productId: 'produit-totalement-inexistant',
         note: 5,
         texte: 'Un témoignage sur un produit fantôme.',
@@ -173,7 +173,7 @@ describe('importerTemoignage', () => {
   })
 
   it("journalise l'import dans le journal d'audit", async () => {
-    const avis = await importerTemoignage({
+    const avis = await importTestimonial({
       productId, note: 5, texte: 'Un témoignage à journaliser.', auteur: AUTEUR,
     })
     idsAvis.push(avis.id)
@@ -187,18 +187,18 @@ describe('importerTemoignage', () => {
   })
 })
 
-describe('epinglerAvis', () => {
+describe('pinReview', () => {
   it("bascule la mise en avant sur la page d'accueil, dans les deux sens", async () => {
     const avis = await creerAvisDeTest({ statut: 'publie' })
     expect(avis.epingle).toBe(false)
 
-    expect((await epinglerAvis(avis.id, true)).epingle).toBe(true)
-    expect((await epinglerAvis(avis.id, false)).epingle).toBe(false)
+    expect((await pinReview(avis.id, true)).epingle).toBe(true)
+    expect((await pinReview(avis.id, false)).epingle).toBe(false)
   })
 
   it('journalise la valeur avant et après', async () => {
     const avis = await creerAvisDeTest({ statut: 'publie' })
-    await epinglerAvis(avis.id, true)
+    await pinReview(avis.id, true)
 
     const traces = await prisma.auditLog.findMany({
       where: { entite: 'Review', entiteId: avis.id, action: 'epingler_avis' },
@@ -209,15 +209,15 @@ describe('epinglerAvis', () => {
   })
 })
 
-describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le composant", () => {
-  // <ActionsAvis> n'affiche le bouton d'épinglage que pour un avis publié, mais une Server
+describe("pinReview — l'invariant est appliqué par l'action, pas par le composant", () => {
+  // <ReviewActions> n'affiche le bouton d'épinglage que pour un avis publié, mais une Server
   // Action exportée reste un point d'entrée POST à part entière : le garde-fou du composant
   // client ne protège rien. Ces tests appellent donc l'action directement, exactement comme
   // le ferait un onglet resté sur un rendu périmé.
   it("refuse d'épingler un avis en attente, sans écrire ni épinglage ni trace", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
 
-    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
+    await expect(pinReview(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
 
     const apres = await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })
     expect(apres.epingle).toBe(false)
@@ -231,9 +231,9 @@ describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le co
     // Scénario réel : deux onglets ouverts sur la liste des avis publiés. L'onglet B rejette
     // l'avis ; l'onglet A, resté sur l'ancien rendu, clique « Épingler ».
     const avis = await creerAvisDeTest({ statut: 'publie' })
-    await modererAvis(avis.id, 'rejete')
+    await moderateReview(avis.id, 'rejete')
 
-    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
+    await expect(pinReview(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
     expect(
       (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).epingle,
     ).toBe(false)
@@ -243,33 +243,33 @@ describe("epinglerAvis — l'invariant est appliqué par l'action, pas par le co
     // Dépunaiser ramène vers l'état cohérent. L'interdire enfermerait un avis épinglé hors
     // vitrine — précisément l'état que l'invariant existe pour empêcher.
     const avis = await creerAvisDeTest({ statut: 'rejete', epingle: true })
-    expect((await epinglerAvis(avis.id, false)).epingle).toBe(false)
+    expect((await pinReview(avis.id, false)).epingle).toBe(false)
   })
 
   it("traduit le refus en français plutôt que de le laisser remonter en erreur 500", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
 
-    const etat = await epinglerAvisDepuisFormulaire(
-      avis.id, true, etatActionAvisInitial, new FormData(),
+    const etat = await pinReviewFromForm(
+      avis.id, true, initialReviewActionState, new FormData(),
     )
 
-    expect(etat.erreur).toMatch(/publié/)
-    expect(etat.erreur).not.toMatch(/Error|prisma|Invariant/i)
+    expect(etat.error).toMatch(/publié/)
+    expect(etat.error).not.toMatch(/Error|prisma|Invariant/i)
   })
 })
 
-describe("epinglerAvis — valeur d'épinglage venue du client", () => {
-  // Jumeau du garde posé sur le statut de `modererAvis` : `epinglerAvis` est exportée du
+describe("pinReview — valeur d'épinglage venue du client", () => {
+  // Jumeau du garde posé sur le statut de `moderateReview` : `pinReview` est exportée du
   // même fichier `'use server'`, c'est donc le même genre de point d'entrée POST, et son
   // paramètre booléen arrive du client sans être typé à l'exécution.
   it("refuse une valeur non booléenne avec un message français, avant l'appel à Prisma", async () => {
     const avis = await creerAvisDeTest({ statut: 'publie' })
 
     await expect(
-      epinglerAvis(avis.id, 'oui' as never),
+      pinReview(avis.id, 'oui' as never),
     ).rejects.toBeInstanceOf(InvalidPinError)
     await expect(
-      epinglerAvis(avis.id, 'oui' as never),
+      pinReview(avis.id, 'oui' as never),
     ).rejects.toThrow("Valeur d'épinglage invalide : oui")
 
     // Sans le garde, `'oui'` est truthy : l'invariant « publié » le laisse passer, et c'est
@@ -289,7 +289,7 @@ describe("epinglerAvis — valeur d'épinglage venue du client", () => {
     const avis = await creerAvisDeTest({ statut: 'publie', epingle: true })
 
     await expect(
-      epinglerAvis(avis.id, undefined as never),
+      pinReview(avis.id, undefined as never),
     ).rejects.toBeInstanceOf(InvalidPinError)
 
     expect(
@@ -300,24 +300,24 @@ describe("epinglerAvis — valeur d'épinglage venue du client", () => {
   it("traduit le refus en français dans l'adaptateur de formulaire", async () => {
     const avis = await creerAvisDeTest({ statut: 'publie' })
 
-    const etat = await epinglerAvisDepuisFormulaire(
-      avis.id, 'oui' as never, etatActionAvisInitial, new FormData(),
+    const etat = await pinReviewFromForm(
+      avis.id, 'oui' as never, initialReviewActionState, new FormData(),
     )
 
-    expect(etat.erreur).toMatch(/épinglage/i)
-    expect(etat.erreur).not.toMatch(/prisma|invalid value|boolean|InvalidPin/i)
+    expect(etat.error).toMatch(/épinglage/i)
+    expect(etat.error).not.toMatch(/prisma|invalid value|boolean|InvalidPin/i)
   })
 })
 
-describe('modererAvis — statut venu du client', () => {
+describe('moderateReview — statut venu du client', () => {
   it("refuse un statut forgé avec un message français, avant l'énumération PostgreSQL", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
 
     await expect(
-      modererAvis(avis.id, 'supprime' as never),
+      moderateReview(avis.id, 'supprime' as never),
     ).rejects.toBeInstanceOf(InvalidReviewStatusError)
     await expect(
-      modererAvis(avis.id, 'supprime' as never),
+      moderateReview(avis.id, 'supprime' as never),
     ).rejects.toThrow("Statut d'avis inconnu : supprime")
 
     expect(
@@ -329,7 +329,7 @@ describe('modererAvis — statut venu du client', () => {
     const avis = await creerAvisDeTest({ statut: 'publie' })
 
     await expect(
-      modererAvis(avis.id, 'en_attente' as never),
+      moderateReview(avis.id, 'en_attente' as never),
     ).rejects.toBeInstanceOf(InvalidReviewStatusError)
     expect(
       (await prisma.review.findUniqueOrThrow({ where: { id: avis.id } })).statut,
@@ -339,43 +339,43 @@ describe('modererAvis — statut venu du client', () => {
   it("traduit le refus en français dans l'adaptateur de formulaire", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
 
-    const etat = await modererAvisDepuisFormulaire(
-      avis.id, 'supprime' as never, etatActionAvisInitial, new FormData(),
+    const etat = await moderateReviewFromForm(
+      avis.id, 'supprime' as never, initialReviewActionState, new FormData(),
     )
 
-    expect(etat.erreur).toMatch(/modération/i)
-    expect(etat.erreur).not.toMatch(/prisma|invalid value|enum/i)
+    expect(etat.error).toMatch(/modération/i)
+    expect(etat.error).not.toMatch(/prisma|invalid value|enum/i)
   })
 })
 
-describe('modererAvis', () => {
+describe('moderateReview', () => {
   it('publie un avis en attente', async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente' })
-    expect((await modererAvis(avis.id, 'publie')).statut).toBe('publie')
+    expect((await moderateReview(avis.id, 'publie')).statut).toBe('publie')
   })
 
   it("dépingle un avis qu'on rejette, pour ne pas laisser un avis épinglé hors vitrine", async () => {
     const avis = await creerAvisDeTest({ statut: 'publie', epingle: true })
-    const apres = await modererAvis(avis.id, 'rejete')
+    const apres = await moderateReview(avis.id, 'rejete')
     expect(apres.statut).toBe('rejete')
     expect(apres.epingle).toBe(false)
   })
 
   it("ne change pas la source d'un avis vérifié qu'on modère", async () => {
     const avis = await creerAvisDeTest({ statut: 'en_attente', source: 'verifie' })
-    expect((await modererAvis(avis.id, 'publie')).source).toBe('verifie')
+    expect((await moderateReview(avis.id, 'publie')).source).toBe('verifie')
   })
 })
 
-describe("epinglerAvis — une bascule sans effet n'est pas un événement", () => {
-  // Un pas AU-DELÀ des deux garde-fous de <ActionsAvis> traités ci-dessous, et pour la même
+describe("pinReview — une bascule sans effet n'est pas un événement", () => {
+  // Un pas AU-DELÀ des deux garde-fous de <ReviewActions> traités ci-dessous, et pour la même
   // raison : le bouton d'épinglage est lié à `!avis.epingle`, donc deux onglets affichant
   // tous deux un avis non épinglé envoient tous deux `true`. Le second n'épingle rien — mais
   // sans ce garde il écrivait quand même une trace « epingle: true → true ».
   it("ne réécrit ni ne journalise un épinglage déjà en place", async () => {
     const avis = await creerAvisDeTest({ statut: 'publie', epingle: true })
 
-    expect((await epinglerAvis(avis.id, true)).epingle).toBe(true)
+    expect((await pinReview(avis.id, true)).epingle).toBe(true)
 
     expect(
       await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
@@ -385,7 +385,7 @@ describe("epinglerAvis — une bascule sans effet n'est pas un événement", () 
   it('ne journalise pas non plus un dépunaisage sur un avis qui ne l’est pas', async () => {
     const avis = await creerAvisDeTest({ statut: 'rejete', epingle: false })
 
-    expect((await epinglerAvis(avis.id, false)).epingle).toBe(false)
+    expect((await pinReview(avis.id, false)).epingle).toBe(false)
 
     expect(
       await prisma.auditLog.count({ where: { entite: 'Review', entiteId: avis.id } }),
@@ -398,19 +398,19 @@ describe("epinglerAvis — une bascule sans effet n'est pas un événement", () 
     // se verrait confirmer son épinglage en silence.
     const avis = await creerAvisDeTest({ statut: 'en_attente', epingle: true })
 
-    await expect(epinglerAvis(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
+    await expect(pinReview(avis.id, true)).rejects.toBeInstanceOf(ReviewNotPublishedError)
   })
 })
 
-describe("modererAvis — une décision sans effet n'est pas un événement", () => {
-  // <ActionsAvis> n'affiche pas « Publier » sur un avis déjà publié, ni « Rejeter » sur un
+describe("moderateReview — une décision sans effet n'est pas un événement", () => {
+  // <ReviewActions> n'affiche pas « Publier » sur un avis déjà publié, ni « Rejeter » sur un
   // avis déjà rejeté. Ces deux garde-fous vivaient uniquement dans le composant client :
   // un onglet resté sur un rendu périmé les contournait, et le journal d'audit enregistrait
   // alors un changement qui n'avait pas eu lieu (avant == après).
   it("ne réécrit ni ne journalise la publication d'un avis déjà publié", async () => {
     const avis = await creerAvisDeTest({ statut: 'publie' })
 
-    const apres = await modererAvis(avis.id, 'publie')
+    const apres = await moderateReview(avis.id, 'publie')
 
     expect(apres.statut).toBe('publie')
     expect(
@@ -421,7 +421,7 @@ describe("modererAvis — une décision sans effet n'est pas un événement", ()
   it("ne réécrit ni ne journalise le rejet d'un avis déjà rejeté", async () => {
     const avis = await creerAvisDeTest({ statut: 'rejete' })
 
-    const apres = await modererAvis(avis.id, 'rejete')
+    const apres = await moderateReview(avis.id, 'rejete')
 
     expect(apres.statut).toBe('rejete')
     expect(
@@ -435,7 +435,7 @@ describe("modererAvis — une décision sans effet n'est pas un événement", ()
     // incohérent que le dépunaisage au rejet existe pour empêcher.
     const avis = await creerAvisDeTest({ statut: 'rejete', epingle: true })
 
-    const apres = await modererAvis(avis.id, 'rejete')
+    const apres = await moderateReview(avis.id, 'rejete')
 
     expect(apres.epingle).toBe(false)
     // Là, un changement a bien eu lieu : il se journalise.
@@ -455,8 +455,8 @@ describe("actions d'avis — identifiant venu du client", () => {
   // lève P2025, et les adaptateurs de formulaire laissent cette erreur remonter au lieu de
   // la déguiser en message métier.
   it("laisse remonter un identifiant forgé en erreur Prisma, sans le déguiser en message métier", async () => {
-    const erreurEpinglage = await epinglerAvisDepuisFormulaire(
-      'avis-totalement-inexistant', true, etatActionAvisInitial, new FormData(),
+    const erreurEpinglage = await pinReviewFromForm(
+      'avis-totalement-inexistant', true, initialReviewActionState, new FormData(),
     ).then(() => null, (e: unknown) => e)
 
     expect(erreurEpinglage).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
@@ -465,8 +465,8 @@ describe("actions d'avis — identifiant venu du client", () => {
     // requireAdmin(), qui s'implémente par un throw et ne doit jamais être avalée.
     expect(erreurEpinglage).not.toBeInstanceOf(ReviewError)
 
-    const erreurModeration = await modererAvisDepuisFormulaire(
-      'avis-totalement-inexistant', 'publie', etatActionAvisInitial, new FormData(),
+    const erreurModeration = await moderateReviewFromForm(
+      'avis-totalement-inexistant', 'publie', initialReviewActionState, new FormData(),
     ).then(() => null, (e: unknown) => e)
 
     expect(erreurModeration).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
@@ -476,7 +476,7 @@ describe("actions d'avis — identifiant venu du client", () => {
 
   it("ne journalise rien pour un identifiant forgé", async () => {
     await expect(
-      modererAvis('avis-totalement-inexistant', 'publie'),
+      moderateReview('avis-totalement-inexistant', 'publie'),
     ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
 
     expect(

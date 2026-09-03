@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { prisma } from '@/server/db'
-import { listerProduitsPagines, PRODUITS_PAR_PAGE } from '@/app/admin/produits/query'
+import { listProductsPaginated, PRODUCTS_PER_PAGE } from '@/app/admin/produits/query'
 
 // Vérifie que la liste admin interroge réellement la base (skip/take + comptage), plutôt
 // que de charger tout le catalogue en mémoire pour le découper ensuite en JavaScript — un
@@ -25,7 +25,7 @@ beforeAll(async () => {
   // dépassait le délai de garde de 10 s de Vitest sur une machine chargée ou à froid —
   // 8 fichiers rougissaient d'un coup, symptôme trompeur d'une régression (observé le
   // 2026-08-30, consigné dans la passation des tâches 1 à 12).
-  const total = PRODUITS_PAR_PAGE + 5
+  const total = PRODUCTS_PER_PAGE + 5
   await prisma.product.createMany({
     data: Array.from({ length: total }, (_, i) => ({
       slug: `${PREFIXE}${i}`,
@@ -52,54 +52,54 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('listerProduitsPagines', () => {
+describe('listProductsPaginated', () => {
   it('interroge la base avec skip/take plutôt que de charger tout le catalogue', async () => {
     const espionFindMany = vi.spyOn(prisma.product, 'findMany')
     const espionCount = vi.spyOn(prisma.product, 'count')
 
-    const resultat = await listerProduitsPagines(prisma.product, {
+    const resultat = await listProductsPaginated(prisma.product, {
       page: 1,
-      filtres: { categoryId },
+      filters: { categoryId },
     })
 
     expect(espionCount).toHaveBeenCalled()
     expect(espionFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 0, take: PRODUITS_PAR_PAGE }),
+      expect.objectContaining({ skip: 0, take: PRODUCTS_PER_PAGE }),
     )
-    expect(resultat.lignes).toHaveLength(PRODUITS_PAR_PAGE)
+    expect(resultat.rows).toHaveLength(PRODUCTS_PER_PAGE)
     expect(resultat.totalPages).toBe(2)
   })
 
   it('renvoie la seconde page avec le reste des lignes, pas les mêmes', async () => {
-    const page1 = await listerProduitsPagines(prisma.product, { page: 1, filtres: { categoryId } })
-    const page2 = await listerProduitsPagines(prisma.product, { page: 2, filtres: { categoryId } })
+    const page1 = await listProductsPaginated(prisma.product, { page: 1, filters: { categoryId } })
+    const page2 = await listProductsPaginated(prisma.product, { page: 2, filters: { categoryId } })
 
-    expect(page2.lignes).toHaveLength(5)
+    expect(page2.rows).toHaveLength(5)
     expect(page2.page).toBe(2)
-    const slugsPage1 = new Set(page1.lignes.map((l) => l.slug))
-    for (const ligne of page2.lignes) {
+    const slugsPage1 = new Set(page1.rows.map((l) => l.slug))
+    for (const ligne of page2.rows) {
       expect(slugsPage1.has(ligne.slug)).toBe(false)
     }
   })
 
   it('filtre par catégorie', async () => {
-    const resultat = await listerProduitsPagines(prisma.product, {
+    const resultat = await listProductsPaginated(prisma.product, {
       page: 1,
-      filtres: { categoryId: 'categorie-totalement-inexistante' },
+      filters: { categoryId: 'categorie-totalement-inexistante' },
     })
-    expect(resultat.lignes).toHaveLength(0)
+    expect(resultat.rows).toHaveLength(0)
     expect(resultat.totalPages).toBe(1)
   })
 
   it('affiche le nom de la catégorie plutôt que son identifiant brut', async () => {
-    const resultat = await listerProduitsPagines(prisma.product, { page: 1, filtres: { categoryId } })
-    expect(resultat.lignes[0]?.categoryId).toBe('Pagination Test')
+    const resultat = await listProductsPaginated(prisma.product, { page: 1, filters: { categoryId } })
+    expect(resultat.rows[0]?.categoryId).toBe('Pagination Test')
   })
 
   it('ramène une page demandée hors bornes à la dernière page existante', async () => {
-    const resultat = await listerProduitsPagines(prisma.product, { page: 999, filtres: { categoryId } })
+    const resultat = await listProductsPaginated(prisma.product, { page: 999, filters: { categoryId } })
     expect(resultat.page).toBe(resultat.totalPages)
-    expect(resultat.lignes.length).toBeGreaterThan(0)
+    expect(resultat.rows.length).toBeGreaterThan(0)
   })
 })
 
@@ -112,7 +112,7 @@ describe('listerProduitsPagines', () => {
 // deux pages, ni ne disparaît, avec un `ordre` identique pour tous les produits — via un
 // second critère de tri déterministe (`id`), pas via des valeurs d'`ordre` distinctes que
 // l'interface ne produit jamais.
-describe('listerProduitsPagines avec un `ordre` identique pour tous les produits (cas réel)', () => {
+describe('listProductsPaginated avec un `ordre` identique pour tous les produits (cas réel)', () => {
   const PREFIXE_ORDRE_CONSTANT = 'pagtest-ordre-constant-'
   let categoryIdOrdreConstant: string
 
@@ -128,7 +128,7 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
 
     // Même correctif que le beforeAll du bloc précédent : un seul `createMany` plutôt que
     // 25 allers-retours séquentiels sous le délai de garde de 10 s de Vitest.
-    const total = PRODUITS_PAR_PAGE + 5
+    const total = PRODUCTS_PER_PAGE + 5
     await prisma.product.createMany({
       data: Array.from({ length: total }, (_, i) => ({
         slug: `${PREFIXE_ORDRE_CONSTANT}${i}`,
@@ -157,24 +157,24 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
     // réellement transmise à Prisma, pas seulement sur les lignes obtenues.
     const espionFindMany = vi.spyOn(prisma.product, 'findMany')
 
-    const page1 = await listerProduitsPagines(prisma.product, {
+    const page1 = await listProductsPaginated(prisma.product, {
       page: 1,
-      filtres: { categoryId: categoryIdOrdreConstant },
+      filters: { categoryId: categoryIdOrdreConstant },
     })
-    const page2 = await listerProduitsPagines(prisma.product, {
+    const page2 = await listProductsPaginated(prisma.product, {
       page: 2,
-      filtres: { categoryId: categoryIdOrdreConstant },
+      filters: { categoryId: categoryIdOrdreConstant },
     })
 
     expect(espionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: [{ ordre: 'asc' }, { id: 'asc' }] }),
     )
 
-    expect(page1.lignes).toHaveLength(PRODUITS_PAR_PAGE)
-    expect(page2.lignes).toHaveLength(5)
+    expect(page1.rows).toHaveLength(PRODUCTS_PER_PAGE)
+    expect(page2.rows).toHaveLength(5)
 
-    const idsPage1 = page1.lignes.map((l) => l.id)
-    const idsPage2 = page2.lignes.map((l) => l.id)
+    const idsPage1 = page1.rows.map((l) => l.id)
+    const idsPage2 = page2.rows.map((l) => l.id)
 
     // Aucun chevauchement entre les deux pages...
     for (const id of idsPage2) {
@@ -183,6 +183,6 @@ describe('listerProduitsPagines avec un `ordre` identique pour tous les produits
     // ...et l'ensemble des deux pages couvre bien tous les produits créés, sans doublon ni
     // absent.
     const tousLesIds = new Set([...idsPage1, ...idsPage2])
-    expect(tousLesIds.size).toBe(PRODUITS_PAR_PAGE + 5)
+    expect(tousLesIds.size).toBe(PRODUCTS_PER_PAGE + 5)
   })
 })

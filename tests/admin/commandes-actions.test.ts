@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
 import { OrderError, createOrder } from '@/server/orders'
 import { pathsToRevalidate } from '@/server/order-status-service'
-import { etatChangementStatutInitial } from '@/app/admin/commandes/etats'
+import { initialStatusChangeState } from '@/app/admin/commandes/etats'
 
 // Mêmes doublures que tests/admin/avis-actions.test.ts : requireAdmin() lit une session via
 // next/headers et revalidatePath() exige un contexte de requête App Router — ni l'un ni
@@ -16,7 +16,7 @@ vi.mock('next/cache', () => ({
 }))
 
 const { revalidatePath } = await import('next/cache')
-const { changerStatut, changerStatutDepuisFormulaire } = await import(
+const { changeStatus, changeStatusFromForm } = await import(
   '@/app/admin/commandes/actions'
 )
 
@@ -125,13 +125,13 @@ async function commandeConfirmee(quantity: number) {
   })
 }
 
-describe('changerStatut — garde de type sur le statut', () => {
+describe('changeStatus — garde de type sur le statut', () => {
   it("refuse un statut forgé avant qu'il n'atteigne l'énumération PostgreSQL", async () => {
     const c = await commandeConfirmee(1)
 
     // Une Server Action exportée est une route publique : protégée par requireAdmin(),
     // mais pas typée à l'exécution.
-    await expect(changerStatut(c.id, 'supprimee' as never)).rejects.toThrow(
+    await expect(changeStatus(c.id, 'supprimee' as never)).rejects.toThrow(
       'Statut inconnu : supprimee',
     )
 
@@ -142,11 +142,11 @@ describe('changerStatut — garde de type sur le statut', () => {
   })
 })
 
-describe('changerStatut — chemin nominal', () => {
+describe('changeStatus — chemin nominal', () => {
   it('applique la transition et invalide tous les chemins publiés par le cœur métier', async () => {
     const c = await commandeWhatsapp(2)
 
-    await changerStatut(c.id, 'confirmee')
+    await changeStatus(c.id, 'confirmee')
 
     expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
       'confirmee',
@@ -159,25 +159,25 @@ describe('changerStatut — chemin nominal', () => {
   })
 })
 
-describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () => {
+describe('changeStatusFromForm — traduction des erreurs métier', () => {
   it("traduit une transition devenue impossible en français, avec les libellés d'écran", async () => {
     const c = await commandeConfirmee(2)
 
     // confirmee → livree n'est pas une transition déclarée : c'est ce que voit un onglet
     // resté sur un rendu périmé.
-    const etat = await changerStatutDepuisFormulaire(
+    const etat = await changeStatusFromForm(
       c.id,
       'livree',
-      etatChangementStatutInitial,
+      initialStatusChangeState,
       new FormData(),
     )
 
-    expect(etat.erreur).toContain('« Confirmée »')
-    expect(etat.erreur).toContain('« Livrée »')
-    expect(etat.erreur).toContain('Rechargez la page.')
+    expect(etat.error).toContain('« Confirmée »')
+    expect(etat.error).toContain('« Livrée »')
+    expect(etat.error).toContain('Rechargez la page.')
     // Ni valeur brute d'énumération, ni nom de classe d'erreur sous les yeux de la
     // propriétaire.
-    expect(etat.erreur).not.toMatch(/confirmee|livree|ForbiddenTransition/)
+    expect(etat.error).not.toMatch(/confirmee|livree|ForbiddenTransition/)
     expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
       'confirmee',
     )
@@ -189,16 +189,16 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
     const c = await commandeWhatsapp(3)
     await prisma.variant.update({ where: { id: variantId }, data: { stock: 1 } })
 
-    const etat = await changerStatutDepuisFormulaire(
+    const etat = await changeStatusFromForm(
       c.id,
       'confirmee',
-      etatChangementStatutInitial,
+      initialStatusChangeState,
       new FormData(),
     )
 
-    expect(etat.erreur).toContain('Stock insuffisant')
-    expect(etat.erreur).toContain('Réapprovisionnez')
-    expect(etat.erreur).not.toMatch(/OutOfStock|prisma|constraint/i)
+    expect(etat.error).toContain('Stock insuffisant')
+    expect(etat.error).toContain('Réapprovisionnez')
+    expect(etat.error).not.toMatch(/OutOfStock|prisma|constraint/i)
     // Refusée avant toute écriture : ni stock entamé, ni statut avancé à tort.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(1)
     expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
@@ -206,17 +206,17 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
     )
   })
 
-  it('rend { erreur: null } quand la transition passe', async () => {
+  it('rend { error: null } quand la transition passe', async () => {
     const c = await commandeWhatsapp(2)
 
-    const etat = await changerStatutDepuisFormulaire(
+    const etat = await changeStatusFromForm(
       c.id,
       'confirmee',
-      etatChangementStatutInitial,
+      initialStatusChangeState,
       new FormData(),
     )
 
-    expect(etat).toEqual({ erreur: null })
+    expect(etat).toEqual({ error: null })
     expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
       'confirmee',
     )
@@ -226,10 +226,10 @@ describe('changerStatutDepuisFormulaire — traduction des erreurs métier', () 
     // Une commande inexistante n'est pas une situation normale que la propriétaire devrait
     // lire sous le bouton : c'est un défaut. L'avaler ici la masquerait — au même titre
     // que la redirection de requireAdmin(), qui s'implémente par un throw.
-    const erreur = await changerStatutDepuisFormulaire(
+    const erreur = await changeStatusFromForm(
       'commande-totalement-inexistante',
       'annulee',
-      etatChangementStatutInitial,
+      initialStatusChangeState,
       new FormData(),
     ).then(() => null, (e: unknown) => e)
 

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/server/auth'
-import { BoutonDeconnexion } from '@/components/bouton-deconnexion'
+import { SignOutButton } from '@/components/bouton-deconnexion'
 
 // Layout unique de tout /admin/* : la page de connexion vit hors de /admin (voir
 // src/app/connexion/page.tsx), donc requireAdmin() peut être appelé ici sans provoquer de
@@ -30,7 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Avis
           </Link>
         </div>
-        <BoutonDeconnexion />
+        <SignOutButton />
       </nav>
       <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
     </div>

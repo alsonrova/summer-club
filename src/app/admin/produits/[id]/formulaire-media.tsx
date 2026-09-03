@@ -1,17 +1,17 @@
 'use client'
 
 import { useActionState } from 'react'
-import type { EtatActionSimple } from '../etats'
+import type { SimpleActionState } from '../etats'
 
-export function FormulaireMedia({
+export function MediaForm({
   action,
 }: {
-  action: (etatPrecedent: EtatActionSimple, formData: FormData) => Promise<EtatActionSimple>
+  action: (previousState: SimpleActionState, formData: FormData) => Promise<SimpleActionState>
 }) {
-  const [etat, soumettre, enCours] = useActionState(action, { erreur: null })
+  const [state, submit, isPending] = useActionState(action, { error: null })
 
   return (
-    <form action={soumettre} className="flex flex-wrap items-end gap-3">
+    <form action={submit} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
         <label htmlFor="media-fichier" className="text-small text-bark-soft">
           Ajouter une photo
@@ -26,14 +26,14 @@ export function FormulaireMedia({
       </div>
       <button
         type="submit"
-        disabled={enCours}
+        disabled={isPending}
         className="rounded border border-taupe/40 bg-sage-deep px-4 py-2 text-shell hover:opacity-90 disabled:opacity-60"
       >
         Téléverser
       </button>
-      {etat.erreur ? (
+      {state.error ? (
         <p role="alert" className="w-full text-small text-bark">
-          {etat.erreur}
+          {state.error}
         </p>
       ) : null}
     </form>

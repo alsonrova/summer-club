@@ -12,24 +12,24 @@ import {
 } from '@/admin/resources/orders'
 import { formatAriary } from '@/domain/money'
 import { ORDER_STATUSES, isOrderStatus } from '@/domain/order-status'
-import { listerCommandesPaginees } from './query'
+import { listOrdersPaginated } from './query'
 
-function versPageValide(valeur: string | undefined): number {
-  const n = Number(valeur)
+function toValidPage(value: string | undefined): number {
+  const n = Number(value)
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1
 }
 
-function texteCourt(valeur: unknown): string {
-  const s = typeof valeur === 'string' ? valeur.trim() : ''
+function truncateText(value: unknown): string {
+  const s = typeof value === 'string' ? value.trim() : ''
   return s.slice(0, 60)
 }
 
-const OPTIONS_STATUT = ORDER_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
-const OPTIONS_CANAL = CHANNELS.map((c) => ({ value: c, label: CHANNEL_LABELS[c] }))
+const STATUS_OPTIONS = ORDER_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))
+const CHANNEL_OPTIONS = CHANNELS.map((c) => ({ value: c, label: CHANNEL_LABELS[c] }))
 
 // Chaque page d'administration appelle requireAdmin() elle-même : voir la convention dans
 // src/server/auth.ts — le layout ne suffit pas.
-export default async function CommandesPage({
+export default async function OrdersPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -37,21 +37,21 @@ export default async function CommandesPage({
   await requireAdmin()
 
   const sp = await searchParams
-  const statutBrut = typeof sp.statut === 'string' ? sp.statut : undefined
-  const canalBrut = typeof sp.canal === 'string' ? sp.canal : undefined
-  const referenceBrut = typeof sp.reference === 'string' ? sp.reference : undefined
+  const rawStatus = typeof sp.statut === 'string' ? sp.statut : undefined
+  const rawChannel = typeof sp.canal === 'string' ? sp.canal : undefined
+  const rawReference = typeof sp.reference === 'string' ? sp.reference : undefined
 
   // La querystring est écrite par le visiteur : un statut ou un canal inconnu est ignoré
   // plutôt que transmis à Prisma, qui répondrait par une erreur d'énumération PostgreSQL.
   // Les deux passent par le même genre de garde de type, jamais par un `as`.
-  const statut = isOrderStatus(statutBrut) ? statutBrut : undefined
-  const canal = isChannel(canalBrut) ? canalBrut : undefined
-  const reference = texteCourt(referenceBrut) || undefined
-  const page = versPageValide(typeof sp.page === 'string' ? sp.page : undefined)
+  const status = isOrderStatus(rawStatus) ? rawStatus : undefined
+  const channel = isChannel(rawChannel) ? rawChannel : undefined
+  const reference = truncateText(rawReference) || undefined
+  const page = toValidPage(typeof sp.page === 'string' ? sp.page : undefined)
 
-  const { lignes, page: pageCourante, totalPages, total } = await listerCommandesPaginees(
+  const { rows, page: currentPage, totalPages, total } = await listOrdersPaginated(
     prisma.order,
-    { page, filtres: { statut, canal, reference } },
+    { page, filters: { status, channel, reference } },
   )
 
   return (
@@ -65,31 +65,31 @@ export default async function CommandesPage({
 
       <AdminTable
         resource={ordersResource}
-        rows={lignes}
+        rows={rows}
         basePath="/admin/commandes"
-        page={pageCourante}
+        page={currentPage}
         totalPages={totalPages}
         filters={{
-          statut: statut ?? '',
-          canal: canal ?? '',
+          statut: status ?? '',
+          canal: channel ?? '',
           reference: reference ?? '',
         }}
-        filterOptions={{ statut: OPTIONS_STATUT, canal: OPTIONS_CANAL }}
+        filterOptions={{ statut: STATUS_OPTIONS, canal: CHANNEL_OPTIONS }}
         columnFormatters={{
-          total: (valeur) => formatAriary(Number(valeur)),
-          statut: (valeur) => statusLabel(String(valeur)),
-          canal: (valeur) => channelLabel(String(valeur)),
+          total: (value) => formatAriary(Number(value)),
+          statut: (value) => statusLabel(String(value)),
+          canal: (value) => channelLabel(String(value)),
           // L'heure compte autant que le jour pour retrouver une commande passée le matin
           // même : le formatage `date` générique d'AdminTable ne donne que la date.
-          createdAt: (valeur) =>
-            valeur instanceof Date
-              ? valeur.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-              : String(valeur),
+          createdAt: (value) =>
+            value instanceof Date
+              ? value.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+              : String(value),
         }}
-        // `ligne['id']` en notation crochet : le générique d'AdminTable est dérivé
+        // `row['id']` en notation crochet : le générique d'AdminTable est dérivé
         // d'orderSchema, qui ne déclare pas `id` (ce n'est pas une colonne). La ligne
-        // réellement transmise (LigneCommandeListe) le porte bien à l'exécution.
-        link={{ column: 'reference', to: (ligne) => `/admin/commandes/${ligne['id']}` }}
+        // réellement transmise (OrderListRow) le porte bien à l'exécution.
+        link={{ column: 'reference', to: (row) => `/admin/commandes/${row['id']}` }}
       />
     </div>
   )

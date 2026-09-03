@@ -1,11 +1,11 @@
 'use client'
 
 import { useActionState, useId } from 'react'
-import type { EtatActionSimple } from '../etats'
+import type { SimpleActionState } from '../etats'
 
 type Media = { id: string; chemin: string; alt: string; position: number; isPrimary: boolean }
 
-type ActionMedia = (etatPrecedent: EtatActionSimple, formData: FormData) => Promise<EtatActionSimple>
+type ActionMedia = (previousState: SimpleActionState, formData: FormData) => Promise<SimpleActionState>
 
 // Cadre en arche (rounded-arch) au ratio 4:5 : le motif signature de la marque (spec §3.9),
 // appliqué ici à la vignette admin. `<picture>` avec les variantes AVIF/WebP déjà générées
@@ -13,34 +13,34 @@ type ActionMedia = (etatPrecedent: EtatActionSimple, formData: FormData) => Prom
 // utiles (400/800/1200), un second passage d'optimisation serait redondant.
 //
 // Pas de glisser-déposer (hors périmètre de cette tâche) : un simple champ de position
-// numérique, soumis via reordonnerMedia. Le texte alternatif, la désignation de la photo
+// numérique, soumis via reorderAction. Le texte alternatif, la désignation de la photo
 // principale et la suppression sont chacun leur propre petit formulaire, sur le même
-// modèle (useActionState, doublure EtatActionSimple) que le réordonnancement.
-export function MediaCarte({
+// modèle (useActionState, doublure SimpleActionState) que le réordonnancement.
+export function MediaCard({
   media,
-  actionReordonner,
-  actionAlt,
-  actionPrincipale,
-  actionSupprimer,
+  reorderAction,
+  altAction,
+  primaryAction,
+  deleteAction,
 }: {
   media: Media
-  actionReordonner: ActionMedia
-  actionAlt: ActionMedia
-  actionPrincipale: ActionMedia
-  actionSupprimer: ActionMedia
+  reorderAction: ActionMedia
+  altAction: ActionMedia
+  primaryAction: ActionMedia
+  deleteAction: ActionMedia
 }) {
-  const [etatPosition, soumettrePosition, positionEnCours] = useActionState(actionReordonner, {
-    erreur: null,
+  const [positionState, submitPosition, positionPending] = useActionState(reorderAction, {
+    error: null,
   })
-  const [etatAlt, soumettreAlt, altEnCours] = useActionState(actionAlt, { erreur: null })
-  const [etatPrincipale, soumettrePrincipale, principaleEnCours] = useActionState(actionPrincipale, {
-    erreur: null,
+  const [altState, submitAlt, altPending] = useActionState(altAction, { error: null })
+  const [primaryState, submitPrimary, primaryPending] = useActionState(primaryAction, {
+    error: null,
   })
-  const [etatSuppression, soumettreSuppression, suppressionEnCours] = useActionState(actionSupprimer, {
-    erreur: null,
+  const [deleteState, submitDelete, deletePending] = useActionState(deleteAction, {
+    error: null,
   })
-  const idPosition = useId()
-  const idAlt = useId()
+  const positionId = useId()
+  const altId = useId()
 
   return (
     <div className="flex flex-col gap-2">
@@ -58,29 +58,29 @@ export function MediaCarte({
       {media.isPrimary ? (
         <span className="text-small text-bark-soft">Photo principale</span>
       ) : (
-        <form action={soumettrePrincipale}>
+        <form action={submitPrimary}>
           <button
             type="submit"
-            disabled={principaleEnCours}
+            disabled={primaryPending}
             className="text-small text-bark-soft underline hover:text-bark disabled:opacity-60"
           >
             Définir comme photo principale
           </button>
         </form>
       )}
-      {etatPrincipale.erreur ? (
+      {primaryState.error ? (
         <p role="alert" className="text-small text-bark">
-          {etatPrincipale.erreur}
+          {primaryState.error}
         </p>
       ) : null}
 
-      <form action={soumettreAlt} className="flex flex-col gap-1">
-        <label htmlFor={idAlt} className="text-small text-bark-soft">
+      <form action={submitAlt} className="flex flex-col gap-1">
+        <label htmlFor={altId} className="text-small text-bark-soft">
           Texte alternatif
         </label>
         <div className="flex items-center gap-2">
           <input
-            id={idAlt}
+            id={altId}
             name="alt"
             type="text"
             defaultValue={media.alt}
@@ -88,25 +88,25 @@ export function MediaCarte({
           />
           <button
             type="submit"
-            disabled={altEnCours}
+            disabled={altPending}
             className="rounded border border-taupe/40 bg-shell px-2 py-1 text-small text-bark-soft hover:text-bark disabled:opacity-60"
           >
             Enregistrer
           </button>
         </div>
       </form>
-      {etatAlt.erreur ? (
+      {altState.error ? (
         <p role="alert" className="text-small text-bark">
-          {etatAlt.erreur}
+          {altState.error}
         </p>
       ) : null}
 
-      <form action={soumettrePosition} className="flex items-center gap-2">
-        <label htmlFor={idPosition} className="sr-only">
+      <form action={submitPosition} className="flex items-center gap-2">
+        <label htmlFor={positionId} className="sr-only">
           Position
         </label>
         <input
-          id={idPosition}
+          id={positionId}
           name="position"
           type="number"
           defaultValue={media.position}
@@ -114,37 +114,37 @@ export function MediaCarte({
         />
         <button
           type="submit"
-          disabled={positionEnCours}
+          disabled={positionPending}
           className="rounded border border-taupe/40 bg-shell px-2 py-1 text-small text-bark-soft hover:text-bark disabled:opacity-60"
         >
           Réordonner
         </button>
       </form>
-      {etatPosition.erreur ? (
+      {positionState.error ? (
         <p role="alert" className="text-small text-bark">
-          {etatPosition.erreur}
+          {positionState.error}
         </p>
       ) : null}
 
       <form
-        action={soumettreSuppression}
-        onSubmit={(evenement) => {
+        action={submitDelete}
+        onSubmit={(event) => {
           if (!window.confirm('Supprimer définitivement cette photo ?')) {
-            evenement.preventDefault()
+            event.preventDefault()
           }
         }}
       >
         <button
           type="submit"
-          disabled={suppressionEnCours}
+          disabled={deletePending}
           className="text-small text-bark-soft underline hover:text-bark disabled:opacity-60"
         >
           Supprimer
         </button>
       </form>
-      {etatSuppression.erreur ? (
+      {deleteState.error ? (
         <p role="alert" className="text-small text-bark">
-          {etatSuppression.erreur}
+          {deleteState.error}
         </p>
       ) : null}
     </div>

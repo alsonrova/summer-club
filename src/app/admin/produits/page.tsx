@@ -4,23 +4,23 @@ import { prisma } from '@/server/db'
 import { AdminTable } from '@/admin/engine/table'
 import { productsResource } from '@/admin/resources/products'
 import { formatAriary } from '@/domain/money'
-import { listerProduitsPagines } from './query'
+import { listProductsPaginated } from './query'
 
-function versPageValide(valeur: string | undefined): number {
-  const n = Number(valeur)
+function toValidPage(value: string | undefined): number {
+  const n = Number(value)
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1
 }
 
-function versFiltreActif(valeur: string | undefined): boolean | undefined {
-  if (valeur === 'true') return true
-  if (valeur === 'false') return false
+function toActiveFilter(value: string | undefined): boolean | undefined {
+  if (value === 'true') return true
+  if (value === 'false') return false
   return undefined
 }
 
 // Chaque page d'administration appelle requireAdmin() elle-même : voir le commentaire de
 // convention dans src/server/auth.ts — le layout /admin ne suffit pas (rendu partiel, ne
 // protège ni les Server Actions ni les Route Handlers).
-export default async function ProduitsPage({
+export default async function ProductsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -29,13 +29,13 @@ export default async function ProduitsPage({
 
   const sp = await searchParams
   const categoryId = typeof sp.categoryId === 'string' && sp.categoryId !== '' ? sp.categoryId : undefined
-  const actifBrut = typeof sp.actif === 'string' ? sp.actif : undefined
-  const actif = versFiltreActif(actifBrut)
-  const page = versPageValide(typeof sp.page === 'string' ? sp.page : undefined)
+  const rawActive = typeof sp.actif === 'string' ? sp.actif : undefined
+  const active = toActiveFilter(rawActive)
+  const page = toValidPage(typeof sp.page === 'string' ? sp.page : undefined)
 
-  const { lignes, page: pageCourante, totalPages } = await listerProduitsPagines(prisma.product, {
+  const { rows, page: currentPage, totalPages } = await listProductsPaginated(prisma.product, {
     page,
-    filtres: { categoryId, actif },
+    filters: { categoryId, active },
   })
 
   return (
@@ -52,18 +52,18 @@ export default async function ProduitsPage({
 
       <AdminTable
         resource={productsResource}
-        rows={lignes}
+        rows={rows}
         basePath="/admin/produits"
-        page={pageCourante}
+        page={currentPage}
         totalPages={totalPages}
-        filters={{ categoryId: categoryId ?? '', actif: actifBrut ?? '' }}
-        columnFormatters={{ prixBase: (valeur) => formatAriary(Number(valeur)) }}
-        // `ligne['id']` en notation crochet, pas `ligne.id` : le paramètre générique T
+        filters={{ categoryId: categoryId ?? '', actif: rawActive ?? '' }}
+        columnFormatters={{ prixBase: (value) => formatAriary(Number(value)) }}
+        // `row['id']` en notation crochet, pas `row.id` : le paramètre générique T
         // d'AdminTable (ici ProductInput, dérivé de productSchema) n'a pas de champ `id`
         // propre — seule la contrainte structurelle `T extends Record<string, unknown>`
         // autorise l'indexation par une chaîne arbitraire. Le tableau réellement transmis
-        // (LigneProduitListe) porte bien un `id` à l'exécution.
-        link={{ column: 'nom', to: (ligne) => `/admin/produits/${ligne['id']}` }}
+        // (ProductListRow) porte bien un `id` à l'exécution.
+        link={{ column: 'nom', to: (row) => `/admin/produits/${row['id']}` }}
       />
     </div>
   )

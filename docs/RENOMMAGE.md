@@ -540,6 +540,46 @@ Couche `src/admin/` (étape 3) :
 | `AdminTable.filterOptions` (`optionsFiltres`, éléments) | `valeur` / `libelle` | `value` / `label` |
 | `AdminForm` (clés du paramètre déstructuré) | `valeursInitiales` / `erreurs` / `libelleSoumettre` | `initialValues` / `errors` / `submitLabel` — même découverte ; `AdminForm` n'est pour l'instant invoqué nulle part dans `src/app/`, donc aucun consommateur à aligner dans ce commit |
 
+Couche `src/app/` et `src/components/` (étape 4) :
+
+| Type ou paramètre | Actuel | Cible |
+| --- | --- | --- |
+| `TestimonialFormState` / `ReviewActionState` (`EtatFormulaireTemoignage` / `EtatActionAvis`) | `succes` / `erreurs` / `valeursInitiales` / `erreur` | `success` / `errors` / `initialValues` / `error` |
+| `StatusChangeState` (`EtatChangementStatut`) | `erreur` | `error` |
+| `ProductFormState` / `VariantFormState` / `SimpleActionState` (`EtatFormulaireProduit` / `EtatFormulaireDeclinaison` / `EtatActionSimple`) | `succes` / `erreurs` / `valeursInitiales` / `erreur` | `success` / `errors` / `initialValues` / `error` |
+| `ReviewFilters` (`FiltresAvis`, paramètre de `listReviewsPaginated`) | `statut` / `epingle` | `status` / `pinned` |
+| `OrderFilters` (`FiltresCommandes`, paramètre de `listOrdersPaginated`) | `statut` / `canal` | `status` / `channel` |
+| `ProductFilters` (`FiltresProduits`, paramètre de `listProductsPaginated`) | `actif` | `active` — `categoryId` était déjà conforme |
+| `listReviewsPaginated` / `listOrdersPaginated` / `listProductsPaginated` (forme de retour) | `lignes` | `rows` — miroir du prop déjà anglais `AdminTable.rows` (§ 3.7, couche `src/admin/`, ci-dessus) |
+| `ReviewListRow` (`LigneAvisListe`) | `auteur` / `note` / `texte` / `statut` / `epingle` / `produit` | `author` / `rating` / `body` / `status` / `pinned` / `product` — libre de toute contrainte, contrairement aux deux lignes suivantes : l'écran avis ne passe jamais cette ligne à `<AdminTable>`, il construit son propre `<table>` |
+| ⚠ `OrderListRow` (`LigneCommandeListe`) | `clientNom` / `tel` / `canal` / `statut` | **inchangés, restent français** | 
+| ⚠ `ProductListRow` (`LigneProduitListe`) | `nom` / `prixBase` / `prixAchat` / `actif` / `ordre` | **inchangés, restent français** |
+
+**Sur ces deux derniers ⚠ : seul le NOM du type change, pas ses champs.** `OrderListRow`/`ProductListRow` sont passées telles quelles en prop `rows` à `<AdminTable resource={ordersResource|productsResource} ...>` (`src/admin/engine/table.tsx`), dont le paramètre générique `T` est lié par inférence à `OrderListInput`/`ProductInput` (`src/admin/resources/{orders,products}.ts`, dérivés par `z.infer` des schémas `orderSchema`/`productSchema` — miroirs des colonnes Prisma, § 2, pas encore renommées). Renommer ces champs romprait l'assignabilité structurelle à la compilation (`tsc` refuse alors `rows={rows}` : propriétés requises manquantes). C'est la même frontière que `Media.chemin`, déjà documentée pour `src/server/` ci-dessus — une propriété qui semble appartenir à cette couche mais qui est en réalité contrainte par un point de consommation encore français. Vérifié en compilant les deux sens (renommé → `tsc` échoue ; inchangé → `tsc` passe) avant de trancher.
+
+| Type ou paramètre | Actuel | Cible |
+| --- | --- | --- |
+| `ProductForm` (`FormulaireProduit`, props) | `etatInitial` / `libelleSoumettre` | `initialState` / `submitLabel` — props propres à ce composant hand-écrit (distinct d'`AdminForm`) |
+| `VariantForm` (`FormulaireDeclinaison`, props) | `prixBase` | `basePrice` — simple prop d'affichage, sans lien avec `AdminTable` |
+| `StockForm` (`FormulaireStock`, props) | `stockActuel` / `seuilAlerte` | `currentStock` / `lowStockThreshold` — miroir du vocabulaire `Variant.seuilAlerte` → `lowStockThreshold` (§ 2) |
+| `MediaCard` (`MediaCarte`, props) | `actionReordonner` / `actionAlt` / `actionPrincipale` / `actionSupprimer` | `reorderAction` / `altAction` / `primaryAction` / `deleteAction` |
+| `ReviewActions` (`ActionsAvis`, props) | `publier` / `rejeter` / `basculerEpingle` / `statut` / `epingle` | `publish` / `reject` / `togglePinned` / `status` / `pinned` |
+| `StatusButtons` (`BoutonsStatut`, props et éléments de `transitions`) | `vers` / `libelle` | `to` / `label` |
+| `changeStatus` / `changeStatusFromForm` (`changerStatut`, paramètre) | `vers` | `to` — aligné sur `transitionAllowed(from, to)` (`src/domain/order-status.ts`), déjà ainsi depuis l'étape 1 |
+
+**Trou découvert à l'étape 4, même famille que celui de l'étape 1 (§ 3.6) :** la commande d'audit du § 3 (`grep -rhoE '^export (async function|function|const|type|class|interface) …'`) ne capture pas `export default async function NomPage(...)` — le mot `default` casse le motif `^export (async function|…)`. Six pages d'administration et deux pages publiques portaient donc un nom de fonction français jamais recensé dans aucune table : `AvisPage`, `CommandesPage`, `FicheCommandePage`, `NouveauProduitPage`, `ProduitsPage`, `FicheProduitPage`, `AccesRefusePage`, `ConnexionPage`. Aucune n'est importée par son nom ailleurs (un export par défaut de `page.tsx` n'est référencé que par Next.js, via le chemin de fichier) : renommage sans risque, dans le même commit.
+
+| Actuel | Cible | Fichier |
+| --- | --- | --- |
+| `AvisPage` | `ReviewsPage` | `src/app/admin/avis/page.tsx` |
+| `CommandesPage` | `OrdersPage` | `src/app/admin/commandes/page.tsx` |
+| `FicheCommandePage` | `OrderDetailPage` | `src/app/admin/commandes/[id]/page.tsx` |
+| `NouveauProduitPage` | `NewProductPage` | `src/app/admin/produits/nouveau/page.tsx` |
+| `ProduitsPage` | `ProductsPage` | `src/app/admin/produits/page.tsx` |
+| `FicheProduitPage` | `ProductDetailPage` | `src/app/admin/produits/[id]/page.tsx` |
+| `AccesRefusePage` | `AccessDeniedPage` | `src/app/acces-refuse/page.tsx` |
+| `ConnexionPage` | `SignInPage` | `src/app/connexion/page.tsx` |
+
 ---
 
 ## 4. Fichiers à renommer

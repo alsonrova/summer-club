@@ -1,26 +1,26 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import { prisma } from '@/server/db'
 import {
-  listerAvisPagines,
-  AVIS_PAR_PAGE,
-  type DelegateListeAvis,
+  listReviewsPaginated,
+  REVIEWS_PER_PAGE,
+  type ReviewListDelegate,
 } from '@/app/admin/avis/query'
 
 // Pendant de tests/admin/commandes-query.test.ts pour les avis : vérifie que la liste
 // interroge réellement la base (comptage + skip/take) au lieu de charger toute la table pour
 // la découper en mémoire, que son tri est TOTAL donc déterministe, et que ses deux filtres
-// fonctionnent — y compris `epingle: false`, qu'un `if (filtres.epingle)` naïf laisserait
+// fonctionnent — y compris `pinned: false`, qu'un `if (filters.pinned)` naïf laisserait
 // tomber.
 //
-// La table Review est un état global que ce fichier ne possède pas, et `FiltresAvis` n'offre
-// aucun filtre par produit pour s'y borner. C'est le DELEGATE injecté qui joue ce rôle :
-// `listerAvisPagines` prend son delegate en paramètre, on lui en passe un qui ajoute
-// `productId` à chaque `where`. Les avis des autres fichiers, qui tournent en parallèle
-// (vitest.config.ts), restent invisibles d'ici — et ceux d'ici invisibles d'eux.
+// La table Review est un état global que ce fichier ne possède pas, et `ReviewFilters`
+// n'offre aucun filtre par produit pour s'y borner. C'est le DELEGATE injecté qui joue ce
+// rôle : `listReviewsPaginated` prend son delegate en paramètre, on lui en passe un qui
+// ajoute `productId` à chaque `where`. Les avis des autres fichiers, qui tournent en
+// parallèle (vitest.config.ts), restent invisibles d'ici — et ceux d'ici invisibles d'eux.
 const SLUG_CATEGORIE = 'test-avis-query-categorie'
 const SLUG_PRODUIT = 'test-avis-query-produit'
 const NOM_PRODUIT = 'Produit de test (liste des avis)'
-const TOTAL = AVIS_PAR_PAGE + 5
+const TOTAL = REVIEWS_PER_PAGE + 5
 const EPINGLES = 3
 
 // Horodatage identique pour tous : c'est le cas réel qui casse un tri sur `createdAt` seul
@@ -43,7 +43,7 @@ async function purger() {
 }
 
 /** Delegate borné à MES avis — voir l'en-tête de fichier. */
-function mesAvis(): DelegateListeAvis {
+function mesAvis(): ReviewListDelegate {
   return {
     count: ({ where }) => prisma.review.count({ where: { ...where, productId } }),
     findMany: (args) => prisma.review.findMany({ ...args, where: { ...args.where, productId } }),
@@ -103,18 +103,18 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('listerAvisPagines', () => {
+describe('listReviewsPaginated', () => {
   it('interroge la base avec skip/take plutôt que de charger tous les avis', async () => {
     const espionFindMany = vi.spyOn(prisma.review, 'findMany')
     const espionCount = vi.spyOn(prisma.review, 'count')
 
-    const resultat = await listerAvisPagines(mesAvis(), { page: 1 })
+    const resultat = await listReviewsPaginated(mesAvis(), { page: 1 })
 
     expect(espionCount).toHaveBeenCalled()
     expect(espionFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 0, take: AVIS_PAR_PAGE }),
+      expect.objectContaining({ skip: 0, take: REVIEWS_PER_PAGE }),
     )
-    expect(resultat.lignes).toHaveLength(AVIS_PAR_PAGE)
+    expect(resultat.rows).toHaveLength(REVIEWS_PER_PAGE)
     expect(resultat.total).toBe(TOTAL)
     expect(resultat.totalPages).toBe(2)
   })
@@ -122,12 +122,12 @@ describe('listerAvisPagines', () => {
   it('décale bien skip sur la seconde page', async () => {
     const espionFindMany = vi.spyOn(prisma.review, 'findMany')
 
-    const resultat = await listerAvisPagines(mesAvis(), { page: 2 })
+    const resultat = await listReviewsPaginated(mesAvis(), { page: 2 })
 
     expect(espionFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: AVIS_PAR_PAGE, take: AVIS_PAR_PAGE }),
+      expect.objectContaining({ skip: REVIEWS_PER_PAGE, take: REVIEWS_PER_PAGE }),
     )
-    expect(resultat.lignes).toHaveLength(TOTAL - AVIS_PAR_PAGE)
+    expect(resultat.rows).toHaveLength(TOTAL - REVIEWS_PER_PAGE)
     expect(resultat.page).toBe(2)
   })
 
@@ -138,8 +138,8 @@ describe('listerAvisPagines', () => {
     // détecté par les seules lignes obtenues.
     const espionFindMany = vi.spyOn(prisma.review, 'findMany')
 
-    const page1 = await listerAvisPagines(mesAvis(), { page: 1 })
-    const page2 = await listerAvisPagines(mesAvis(), { page: 2 })
+    const page1 = await listReviewsPaginated(mesAvis(), { page: 1 })
+    const page2 = await listReviewsPaginated(mesAvis(), { page: 2 })
 
     expect(espionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -147,38 +147,38 @@ describe('listerAvisPagines', () => {
       }),
     )
 
-    const ids = [...page1.lignes.map((l) => l.id), ...page2.lignes.map((l) => l.id)]
+    const ids = [...page1.rows.map((l) => l.id), ...page2.rows.map((l) => l.id)]
     // Ni doublon d'une page à l'autre, ni ligne oubliée.
     expect(new Set(ids).size).toBe(TOTAL)
   })
 
   it("place les avis épinglés en tête, c'est ce que la propriétaire vient vérifier", async () => {
-    const page1 = await listerAvisPagines(mesAvis(), { page: 1 })
+    const page1 = await listReviewsPaginated(mesAvis(), { page: 1 })
 
-    expect(page1.lignes.slice(0, EPINGLES).every((l) => l.epingle)).toBe(true)
-    expect(page1.lignes.slice(EPINGLES).some((l) => l.epingle)).toBe(false)
+    expect(page1.rows.slice(0, EPINGLES).every((l) => l.pinned)).toBe(true)
+    expect(page1.rows.slice(EPINGLES).some((l) => l.pinned)).toBe(false)
   })
 
   it('filtre par statut', async () => {
     const attendu = await prisma.review.count({ where: { productId, statut: 'rejete' } })
     expect(attendu).toBeGreaterThan(0)
 
-    const resultat = await listerAvisPagines(mesAvis(), { page: 1, filtres: { statut: 'rejete' } })
+    const resultat = await listReviewsPaginated(mesAvis(), { page: 1, filters: { status: 'rejete' } })
 
     expect(resultat.total).toBe(attendu)
-    expect(resultat.lignes.every((l) => l.statut === 'rejete')).toBe(true)
+    expect(resultat.rows.every((l) => l.status === 'rejete')).toBe(true)
   })
 
   it('filtre par épinglage, dans les deux sens', async () => {
-    const epingles = await listerAvisPagines(mesAvis(), { page: 1, filtres: { epingle: true } })
+    const epingles = await listReviewsPaginated(mesAvis(), { page: 1, filters: { pinned: true } })
     expect(epingles.total).toBe(EPINGLES)
-    expect(epingles.lignes.every((l) => l.epingle)).toBe(true)
+    expect(epingles.rows.every((l) => l.pinned)).toBe(true)
 
-    // `epingle: false` est le cas qu'un `if (filtres.epingle)` laisserait tomber : la valeur
+    // `pinned: false` est le cas qu'un `if (filters.pinned)` laisserait tomber : la valeur
     // est falsy, mais elle a bien été demandée. D'où le `!== undefined` dans la requête.
-    const nonEpingles = await listerAvisPagines(mesAvis(), { page: 1, filtres: { epingle: false } })
+    const nonEpingles = await listReviewsPaginated(mesAvis(), { page: 1, filters: { pinned: false } })
     expect(nonEpingles.total).toBe(TOTAL - EPINGLES)
-    expect(nonEpingles.lignes.some((l) => l.epingle)).toBe(false)
+    expect(nonEpingles.rows.some((l) => l.pinned)).toBe(false)
   })
 
   it('combine les deux filtres', async () => {
@@ -187,25 +187,25 @@ describe('listerAvisPagines', () => {
     })
     expect(attendu).toBeGreaterThan(0)
 
-    const resultat = await listerAvisPagines(mesAvis(), {
+    const resultat = await listReviewsPaginated(mesAvis(), {
       page: 1,
-      filtres: { statut: 'publie', epingle: false },
+      filters: { status: 'publie', pinned: false },
     })
 
     expect(resultat.total).toBe(attendu)
-    expect(resultat.lignes.every((l) => l.statut === 'publie' && !l.epingle)).toBe(true)
+    expect(resultat.rows.every((l) => l.status === 'publie' && !l.pinned)).toBe(true)
   })
 
   it('ramène une page demandée hors bornes à la dernière page existante', async () => {
-    const resultat = await listerAvisPagines(mesAvis(), { page: 999 })
+    const resultat = await listReviewsPaginated(mesAvis(), { page: 999 })
 
     expect(resultat.page).toBe(resultat.totalPages)
-    expect(resultat.lignes.length).toBeGreaterThan(0)
+    expect(resultat.rows.length).toBeGreaterThan(0)
   })
 
   it("expose le nom du produit rattaché plutôt que son identifiant technique", async () => {
-    const resultat = await listerAvisPagines(mesAvis(), { page: 1 })
+    const resultat = await listReviewsPaginated(mesAvis(), { page: 1 })
 
-    expect(resultat.lignes.every((l) => l.produit === NOM_PRODUIT)).toBe(true)
+    expect(resultat.rows.every((l) => l.product === NOM_PRODUIT)).toBe(true)
   })
 })

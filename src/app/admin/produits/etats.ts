@@ -6,35 +6,35 @@ import type { ValidationErrors } from '@/admin/engine/actions'
 // sont pourtant nécessaires aussi bien aux Server Actions (comme forme de retour) qu'aux
 // composants client qui les invoquent via useActionState (comme état initial).
 
-export type EtatFormulaireProduit = {
-  succes: boolean
-  erreurs: ValidationErrors
-  valeursInitiales: Record<string, unknown>
+export type ProductFormState = {
+  success: boolean
+  errors: ValidationErrors
+  initialValues: Record<string, unknown>
 }
 
-export const etatFormulaireProduitInitial: EtatFormulaireProduit = {
-  succes: false,
-  erreurs: {},
-  valeursInitiales: {},
+export const initialProductFormState: ProductFormState = {
+  success: false,
+  errors: {},
+  initialValues: {},
 }
 
-export type EtatActionSimple = {
-  erreur: string | null
+export type SimpleActionState = {
+  error: string | null
 }
 
-export const etatActionSimpleInitial: EtatActionSimple = { erreur: null }
+export const initialSimpleActionState: SimpleActionState = { error: null }
 
-// Même forme que EtatFormulaireProduit ci-dessus (succès, erreurs par champ, valeurs à
+// Même forme que ProductFormState ci-dessus (succès, erreurs par champ, valeurs à
 // restituer) : le formulaire de création de déclinaison (formulaire-declinaison.tsx) suit
-// le même patron useActionState que FormulaireProduit, sur son propre schéma.
-export type EtatFormulaireDeclinaison = {
-  succes: boolean
-  erreurs: ValidationErrors
-  valeursInitiales: Record<string, unknown>
+// le même patron useActionState que ProductForm, sur son propre schéma.
+export type VariantFormState = {
+  success: boolean
+  errors: ValidationErrors
+  initialValues: Record<string, unknown>
 }
 
-export const etatFormulaireDeclinaisonInitial: EtatFormulaireDeclinaison = {
-  succes: false,
-  erreurs: {},
-  valeursInitiales: {},
+export const initialVariantFormState: VariantFormState = {
+  success: false,
+  errors: {},
+  initialValues: {},
 }

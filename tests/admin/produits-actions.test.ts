@@ -5,19 +5,19 @@ import sharp from 'sharp'
 import { prisma } from '@/server/db'
 import { UnreadableImageError } from '@/server/media'
 import {
-  creerProduit,
-  modifierProduit,
-  creerDeclinaison,
-  ajusterStock,
-  televerserMedia,
-  reordonnerMedia,
-  modifierAltMedia,
-  definirPhotoPrincipale,
-  supprimerMedia,
+  createProduct,
+  updateProduct,
+  createVariant,
+  adjustStock,
+  uploadMedia,
+  reorderMedia,
+  updateMediaAlt,
+  setPrimaryPhoto,
+  deleteMedia,
 } from '@/app/admin/produits/actions'
 
-// ajusterStock/televerserMedia/reordonnerMedia (et désormais creerProduit/modifierProduit/
-// creerDeclinaison/modifierAltMedia/definirPhotoPrincipale/supprimerMedia) passent par
+// adjustStock/uploadMedia/reorderMedia (et désormais createProduct/updateProduct/
+// createVariant/updateMediaAlt/setPrimaryPhoto/deleteMedia) passent par
 // requireAdmin() (session, next/headers) et revalidatePath() (cache App Router) : tous deux
 // exigent un contexte de requête Next.js réel, absent sous Vitest. Même doublure que
 // tests/admin/champs-systeme.test.ts pour requireAdmin ; revalidatePath n'a pas besoin de
@@ -31,8 +31,8 @@ vi.mock('next/cache', () => ({
 // redirect() a un type de retour `never` : en production, Next.js l'implémente en levant
 // une erreur spéciale (digest `NEXT_REDIRECT`) qui interrompt l'exécution. On reproduit ce
 // comportement (lever) plutôt que de le neutraliser (une doublure qui ne fait rien
-// laisserait `creerProduit` se poursuivre après l'appel, un chemin que le vrai runtime
-// n'emprunte jamais) — le test du chemin nominal de creerProduit s'attend donc lui-même à
+// laisserait `createProduct` se poursuivre après l'appel, un chemin que le vrai runtime
+// n'emprunte jamais) — le test du chemin nominal de createProduct s'attend donc lui-même à
 // ce que l'appel lève, une fois l'écriture en base et l'audit déjà faits.
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
@@ -40,7 +40,7 @@ vi.mock('next/navigation', () => ({
   }),
 }))
 // Interrupteur permettant à un test d'armer un échec d'écriture disque (voir le test de la
-// panne technique dans le describe televerserMedia). `vi.hoisted` est nécessaire : les
+// panne technique dans le describe uploadMedia). `vi.hoisted` est nécessaire : les
 // fabriques passées à vi.mock sont hissées au-dessus des déclarations du module.
 const controleEcriture = vi.hoisted(() => ({
   erreur: null as (Error & { code?: string }) | null,
@@ -48,7 +48,7 @@ const controleEcriture = vi.hoisted(() => ({
 // Doublure PARTIELLE : tout node:fs/promises reste réel, seul writeFile peut être armé pour
 // échouer. On mocke le système de fichiers plutôt que processImage afin que le vrai pipeline
 // s'exécute — sharp encode réellement l'image, seule l'écriture casse. C'est exactement la
-// situation que televerserMedia doit savoir distinguer d'un fichier illisible.
+// situation que uploadMedia doit savoir distinguer d'un fichier illisible.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const reel = await importOriginal<typeof import('node:fs/promises')>()
   return {
@@ -151,24 +151,24 @@ function formData(entries: Record<string, string>): FormData {
   return fd
 }
 
-describe('ajusterStock', () => {
+describe('adjustStock', () => {
   it('refuse un stock non entier', async () => {
-    const etat = await ajusterStock(variantId, { erreur: null }, formData({ stock: '4.5' }))
-    expect(etat.erreur).toMatch(/entier/)
+    const etat = await adjustStock(variantId, { error: null }, formData({ stock: '4.5' }))
+    expect(etat.error).toMatch(/entier/)
     const apres = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(apres.stock).toBe(5)
   })
 
   it('refuse un stock négatif', async () => {
-    const etat = await ajusterStock(variantId, { erreur: null }, formData({ stock: '-1' }))
-    expect(etat.erreur).toMatch(/positif|négatif/)
+    const etat = await adjustStock(variantId, { error: null }, formData({ stock: '-1' }))
+    expect(etat.error).toMatch(/positif|négatif/)
     const apres = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(apres.stock).toBe(5)
   })
 
   it('accepte un stock entier positif ou nul et écrit un journal avant/après', async () => {
-    const etat = await ajusterStock(variantId, { erreur: null }, formData({ stock: '12' }))
-    expect(etat.erreur).toBeNull()
+    const etat = await adjustStock(variantId, { error: null }, formData({ stock: '12' }))
+    expect(etat.error).toBeNull()
 
     const apres = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(apres.stock).toBe(12)
@@ -182,14 +182,14 @@ describe('ajusterStock', () => {
   })
 
   it('accepte un stock ramené à zéro', async () => {
-    const etat = await ajusterStock(variantId, { erreur: null }, formData({ stock: '0' }))
-    expect(etat.erreur).toBeNull()
+    const etat = await adjustStock(variantId, { error: null }, formData({ stock: '0' }))
+    expect(etat.error).toBeNull()
     const apres = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })
     expect(apres.stock).toBe(0)
   })
 })
 
-describe('televerserMedia', () => {
+describe('uploadMedia', () => {
   it('refuse un type de fichier non autorisé sans créer de média', async () => {
     const avant = await prisma.media.count({ where: { productId } })
 
@@ -197,16 +197,16 @@ describe('televerserMedia', () => {
     const fd = new FormData()
     fd.set('fichier', fichier)
 
-    const etat = await televerserMedia(productId, { erreur: null }, fd)
-    expect(etat.erreur).toMatch(/Format non accepté/)
+    const etat = await uploadMedia(productId, { error: null }, fd)
+    expect(etat.error).toMatch(/Format non accepté/)
 
     const apres = await prisma.media.count({ where: { productId } })
     expect(apres).toBe(avant)
   })
 
   it("refuse l'absence de fichier", async () => {
-    const etat = await televerserMedia(productId, { erreur: null }, new FormData())
-    expect(etat.erreur).toMatch(/Aucun fichier/)
+    const etat = await uploadMedia(productId, { error: null }, new FormData())
+    expect(etat.error).toMatch(/Aucun fichier/)
   })
 
   it("retourne le message « image illisible » pour un fichier au type MIME accepté dont le contenu n'est pas une image", async () => {
@@ -224,10 +224,10 @@ describe('televerserMedia', () => {
     const fd = new FormData()
     fd.set('fichier', fichier)
 
-    const etat = await televerserMedia(productId, { erreur: null }, fd)
+    const etat = await uploadMedia(productId, { error: null }, fd)
     // Retourné, pas levé : l'action ne doit pas planter sur une entrée que l'utilisateur
     // peut corriger lui-même.
-    expect(etat.erreur).toMatch(/n'a pas pu être lue/)
+    expect(etat.error).toMatch(/n'a pas pu être lue/)
 
     const apres = await prisma.media.count({ where: { productId } })
     expect(apres).toBe(avant)
@@ -236,16 +236,16 @@ describe('televerserMedia', () => {
     // disque plein et un fichier corrompu se ressembleraient dans les journaux.
     expect(journal).toHaveBeenCalledTimes(1)
     const appel = journal.mock.calls[0]
-    expect(String(appel?.[0])).toMatch(/televerserMedia/)
-    const contexte = appel?.[1] as { productId: string; erreur: unknown }
+    expect(String(appel?.[0])).toMatch(/uploadMedia/)
+    const contexte = appel?.[1] as { productId: string; error: unknown }
     expect(contexte.productId).toBe(productId)
-    expect(contexte.erreur).toBeInstanceOf(UnreadableImageError)
-    expect((contexte.erreur as UnreadableImageError).cause).toBeInstanceOf(Error)
+    expect(contexte.error).toBeInstanceOf(UnreadableImageError)
+    expect((contexte.error as UnreadableImageError).cause).toBeInstanceOf(Error)
   })
 
   it("retourne le message de panne technique, et non « image illisible », quand c'est l'écriture disque qui échoue", async () => {
     // Test jumeau du précédent, et le seul à couvrir la branche FAUSSE du discriminant
-    // `erreur instanceof UnreadableImageError`. Sans lui, supprimer ce discriminant pour
+    // `error instanceof UnreadableImageError`. Sans lui, supprimer ce discriminant pour
     // répondre « image illisible » à n'importe quel échec — c'est-à-dire réintroduire
     // exactement la confusion que le correctif a fermée — laisserait la suite entièrement
     // verte. Ici l'image est une VRAIE image : sharp l'encode sans broncher, c'est
@@ -267,31 +267,31 @@ describe('televerserMedia', () => {
     // Désarmé par l'afterEach de ce fichier, y compris si une assertion échoue plus bas.
     controleEcriture.erreur = panne
 
-    const etat = await televerserMedia(productId, { erreur: null }, fd)
+    const etat = await uploadMedia(productId, { error: null }, fd)
 
-    expect(etat.erreur).toMatch(/raison technique/)
-    expect(etat.erreur).not.toMatch(/n'a pas pu être lue/)
+    expect(etat.error).toMatch(/raison technique/)
+    expect(etat.error).not.toMatch(/n'a pas pu être lue/)
 
     // Rien n'est créé en base, et le journal serveur porte l'erreur réelle — celle qui
     // permet de diagnostiquer un disque plein — et non une UnreadableImageError.
     expect(await prisma.media.count({ where: { productId } })).toBe(avant)
     expect(journal).toHaveBeenCalledTimes(1)
-    const contexte = journal.mock.calls[0]?.[1] as { productId: string; erreur: unknown }
+    const contexte = journal.mock.calls[0]?.[1] as { productId: string; error: unknown }
     expect(contexte.productId).toBe(productId)
-    expect(contexte.erreur).toBe(panne)
-    expect(contexte.erreur).not.toBeInstanceOf(UnreadableImageError)
+    expect(contexte.error).toBe(panne)
+    expect(contexte.error).not.toBeInstanceOf(UnreadableImageError)
   })
 })
 
-describe('reordonnerMedia', () => {
+describe('reorderMedia', () => {
   it('refuse une position négative', async () => {
-    const etat = await reordonnerMedia('media-inexistant', { erreur: null }, formData({ position: '-1' }))
-    expect(etat.erreur).toMatch(/entier|positif/)
+    const etat = await reorderMedia('media-inexistant', { error: null }, formData({ position: '-1' }))
+    expect(etat.error).toMatch(/entier|positif/)
   })
 
   it('refuse une position non entière', async () => {
-    const etat = await reordonnerMedia('media-inexistant', { erreur: null }, formData({ position: '1.5' }))
-    expect(etat.erreur).toMatch(/entier/)
+    const etat = await reorderMedia('media-inexistant', { error: null }, formData({ position: '1.5' }))
+    expect(etat.error).toMatch(/entier/)
   })
 
   it('chemin nominal : met à jour la position et écrit un journal avant/après', async () => {
@@ -299,8 +299,8 @@ describe('reordonnerMedia', () => {
       data: { productId, chemin: '/uploads/reordonner-test', alt: '', position: 0, isPrimary: false },
     })
 
-    const etat = await reordonnerMedia(media.id, { erreur: null }, formData({ position: '4' }))
-    expect(etat.erreur).toBeNull()
+    const etat = await reorderMedia(media.id, { error: null }, formData({ position: '4' }))
+    expect(etat.error).toBeNull()
 
     const apres = await prisma.media.findUniqueOrThrow({ where: { id: media.id } })
     expect(apres.position).toBe(4)
@@ -317,13 +317,13 @@ describe('reordonnerMedia', () => {
   })
 })
 
-describe('creerProduit (chemin nominal)', () => {
+describe('createProduct (chemin nominal)', () => {
   it('crée le produit en base et écrit un journal d’audit', async () => {
     const slug = `${PREFIXE}bracelet-nominal`
     const donnees = formData({
       nom: 'Bracelet Test Nominal',
       slug,
-      description: 'Bracelet créé uniquement pour vérifier le chemin nominal de creerProduit.',
+      description: 'Bracelet créé uniquement pour vérifier le chemin nominal de createProduct.',
       categoryId,
       prixBase: '15000',
       prixAchat: '5000',
@@ -334,7 +334,7 @@ describe('creerProduit (chemin nominal)', () => {
     // redirect() (mocké ci-dessus) lève après l'écriture réussie : c'est le comportement
     // réel reproduit, pas un défaut du test.
     await expect(
-      creerProduit({ succes: false, erreurs: {}, valeursInitiales: {} }, donnees),
+      createProduct({ success: false, errors: {}, initialValues: {} }, donnees),
     ).rejects.toThrow(/NEXT_REDIRECT/)
 
     const produit = await prisma.product.findUniqueOrThrow({ where: { slug } })
@@ -377,9 +377,9 @@ describe('creerProduit (chemin nominal)', () => {
       ordre: '0',
     })
 
-    const etat = await creerProduit({ succes: false, erreurs: {}, valeursInitiales: {} }, donnees)
-    expect(etat.succes).toBe(false)
-    expect(etat.erreurs.slug?.[0]).toMatch(/slug.*déjà utilisé/)
+    const etat = await createProduct({ success: false, errors: {}, initialValues: {} }, donnees)
+    expect(etat.success).toBe(false)
+    expect(etat.errors.slug?.[0]).toMatch(/slug.*déjà utilisé/)
 
     const compte = await prisma.product.count({ where: { slug, nom: 'Autre produit' } })
     expect(compte).toBe(0)
@@ -390,9 +390,9 @@ describe('creerProduit (chemin nominal)', () => {
 
 // Couvre le .trim() de productSchema (src/admin/resources/products.ts) : sans lui, un nom
 // entouré ou fait uniquement d'espaces passait la validation et produisait, une fois copié
-// tel quel dans le texte alternatif de la photo par défaut, un alt que modifierAltMedia
+// tel quel dans le texte alternatif de la photo par défaut, un alt que updateMediaAlt
 // refuse ensuite (vide ou fait uniquement d'espaces) — l'incohérence que le correctif ferme.
-describe('creerProduit — normalisation du nom (.trim())', () => {
+describe('createProduct — normalisation du nom (.trim())', () => {
   it('normalise un nom entouré d’espaces avant de l’écrire en base', async () => {
     const slug = `${PREFIXE}nom-entoure-espaces`
     const donnees = formData({
@@ -407,7 +407,7 @@ describe('creerProduit — normalisation du nom (.trim())', () => {
     })
 
     await expect(
-      creerProduit({ succes: false, erreurs: {}, valeursInitiales: {} }, donnees),
+      createProduct({ success: false, errors: {}, initialValues: {} }, donnees),
     ).rejects.toThrow(/NEXT_REDIRECT/)
 
     const produit = await prisma.product.findUniqueOrThrow({ where: { slug } })
@@ -430,22 +430,22 @@ describe('creerProduit — normalisation du nom (.trim())', () => {
       ordre: '0',
     })
 
-    const etat = await creerProduit({ succes: false, erreurs: {}, valeursInitiales: {} }, donnees)
-    expect(etat.succes).toBe(false)
-    expect(etat.erreurs.nom?.[0]).toBe('Le nom est requis')
+    const etat = await createProduct({ success: false, errors: {}, initialValues: {} }, donnees)
+    expect(etat.success).toBe(false)
+    expect(etat.errors.nom?.[0]).toBe('Le nom est requis')
 
     const compte = await prisma.product.count({ where: { slug } })
     expect(compte).toBe(0)
   })
 })
 
-describe('modifierProduit (chemin nominal)', () => {
+describe('updateProduct (chemin nominal)', () => {
   it('met à jour le produit et écrit un journal symétrique (mêmes clés avant/après)', async () => {
     const produit = await prisma.product.create({
       data: {
         slug: `${PREFIXE}modif-produit`,
         nom: 'Produit à modifier',
-        description: 'Produit créé uniquement pour tester le chemin nominal de modifierProduit.',
+        description: 'Produit créé uniquement pour tester le chemin nominal de updateProduct.',
         categoryId,
         prixBase: 20000,
         ordre: 1,
@@ -455,7 +455,7 @@ describe('modifierProduit (chemin nominal)', () => {
     const donnees = formData({
       nom: 'Produit modifié',
       slug: `${PREFIXE}modif-produit`,
-      description: 'Produit créé uniquement pour tester modifierProduit, désormais modifié.',
+      description: 'Produit créé uniquement pour tester updateProduct, désormais modifié.',
       categoryId,
       prixBase: '25000',
       prixAchat: '9000',
@@ -463,12 +463,12 @@ describe('modifierProduit (chemin nominal)', () => {
       ordre: '2',
     })
 
-    const etat = await modifierProduit(
+    const etat = await updateProduct(
       produit.id,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       donnees,
     )
-    expect(etat.succes).toBe(true)
+    expect(etat.success).toBe(true)
 
     const apres = await prisma.product.findUniqueOrThrow({ where: { id: produit.id } })
     expect(apres.nom).toBe('Produit modifié')
@@ -523,27 +523,27 @@ describe('modifierProduit (chemin nominal)', () => {
       ordre: '0',
     })
 
-    const etat = await modifierProduit(
+    const etat = await updateProduct(
       produit.id,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       donnees,
     )
-    expect(etat.succes).toBe(false)
-    expect(etat.erreurs.slug?.[0]).toMatch(/slug.*déjà utilisé/)
+    expect(etat.success).toBe(false)
+    expect(etat.errors.slug?.[0]).toMatch(/slug.*déjà utilisé/)
 
     await prisma.product.deleteMany({ where: { id: { in: [autre.id, produit.id] } } })
   })
 })
 
-describe('creerDeclinaison', () => {
+describe('createVariant', () => {
   it('crée la déclinaison en base et écrit un journal d’audit (chemin nominal)', async () => {
     const sku = `${PREFIXE}sku-L`
-    const etat = await creerDeclinaison(
+    const etat = await createVariant(
       productId,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       formData({ libelle: 'Taille L', sku, deltaPrix: '1500', stock: '3' }),
     )
-    expect(etat.succes).toBe(true)
+    expect(etat.success).toBe(true)
 
     const variant = await prisma.variant.findFirstOrThrow({ where: { sku } })
     expect(variant.deltaPrix).toBe(1500)
@@ -564,12 +564,12 @@ describe('creerDeclinaison', () => {
     const sku = `${PREFIXE}sku-S`
     // productId a prixBase: 10000 (fixture ci-dessus) ; -500 donne un prix résultant de
     // 9500, toujours positif.
-    const etat = await creerDeclinaison(
+    const etat = await createVariant(
       productId,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       formData({ libelle: 'Taille S', sku, deltaPrix: '-500', stock: '1' }),
     )
-    expect(etat.succes).toBe(true)
+    expect(etat.success).toBe(true)
 
     const variant = await prisma.variant.findFirstOrThrow({ where: { sku } })
     expect(variant.deltaPrix).toBe(-500)
@@ -580,45 +580,45 @@ describe('creerDeclinaison', () => {
 
   it('refuse un prix de vente résultant nul ou négatif', async () => {
     const sku = `${PREFIXE}sku-gratuit`
-    const etat = await creerDeclinaison(
+    const etat = await createVariant(
       productId,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       formData({ libelle: 'Taille bradée', sku, deltaPrix: '-10000', stock: '1' }),
     )
-    expect(etat.succes).toBe(false)
-    expect(etat.erreurs.deltaPrix?.[0]).toMatch(/positif/)
+    expect(etat.success).toBe(false)
+    expect(etat.errors.deltaPrix?.[0]).toMatch(/positif/)
 
     const compte = await prisma.variant.count({ where: { sku } })
     expect(compte).toBe(0)
   })
 
   it('refuse un SKU déjà utilisé, avec un message dédié distinct de celui du libellé', async () => {
-    const etat = await creerDeclinaison(
+    const etat = await createVariant(
       productId,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       // `${PREFIXE}sku` est déjà pris par la fixture `variantId` créée dans beforeAll.
       formData({ libelle: 'Libellé sans rapport', sku: `${PREFIXE}sku`, deltaPrix: '0', stock: '1' }),
     )
-    expect(etat.succes).toBe(false)
-    expect(etat.erreurs.sku?.[0]).toMatch(/SKU.*déjà utilisé/)
-    expect(etat.erreurs.libelle).toBeUndefined()
+    expect(etat.success).toBe(false)
+    expect(etat.errors.sku?.[0]).toMatch(/SKU.*déjà utilisé/)
+    expect(etat.errors.libelle).toBeUndefined()
   })
 
   it('refuse un libellé déjà utilisé pour ce produit, avec un message dédié distinct de celui du SKU', async () => {
-    const etat = await creerDeclinaison(
+    const etat = await createVariant(
       productId,
-      { succes: false, erreurs: {}, valeursInitiales: {} },
+      { success: false, errors: {}, initialValues: {} },
       // 'Unique' est déjà le libellé de la fixture `variantId` créée dans beforeAll, pour
       // ce même produit.
       formData({ libelle: 'Unique', sku: `${PREFIXE}sku-libelle-dup`, deltaPrix: '0', stock: '1' }),
     )
-    expect(etat.succes).toBe(false)
-    expect(etat.erreurs.libelle?.[0]).toMatch(/libellé.*existe déjà/)
-    expect(etat.erreurs.sku).toBeUndefined()
+    expect(etat.success).toBe(false)
+    expect(etat.errors.libelle?.[0]).toMatch(/libellé.*existe déjà/)
+    expect(etat.errors.sku).toBeUndefined()
   })
 })
 
-describe('televerserMedia (chemin nominal)', () => {
+describe('uploadMedia (chemin nominal)', () => {
   function fichierPour(chemin: string, largeur: number, extension: 'avif' | 'webp') {
     return path.join(process.cwd(), 'public', `${chemin}-${largeur}.${extension}`)
   }
@@ -635,8 +635,8 @@ describe('televerserMedia (chemin nominal)', () => {
 
     const avantCompte = await prisma.media.count({ where: { productId } })
 
-    const etat = await televerserMedia(productId, { erreur: null }, fd)
-    expect(etat.erreur).toBeNull()
+    const etat = await uploadMedia(productId, { error: null }, fd)
+    expect(etat.error).toBeNull()
 
     const media = await prisma.media.findFirstOrThrow({
       where: { productId },
@@ -644,7 +644,7 @@ describe('televerserMedia (chemin nominal)', () => {
     })
     expect(media.chemin).toMatch(/^\/uploads\//)
     // Jamais d'alt vide à l'ajout : la valeur de départ est dérivée du nom du produit,
-    // sans quoi la photo naîtrait dans un état que modifierAltMedia refuse de reproduire
+    // sans quoi la photo naîtrait dans un état que updateMediaAlt refuse de reproduire
     // (et partirait en vitrine sans texte alternatif).
     expect(media.alt).toBe('Produit de test admin')
 
@@ -659,11 +659,11 @@ describe('televerserMedia (chemin nominal)', () => {
     })
     expect(audit.apres).toEqual({ chemin: media.chemin })
 
-    // Nettoyage via supprimerMedia (Correctif 5) plutôt qu'un rm manuel : exerce du même
+    // Nettoyage via deleteMedia (Correctif 5) plutôt qu'un rm manuel : exerce du même
     // coup son chemin nominal (effacement des six fichiers produits par processImage), et
     // ne laisse rien dans public/uploads au-delà de .gitkeep.
-    const etatSuppression = await supprimerMedia(media.id, { erreur: null }, new FormData())
-    expect(etatSuppression.erreur).toBeNull()
+    const etatSuppression = await deleteMedia(media.id, { error: null }, new FormData())
+    expect(etatSuppression.error).toBeNull()
 
     for (const largeur of [400, 800, 1200] as const) {
       await expect(stat(fichierPour(media.chemin, largeur, 'avif'))).rejects.toThrow()
@@ -674,8 +674,8 @@ describe('televerserMedia (chemin nominal)', () => {
     expect(apresCompte).toBe(avantCompte)
 
     // Aucun résidu sous le préfixe que CE test s'est attribué (le nom de fichier retourné
-    // par processImage) : attrape une largeur ou une extension que televerserMedia aurait
-    // écrite et que supprimerMedia ne nettoierait pas. Aucune assertion, en revanche, sur
+    // par processImage) : attrape une largeur ou une extension que uploadMedia aurait
+    // écrite et que deleteMedia ne nettoierait pas. Aucune assertion, en revanche, sur
     // le contenu entier de public/uploads : ce dossier est une ressource globale que ce
     // fichier ne possède pas, et l'exiger vide (« il ne reste que .gitkeep ») entrait en
     // collision avec tests/server/media.test.ts, qui y écrit ses propres fichiers au même
@@ -684,25 +684,25 @@ describe('televerserMedia (chemin nominal)', () => {
     const entrees = await readdir(path.join(process.cwd(), 'public', 'uploads'))
     expect(entrees.filter((entree) => entree.startsWith(prefixe))).toEqual([])
 
-    // televerserMedia ('ajout_media') et supprimerMedia ('supprimer_media') ont chacune
+    // uploadMedia ('ajout_media') et deleteMedia ('supprimer_media') ont chacune
     // écrit leur propre ligne de journal pour ce media.id : les deux doivent disparaître,
     // pas seulement le média lui-même.
     await prisma.auditLog.deleteMany({ where: { entiteId: media.id } })
   })
 })
 
-describe('modifierAltMedia', () => {
+describe('updateMediaAlt', () => {
   it('modifie le texte alternatif et écrit un journal avant/après', async () => {
     const media = await prisma.media.create({
       data: { productId, chemin: '/uploads/alt-test', alt: 'ancien texte', position: 0, isPrimary: false },
     })
 
-    const etat = await modifierAltMedia(
+    const etat = await updateMediaAlt(
       media.id,
-      { erreur: null },
+      { error: null },
       formData({ alt: 'Bracelet en argent sur fond clair' }),
     )
-    expect(etat.erreur).toBeNull()
+    expect(etat.error).toBeNull()
 
     const apres = await prisma.media.findUniqueOrThrow({ where: { id: media.id } })
     expect(apres.alt).toBe('Bracelet en argent sur fond clair')
@@ -723,8 +723,8 @@ describe('modifierAltMedia', () => {
       data: { productId, chemin: '/uploads/alt-vide', alt: 'texte existant', position: 0, isPrimary: false },
     })
 
-    const etat = await modifierAltMedia(media.id, { erreur: null }, formData({ alt: '   ' }))
-    expect(etat.erreur).toMatch(/requis/)
+    const etat = await updateMediaAlt(media.id, { error: null }, formData({ alt: '   ' }))
+    expect(etat.error).toMatch(/requis/)
 
     const apres = await prisma.media.findUniqueOrThrow({ where: { id: media.id } })
     expect(apres.alt).toBe('texte existant')
@@ -733,7 +733,7 @@ describe('modifierAltMedia', () => {
   })
 })
 
-describe('definirPhotoPrincipale', () => {
+describe('setPrimaryPhoto', () => {
   it('retire le drapeau des autres photos du produit avant de le poser sur celle-ci', async () => {
     const m1 = await prisma.media.create({
       data: { productId, chemin: '/uploads/principale-1', alt: 'a', position: 0, isPrimary: true },
@@ -742,8 +742,8 @@ describe('definirPhotoPrincipale', () => {
       data: { productId, chemin: '/uploads/principale-2', alt: 'b', position: 1, isPrimary: false },
     })
 
-    const etat = await definirPhotoPrincipale(m2.id, { erreur: null }, new FormData())
-    expect(etat.erreur).toBeNull()
+    const etat = await setPrimaryPhoto(m2.id, { error: null }, new FormData())
+    expect(etat.error).toBeNull()
 
     const [apres1, apres2] = await Promise.all([
       prisma.media.findUniqueOrThrow({ where: { id: m1.id } }),
@@ -757,7 +757,7 @@ describe('definirPhotoPrincipale', () => {
   })
 })
 
-describe('supprimerMedia', () => {
+describe('deleteMedia', () => {
   it('supprime la photo et promeut la suivante quand la principale est supprimée', async () => {
     const m1 = await prisma.media.create({
       data: { productId, chemin: '/uploads/suppr-1', alt: 'a', position: 0, isPrimary: true },
@@ -766,8 +766,8 @@ describe('supprimerMedia', () => {
       data: { productId, chemin: '/uploads/suppr-2', alt: 'b', position: 1, isPrimary: false },
     })
 
-    const etat = await supprimerMedia(m1.id, { erreur: null }, new FormData())
-    expect(etat.erreur).toBeNull()
+    const etat = await deleteMedia(m1.id, { error: null }, new FormData())
+    expect(etat.error).toBeNull()
 
     const compte = await prisma.media.count({ where: { id: m1.id } })
     expect(compte).toBe(0)
