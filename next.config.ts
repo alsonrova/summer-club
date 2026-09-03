@@ -6,7 +6,7 @@ const config: NextConfig = {
   typedRoutes: true,
   experimental: {
     serverActions: {
-      // televerserMedia (src/app/admin/produits/actions.ts) accepte des photos jusqu'à
+      // uploadMedia (src/app/admin/produits/actions.ts) accepte des photos jusqu'à
       // 8 Mo ; la limite par défaut d'une Server Action est 1 Mo (voir
       // node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/
       // serverActions.md), ce qui rejetterait silencieusement tout téléversement réel

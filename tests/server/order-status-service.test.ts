@@ -4,7 +4,7 @@ import { prisma } from '@/server/db'
 import { createOrder, OutOfStockError } from '@/server/orders'
 import { applyStatus, ForbiddenTransitionError } from '@/server/order-status-service'
 
-// Les tests visent applyStatus : changerStatut n'en est que
+// Les tests visent applyStatus : changeStatus n'en est que
 // l'enveloppe authentifiée, et requireAdmin n'a pas de sens hors requête.
 const changeStatus = (id: string, to: Parameters<typeof applyStatus>[1]) =>
   applyStatus(id, to, 'test')
@@ -29,7 +29,7 @@ let variantId: string
 // donc la même : chaque fichier possède ses propres lignes et ne supprime que les
 // siennes. Ni sérialisation des fichiers, ni plafond de workers, ni réessai.
 //
-// Les trois tests du brief (describe « changerStatut » ci-dessous) sont repris mot pour
+// Les trois tests du brief (describe « changeStatus » ci-dessous) sont repris mot pour
 // mot ; seule cette fixture partagée a changé.
 const CATEGORY_SLUG = 'test-statuts-categorie'
 const PRODUCT_SLUG = 'test-statuts-produit'
@@ -104,7 +104,7 @@ afterAll(async () => {
   await prisma.$disconnect()
 })
 
-describe('changerStatut', () => {
+describe('changeStatus', () => {
   it('recrédite le stock à l\'annulation d\'une commande confirmée', async () => {
     const c = await createOrder({
       lines: [{ variantId, quantity: 3 }], channel: 'cash_on_delivery',

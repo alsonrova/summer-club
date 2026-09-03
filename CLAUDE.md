@@ -5,9 +5,12 @@ sur ce dépôt : langue, architecture, sécurité, tests, rôles d'agents. Il l'
 habitude venue d'un autre projet.
 
 - Conventions : `docs/CONVENTIONS.md`
-- Renommage des identifiants français : `docs/RENOMMAGE.md` — table de correspondance,
-  points de vigilance et ordre d'exécution. **Ne renommez rien en passant** (§ 1 des
-  conventions) ; quand la tâche viendra, c'est ce document qu'on suit.
+- Renommage des identifiants français : chantier exécuté les 2026-09-03/04 (journal, tâche
+  `renommage`, verdict approuvé). `docs/RENOMMAGE.md` reste la trace de ce qui a été
+  appliqué — table de correspondance, points de vigilance, ordre d'exécution suivi — pas une
+  liste de travail en attente. La règle qui s'applique désormais à tout code, neuf ou touché,
+  est le critère de validité du propriétaire (`docs/CONVENTIONS.md` § 1) : un identifiant
+  français rend la contribution invalide, sans exception d'ancienneté.
 - Journal des agents : `docs/journal/README.md` — consignez votre intervention en fin de tâche
   (en lecture seule ? remettez la commande au coordinateur, ne l'exécutez pas)
 - Dernière passation : `docs/passation/` (le fichier le plus récent)

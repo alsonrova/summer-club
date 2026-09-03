@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**70 entrées** · 16 tâches · Développeur 45 · Auditeur qualité et sécurité 19 · Coordinateur 6
+**72 entrées** · 16 tâches · Développeur 46 · Auditeur qualité et sécurité 20 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -80,6 +80,8 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Auditeur qualité et sécurité | correctifs demandés | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
+| 2026-09-03 | renommage | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 
 ## Tâche 1
@@ -766,3 +768,22 @@ Correctifs post-audit — 4 constats Importants fermés : libellés dérivés su
 - **Réserve** : prisma/migrations/20260903223000_english_identifiers/migration.sql non touche (applique et somme, cf. brief) : les deux residus releves par l'audit -- commentaire d'atomicite trompeur (pas de BEGIN/COMMIT explicite) et l'UPDATE section 6.2 non durci contre un JSON {statut: null} -- restent documentes, non corriges.
 - **Réserve** : npx prisma format ne fait pas qu'un realignement d'espaces sur prisma/schema.prisma : sur le modele Variant il intervertit aussi l'ordre de @@index([productId]) et @@unique([productId, label]). Verifie sans effet reel : prisma migrate diff --from-url <db dev> --to-schema-datamodel prisma/schema.prisma --exit-code renvoie No difference detected.
 - **Réserve** : Des fichiers media orphelins (public/uploads/*.avif, *.webp) restent non suivis apres les executions Playwright de cette session -- meme categorie que les 61 fichiers deja purges a l'etape 6, hors perimetre de cette tache, non commites.
+
+### 2026-09-03 · Auditeur qualité et sécurité — validé
+
+Re-revue du commit de correctifs 87e142c (5a4244c..HEAD, 25 fichiers, +342/-214). Les QUATRE constats Importants de l'audit final sont fermes, verifies un par un. Constat 1 : les libelles derives de productsResource redonnent exactement Nom / Catégorie / Prix / Actif, identiques a la derivation d'avant le chantier reconstituee depuis git show b04f3c7 et capitalize() ; ordersResource surchargeait deja ses sept champs ; les deux nouvelles assertions de tests/admin/resource.test.ts importent les vraies ressources et comparent a des chaines francaises litterales, ce n'est pas une tautologie et la sortie RED citee est coherente. Constat 2 : chasse refaite de facon independante et plus large que celle du developpeur (script AST TypeScript sur src/ tests/ e2e/ tools/ prisma/) : 773 identifiants declares, un seul suspect, 'mine', qui est le pronom ANGLAIS ; zero cle d'objet ou attribut JSX francais ; tous les sites nommes sont fermes avec le vocabulaire de RENOMMAGE 3.7. Constat 3 : la rectification est bien APPENDUE en section 8 du rapport d'etape 6, les lignes originales intactes, le contenu dit vrai et ne fige aucun SHA. Constat 4 : le nouveau test e2e assere LES DEUX moities (searchParams.get('statut') === 'cancelled' ET les lignes filtrees), vise le seul filtre dont le nom de parametre differe du nom de champ, possede ses donnees, et la preuve par mutation est coherente avec le code. Rien de neuf casse : diff sur prisma/migrations/ vide, portillon de noms de fichiers vide, comptage des 20 valeurs = 31 dont zero francais, aucune suppression cote libelles/selecteurs, filterParams intacte, les 18 references perimees corrigees, prisma format prouve inerte par comparaison normalisee du schema. Aucune suite executee : les chiffres du rapport (251/251, playwright 14/14, tsc, build, migrate diff vide) ne sont ni confirmes ni contredits, mais leurs conditions statiques concordent avec le diff.
+
+- **Modèle** : claude-opus-5
+- **Mineur** : Le rapport de correctifs surestime deux fois son exactitude, sans consequence sur le code : 'les libelles cibles sont ceux reellement rendus avant le renommage' est faux pour variantsResource (capitalize('libelle') rendait 'Libelle' sans accent, le correctif pose 'Libellé', jamais rendu nulle part, nouvelle valeur meilleure — le describe de resource.test.ts:28 porte la meme approximation) ; et 'une vingtaine de commentaires, tous corriges' — les 18 de la liste le sont, la classe non : restent changerStatut dans tests/server/order-status-service.test.ts:7,32,107, 'tests/server/statut.test.ts' en donnee de fixture dans tests/tools/agent-journal.test.ts:55,75, et televerserMedia dans next.config.ts:9.
+- **Mineur** : prepareSecondOrder (e2e/admin-orders.spec.ts:106-131) duplique le corps du data: de prepareOrder — une divergence future passera inapercue ; extraire le data: commun couterait une dizaine de lignes.
+- **Mineur** : La suite e2e laisse des residus sur le disque et l'etape 6 affirmait le contraire : 16 fichiers .avif/.webp non suivis sous public/uploads/, et git check-ignore sort en 1 donc ils NE SONT PAS ignores — un git add -A distrait les commiterait. Le teardown (deleteTestMediaFiles) ne couvre que les fichiers encore rattaches a une ligne Media. Cause non reproduite, annoncee comme suspicion. A traiter en hygiene de test : ignorer public/uploads/* sauf .gitkeep, ou balayer le dossier en fin de suite.
+- **Réserve** : Lecture seule stricte : aucune suite executee. Les Mineurs 6 et 7 de l'audit precedent (durcissement de l'UPDATE 6.2, BEGIN/COMMIT explicite) restent deliberement ouverts, la migration appliquee et sommee etant intouchable. La connexion reelle en navigateur exigee par RENOMMAGE 7 etape 7 reste a faire.
+
+### 2026-09-03 · Développeur — livré
+
+Alignement documentaire post-renommage — docs/CONVENTIONS.md (§ 1 sous-sections énumérations et lot à renommer réécrites en état exécuté, §§ 2-3-4-5-6-8 : identifiants mis à jour vers les noms courants, vérifiés un par un contre le code), docs/RENOMMAGE.md (avis de complétion sous le titre, tables et historique intacts), passation 2026-08-29 (dette renommage marquée résolue, identifiants annotés (aujourd'hui …)), CLAUDE.md (puce RENOMMAGE mise à l'état exécuté), et trois références de code stale (tests/server/order-status-service.test.ts:7,32,107 describe/commentaires changerStatut->changeStatus, next.config.ts:9 televerserMedia->uploadMedia)
+
+- **Modèle** : claude-sonnet-5
+- **Tests** : npm test : Test Files 25 passed (25), Tests 251 passed (251) → npm test : Test Files 25 passed (25), Tests 251 passed (251) | npx --no-install tsc --noEmit : aucune sortie (exit 0) | commande de détection CONVENTIONS § 1 : aucun résultat (exit 1) | npm run build et playwright non relancés (documentation et commentaires/titre de test seulement, justifié au rapport)
+- **Fichiers** : `docs/CONVENTIONS.md,docs/RENOMMAGE.md,docs/passation/2026-08-29-v1.0-taches-1-a-12.md,CLAUDE.md,tests/server/order-status-service.test.ts,next.config.ts,.superpowers/sdd/renommage-docs-report.md`
+- **Réserve** : npm run build et npx playwright test non relancés : aucun fichier de production ni comportement modifié, seul un titre describe() de test a changé (Vitest, sans effet sur Playwright) ; tsc --noEmit et npm test suffisaient à couvrir le risque réel

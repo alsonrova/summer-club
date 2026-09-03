@@ -72,9 +72,9 @@ Concrètement, sous `src/app/` :
 - **Les fichiers techniques qui les composent gardent le nom que le cadre leur impose** :
   `page.tsx`, `layout.tsx`, `route.ts`, `loading.tsx`, `error.tsx`. On ne les choisit pas.
   Les fichiers voisins que nous choisissons, eux, suivent la règle anglaise dès lors qu'ils
-  ne paraissent dans aucune URL : `actions.ts`, `query.ts` sont des noms techniques, pas des
-  adresses. (`etats.ts` est un reste français — **il y en a trois**, un par écran
-  d'administration ; ils font partie du lot à renommer.)
+  ne paraissent dans aucune URL : `actions.ts`, `query.ts`, `states.ts` sont des noms
+  techniques, pas des adresses. (`states.ts` s'appelait `etats.ts` jusqu'au renommage du
+  2026-09-03/04 — **il y en a trois**, un par écran d'administration.)
 - **Ce qui ne paraît pas dans l'URL suit la règle anglaise** : groupes de routes entre
   parenthèses, et segments dynamiques entre crochets — `[id]`, `[...all]`. Attention
   toutefois : renommer un groupe de routes ne change aucune adresse, mais renommer un
@@ -135,32 +135,47 @@ un identifiant. Le nom du type et ses valeurs passent en anglais lors du renomma
 comprise.**
 
 Ce qu'un être humain lit n'est jamais la valeur brute, c'est sa traduction affichée :
-`LIBELLES_STATUT` (`src/admin/resources/orders.ts`) rend déjà `en_preparation` par
-« En préparation », et `LIBELLES_TRANSITION` la rend par « Mettre en préparation » sur un
+`STATUS_LABELS` (`src/admin/resources/orders.ts`) rend `preparing` par
+« En préparation », et `TRANSITION_LABELS` la rend par « Mettre en préparation » sur un
 bouton. Cette indirection existe déjà partout et elle est le bon endroit pour le français :
-**le renommage ne touche aucun libellé.**
+**le renommage n'a touché aucun libellé.**
 
-#### Ce que le renommage touche quand même
+#### Ce que le renommage a touché — et pourquoi ce n'était pas gratuit
 
 Ce document a d'abord conclu de ce qui précède que le renommage se ferait « sans toucher à
-un seul libellé, **donc sans casser un seul test de bout en bout** ». La première moitié est
-vraie ; la seconde est fausse, et c'est celle-là sur laquelle un agent chargé du renommage se
-reposerait. Une valeur d'énumération n'est pas seulement stockée : **elle voyage dans l'URL
-des filtres du back-office**, où rien ne la traduit.
+un seul libellé, **donc sans casser un seul test de bout en bout** ». La première moitié
+était vraie ; la seconde était fausse, et c'est celle-là sur laquelle un agent chargé du
+renommage se serait reposé à tort. Une valeur d'énumération n'est pas seulement stockée :
+**elle voyage dans l'URL des filtres du back-office**, où rien ne la traduit.
 
-Relevé le 2026-08-30 (pour la tête exacte : `git log -1`) :
+Relevé le 2026-08-30, avant l'exécution du renommage (pour la tête exacte du dépôt
+aujourd'hui : `git log -1` ; ce relevé lui-même est antérieur au journal `docs/journal/`,
+tâche `renommage`) :
 
-| Où | Quoi | Ce qui casse |
+| Où (état au 2026-08-30) | Quoi | Ce qui aurait cassé sans traitement |
 | --- | --- | --- |
 | `e2e/admin-avis.spec.ts:80` et `:91` | `page.goto('/admin/avis?statut=en_attente')`, puis `?statut=publie` | la valeur est écrite en dur dans une URL : renommée en base, la page ne filtre plus, la ligne attendue n'est plus là, le test rougit |
 | `src/app/admin/avis/page.tsx` (`urlListe`) | construit `?statut=<valeur>` à partir de `STATUTS_AVIS` | toute la navigation par statut de l'écran avis porte la valeur brute |
 | `src/app/admin/commandes/page.tsx` + `src/admin/engine/table.tsx` | `<form method="get">` dont les `<select name="statut">` / `name="canal"` ont pour `value` les valeurs d'énumération | filtrer envoie `?statut=…&canal=…` : **chaque filtre du back-office est une URL porteuse d'une valeur d'énumération** |
-| `AuditLog.avant` / `AuditLog.apres` | colonnes `Json` où `appliquerStatut` écrit `{ statut: 'en_preparation' }` | **aucune migration d'énumération ne les touche** — ce sont des colonnes Json, pas le type PostgreSQL. L'historique de la fiche commande garde les anciennes chaînes ; `libelleStatut` rend telle quelle une valeur inconnue, donc l'historique affichera `en_preparation` au lieu de « En préparation », **sans erreur ni symptôme** |
-| Signets, liens collés dans WhatsApp | `/admin/commandes?statut=confirmee` | cessent de filtrer, en silence |
+| `AuditLog.avant` / `AuditLog.apres` | colonnes `Json` où `appliquerStatut` écrivait `{ statut: 'en_preparation' }` | **aucune migration d'énumération ne les touche** automatiquement — ce sont des colonnes Json, pas le type PostgreSQL. Sans `UPDATE` dédié, l'historique de la fiche commande aurait gardé les anciennes chaînes ; `libelleStatut` aurait rendu telle quelle une valeur inconnue, **sans erreur ni symptôme** |
+| Signets, liens collés dans WhatsApp | `/admin/commandes?statut=confirmee` | cessaient de filtrer, en silence |
 
-Et le volume brut des littéraux à réécrire en même temps que la base — mesuré le
+**Ce qui s'est réellement passé (2026-09-03/04, journal tâche `renommage`, étape 6) :** les
+deux `page.goto` ont été réécrits dans le même commit que la migration, `urlListe`/le
+`<form method="get">` produisent désormais `?statut=…` avec les valeurs anglaises via la
+prop `AdminTable.filterParams` (`docs/RENOMMAGE.md` § 3.7 et § 6.9), et les colonnes Json de
+`AuditLog` ont reçu un `UPDATE` explicite sur les lignes `change_status`
+(`docs/RENOMMAGE.md` § 6.2) — la propriétaire a été prévenue que ses anciens signets de
+filtre cesseraient de fonctionner. Le détail exact de ce qui a été migré, et de ce qui a été
+délibérément laissé tel quel (les autres colonnes Json, instantanés d'archive), est dans
+`docs/RENOMMAGE.md` §§ 6.1 à 6.3 et 6.9.
+
+Le volume brut des littéraux à réécrire en même temps que la base avait été mesuré le
 2026-08-30 : **304 occurrences**, réparties en `tests/` 200, `src/` 67, `prisma/` 24,
-`e2e/` 13 (sur 7 lignes, 2 fichiers). Pour le compte à jour :
+`e2e/` 13 (sur 7 lignes, 2 fichiers). C'était une mesure de préparation, pas un objectif à
+retrouver a posteriori — le décompte courant de ces mêmes valeurs (dont certaines restent
+légitimement présentes : `orange_money`, `whatsapp`, `admin`, `percent`, `fixed` ne se
+traduisent pas) se mesure avec :
 
 ```bash
 grep -rnoE "'(en_attente_confirmation|en_attente_paiement|confirmee|en_preparation|expediee|prete_retrait|livree|annulee|echec_paiement|en_attente|publie|rejete|verifie|importe|orange_money|whatsapp|livraison|membre|percent|fixed)'" src/ prisma/ tests/ e2e/ | wc -l
@@ -168,54 +183,60 @@ grep -rnoE "'(en_attente_confirmation|en_attente_paiement|confirmee|en_preparati
 
 Une règle qui sous-estime son coût est pire qu'une règle absente : elle fait partir un agent
 avec une fausse carte. La table de correspondance complète, les points de vigilance et
-l'ordre d'exécution sont dans **`docs/RENOMMAGE.md`**.
+l'ordre d'exécution suivi sont dans **`docs/RENOMMAGE.md`**.
 
-**État actuel des énumérations, à ne pas confondre avec la règle.** Le schéma en porte sept,
-aux noms français — `Role`, `Canal`, `StatutCommande`, `PortePromo`, `TypePromo`,
-`SourceAvis`, `StatutAvis` — avec des valeurs majoritairement françaises
-(`en_attente_confirmation`, `prete_retrait`, `echec_paiement`, `verifie`, `publie`,
-`rejete`, `membre`…). Trois cas ne demandent pourtant aucune traduction de valeur, et il
-faut les distinguer plutôt que de les renommer par symétrie :
+**État des énumérations avant le renommage, gardé pour mémoire — ce n'est plus l'état
+courant.** Le schéma en portait sept, aux noms français — `Role`, `Canal`, `StatutCommande`,
+`PortePromo`, `TypePromo`, `SourceAvis`, `StatutAvis` — avec des valeurs majoritairement
+françaises (`en_attente_confirmation`, `prete_retrait`, `echec_paiement`, `verifie`,
+`publie`, `rejete`, `membre`…). Trois cas ne demandaient pourtant aucune traduction de
+valeur, et il a fallu les distinguer plutôt que de les renommer par symétrie :
 
-- **`TypePromo` porte déjà `percent` et `fixed`** — la seule des sept dont *toutes* les
-  valeurs sont déjà anglaises. Seul son nom de type change. C'est bien ce qui montre que la
-  frontière avait glissé : la même passe avait tranché en anglais ici et en français ailleurs.
-- **`Canal` porte `orange_money` et `whatsapp`**, qui sont des noms propres : ils ne se
-  traduisent pas et ne bougent pas. Seule `livraison` est une valeur française.
-- **`Role` porte `admin`**, identique dans les deux langues. Seule `membre` bouge.
+- **`TypePromo` portait déjà `percent` et `fixed`** — la seule des sept dont *toutes* les
+  valeurs étaient déjà anglaises. Seul son nom de type a changé. C'est bien ce qui montrait
+  que la frontière avait glissé : la même passe avait tranché en anglais ici et en français
+  ailleurs.
+- **`Canal` portait `orange_money` et `whatsapp`**, qui sont des noms propres : ils ne se
+  traduisent pas et n'ont pas bougé. Seule `livraison` était une valeur française
+  (devenue `cash_on_delivery` — voir `docs/RENOMMAGE.md` § 1.3).
+- **`Role` portait `admin`**, identique dans les deux langues. Seule `membre` a bougé
+  (devenue `member`).
 
-**Les sept types sont dans le lot à renommer**, valeurs comprises quand elles sont
-françaises, avec la migration Prisma qui va avec — la partie la plus délicate du renommage,
-puisqu'elle touche des données déjà écrites (les sept types existent bien dans la base, avec
-ces valeurs exactes : `\dT+ public.*` sous `psql`).
+**État courant, exécuté le 2026-09-03/04 (journal tâche `renommage`) :** les sept types
+portent leurs noms anglais — `Role`, `Channel`, `OrderStatus`, `PromotionScope`,
+`PromotionType`, `ReviewSource`, `ReviewStatus` — avec des valeurs anglaises en base, migrées
+par une transaction unique écrite à la main en `RENAME` (`docs/RENOMMAGE.md` § 6.7 à 6.9).
+Pour la liste exacte des sept types et leurs valeurs, la commande qui fait foi est
+`\dT+ public.*` sous `psql`, ou une lecture de `prisma/schema.prisma`.
 
-### Ce qui reste à renommer
+### Le renommage exécuté (2026-09-03/04)
 
-**État actuel, à ne pas confondre avec la règle.** Une bonne partie du code existant porte
-des identifiants français ou mixtes — `appliquerStatut`, `listerProduitsPagines`, `STATUTS`,
-`champsSysteme`, `resolvePrix`, et les colonnes `nom`, `prixBase`, `deltaPrix`,
-`joursSemaine`. S'y ajoutent les sept énumérations avec leurs valeurs. Ils précèdent cette
-règle. **Le renommage est un travail séparé, gouverné par ce document — ne renommez rien en
-passant.** Un renommage opportuniste au milieu d'une tâche fonctionnelle rend la revue
-impossible et casse les tests de bout en bout sans que personne ne sache pourquoi. Le code
-neuf, lui, suit la règle dès maintenant.
+**Ce que cette sous-section décrivait jusqu'ici comme un chantier à faire est achevé.** Une
+bonne partie du code portait des identifiants français ou mixtes — `appliquerStatut`,
+`listerProduitsPagines`, `STATUTS`, `champsSysteme`, `resolvePrix`, et les colonnes `nom`,
+`prixBase`, `deltaPrix`, `joursSemaine`. S'y ajoutaient les sept énumérations avec leurs
+valeurs. **Le renommage a été mené comme un travail séparé**, gouverné par
+`docs/RENOMMAGE.md` et exécuté hors de toute tâche fonctionnelle (journal, tâche
+`renommage` : 7 étapes puis audit final puis correctifs, verdict `approved`) — c'est ce qui a
+permis une revue propre et une migration transactionnelle relue avant application, plutôt
+qu'un renommage opportuniste mêlé à une tâche fonctionnelle, qui aurait rendu la revue
+impossible.
 
-**Décision du propriétaire (2026-09-03) : un identifiant français rend le code INVALIDE.**
-Ce n'est pas une préférence de style, c'est un critère de validité : une contribution qui
-introduit ne serait-ce qu'un identifiant français — variable locale comprise — est rejetée
-en revue et la tâche n'est pas validée, quel que soit le reste de sa qualité. Le relecteur
-le vérifie systématiquement, au rang bloquant, et le développeur relit son propre diff sur
-ce point avant de déclarer terminé (§ 7). La frontière du § 1 ne bouge pas pour autant :
-libellés, messages, commentaires et segments de route restent en français. Pour le stock
-antérieur à la règle, c'est le renommage (`docs/RENOMMAGE.md`) qui fait foi — un
-identifiant hérité qu'une tâche ne touche pas ne l'invalide pas ; mais tout identifiant
-qu'une tâche **introduit ou réécrit** doit être anglais.
+**Décision du propriétaire (2026-09-03), toujours en vigueur : un identifiant français rend
+le code INVALIDE.** Ce n'est pas une préférence de style, c'est un critère de validité : une
+contribution qui introduit ne serait-ce qu'un identifiant français — variable locale
+comprise — est rejetée en revue et la tâche n'est pas validée, quel que soit le reste de sa
+qualité. Le relecteur le vérifie systématiquement, au rang bloquant, et le développeur relit
+son propre diff sur ce point avant de déclarer terminé (§ 7). La frontière du § 1 ne bouge
+pas pour autant : libellés, messages, commentaires et segments de route restent en français.
+`docs/RENOMMAGE.md` documente le stock antérieur à la règle et la façon dont il a été
+traité ; il n'y a plus aujourd'hui de dette de ce genre à distinguer d'un identifiant
+introduit par une tâche récente — le critère s'applique désormais sans exception d'ancienneté.
 
-**Le lot ne se dresse pas en liste : il se mesure.** Une liste de fichiers écrite ici serait
-fausse au prochain commit — c'est exactement le défaut que le § 7 interdit. Le critère est
-donc une commande. Est non conforme tout fichier dont le nom, **hors nom imposé par le cadre**
-(`page`, `layout`, `route`, `loading`, `error`, `not-found`, `template`, `default`), contient
-un mot français :
+**Le lot ne se dressait pas en liste : il se mesurait**, et c'est resté vrai — c'est la
+commande qui fait foi, pas un chiffre recopié. Est non conforme tout fichier dont le nom,
+**hors nom imposé par le cadre** (`page`, `layout`, `route`, `loading`, `error`, `not-found`,
+`template`, `default`), contient un mot français :
 
 ```bash
 git ls-files 'src/*' 'tests/*' 'e2e/*' 'tools/*' 'prisma/seed.ts' \
@@ -227,30 +248,34 @@ git ls-files 'src/*' 'tests/*' 'e2e/*' 'tools/*' 'prisma/seed.ts' \
 mot français nouveau dans un nom de fichier s'y ajoute. Les dossiers ne sont pas filtrés :
 `admin/produits/` est un segment de route, donc conforme — voir ci-dessous.)*
 
-**Résultat de cette commande le 2026-08-30 : 27 fichiers.** C'est une mesure datée, pas un
-état permanent : relancez-la, ne la recopiez pas. Trois d'entre eux sont des `etats.ts` — ce
-document a longtemps écrit « le fichier `etats.ts` » au singulier, il y en a trois
-(`src/app/admin/{avis,commandes,produits}/etats.ts`).
+**Cette commande ne renvoie plus rien** (vérifié le 2026-09-04, après l'exécution). Le lot
+mesuré le 2026-08-30 comptait 27 fichiers, dont trois `etats.ts` (un par écran
+d'administration) — ils s'appellent désormais `states.ts`
+(`src/app/admin/{avis,commandes,produits}/states.ts`). Relancez la commande vous-même pour
+vérifier l'état courant plutôt que de recopier ce chiffre daté.
 
-**Ce qui n'est PAS dans ce lot : les segments de route en français.** Ils sont conformes,
-pas en retard. `admin/produits` ne deviendra jamais `admin/products`.
+**Ce qui n'était PAS dans ce lot, et ne le sera jamais : les segments de route en français.**
+Ils sont conformes, pas en retard. `admin/produits` ne deviendra jamais `admin/products`.
 
-**Le périmètre n'est pas limité aux identifiants exportés.** Une quarantaine de constantes,
-fonctions et types de premier niveau, non exportés, portent aussi des noms français —
-`DOSSIER`, `capitaliser`, `estApplicable`, `ChampSaisie`… Un nom interne est aussi illisible
-pour un lecteur anglophone qu'un nom exporté, et la distinction serait arbitraire :
-**la règle porte sur tout identifiant du code, exporté ou non.** La commande qui les recense,
-son résultat daté et leur nom cible sont dans `docs/RENOMMAGE.md` § 3.6.
+**Le périmètre ne se limitait pas aux identifiants exportés.** Une quarantaine de constantes,
+fonctions et types de premier niveau, non exportés, portaient eux aussi des noms français —
+`DOSSIER` (aujourd'hui `UPLOAD_DIR`), `capitaliser` (`capitalize`), `estApplicable`
+(`isApplicable`), `ChampSaisie` (`InputField`)… Le principe qui a justifié de les inclure
+reste la règle : un nom interne est aussi illisible pour un lecteur anglophone qu'un nom
+exporté, la distinction serait arbitraire — **la règle porte sur tout identifiant du code,
+exporté ou non.** La commande qui les recensait, la mesure datée et la table de
+correspondance complète sont dans `docs/RENOMMAGE.md` § 3.6.
 
 Les variables locales à l'intérieur d'une fonction relèvent du même principe mais ne se
-prêtent pas à une table : trop nombreuses, et propres à chaque fonction. Elles se renomment
-au fil de la lecture des fichiers concernés, sans table dédiée.
+prêtaient pas à une table : trop nombreuses, et propres à chaque fonction. Elles ont été
+renommées au fil de la lecture des fichiers concernés, sans table dédiée — et c'est
+toujours ainsi qu'un futur identifiant français introduit par erreur doit se corriger.
 
-**Le nom cible de chaque identifiant est déjà écrit** — énumérations et valeurs, colonnes
-Prisma, 138 identifiants exportés, 42 identifiants internes non exportés, les 27 fichiers, ce
-qui ne change pas, les pièges et l'ordre d'exécution : **`docs/RENOMMAGE.md`**. Le renommage
-doit être mécanique ; s'il demande un arbitrage de vocabulaire, c'est que cette table est
-incomplète — complétez-la plutôt que de trancher dans le code.
+**Le nom cible de chaque identifiant renommé reste écrit** — énumérations et valeurs,
+colonnes Prisma, 138 identifiants exportés (mesure du 2026-08-30), 42 identifiants internes
+non exportés, les 27 fichiers, ce qui n'a pas changé, les pièges rencontrés et l'ordre
+d'exécution suivi : **`docs/RENOMMAGE.md`**, qui reste la référence de ce qui a été appliqué
+et sert désormais de trace, pas de plan d'action.
 
 ## 2. Architecture : quatre couches, une seule direction
 
@@ -274,7 +299,7 @@ src/proxy.ts     garde optimiste au bord de la requête, avant la résolution de
 ```
 
 `src/components/` sert ce qu'aucune couche ne possède en propre : un composant utilisé par
-plusieurs écrans et qui n'appartient pas au moteur (`bouton-deconnexion.tsx`). Un composant
+plusieurs écrans et qui n'appartient pas au moteur (`sign-out-button.tsx`). Un composant
 qui n'est utilisé que par un écran reste à côté de cet écran, dans `src/app/` — le sortir
 « pour ranger » éloigne le code de son seul appelant.
 
@@ -289,12 +314,12 @@ remonte est un défaut, pas un raccourci.
 ### `src/domain/` — pur, et pur pour une raison
 
 Pas de base, pas de réseau, **pas d'horloge**. Le temps arrive en paramètre :
-`resolvePrix({ …, maintenant: Date })`, jamais `new Date()` à l'intérieur. Sans cela, on ne
+`resolvePrice({ …, now: Date })`, jamais `new Date()` à l'intérieur. Sans cela, on ne
 peut pas tester une happy hour qui franchit minuit sans déplacer l'horloge de la machine —
 et c'est précisément le cas qu'aucun test ne couvrait avant la revue de la tâche 4.
 
 La pureté a une contrepartie qu'il faut connaître : une fonction pure est **sans mémoire**.
-`effetSurStock(de, vers)` appelée deux fois renvoie deux fois le même effet. Elle ne protège
+`stockEffect(from, to)` appelée deux fois renvoie deux fois le même effet. Elle ne protège
 donc contre aucun rejeu — webhook livré deux fois, double clic en back-office. Cette
 protection appartient à l'appelant (voir § 5).
 
@@ -304,13 +329,13 @@ C'est ici que vivent Prisma, les transactions, l'authentification, le traitement
 et le journal d'audit. Deux exigences :
 
 - **Le cœur métier d'une opération ne connaît pas l'authentification.**
-  `appliquerStatut()` (`src/server/order-status-service.ts`) n'appelle pas `requireAdmin()` :
+  `applyStatus()` (`src/server/order-status-service.ts`) n'appelle pas `requireAdmin()` :
   le webhook de paiement de la tâche 19 n'est pas une administratrice et appellera la même
-  fonction. C'est `changerStatut()` (`src/app/admin/commandes/actions.ts`) qui authentifie
+  fonction. C'est `changeStatus()` (`src/app/admin/commandes/actions.ts`) qui authentifie
   puis délègue.
-- **Ce qui exige un contexte de requête reste hors du cœur.** `appliquerStatut` n'appelle pas
+- **Ce qui exige un contexte de requête reste hors du cœur.** `applyStatus` n'appelle pas
   `revalidatePath` — mesuré sous Vitest, cela lève « Invariant: static generation store
-  missing ». Le module publie `cheminsARevalider(orderId)` pour que ses deux appelants
+  missing ». Le module publie `pathsToRevalidate(orderId)` pour que ses deux appelants
   n'aient rien à deviner ni à oublier.
 
 ### `src/app/` — les points d'entrée, donc la sécurité
@@ -348,7 +373,7 @@ seule raison de changer** :
 Une règle métier qui change ne touche que le premier. Un changement d'authentification ne
 touche que le troisième.
 
-Corollaire concret : `src/app/admin/produits/etats.ts` existe séparément de `actions.ts`
+Corollaire concret : `src/app/admin/produits/states.ts` existe séparément de `actions.ts`
 parce qu'un fichier `'use server'` ne peut exporter que des fonctions asynchrones. La
 contrainte technique a rejoint la bonne découpe — les types d'état ne sont pas des actions.
 
@@ -359,33 +384,33 @@ d'un schéma Zod. Un nouvel écran d'administration s'ajoute en **décrivant une
 (`src/admin/resources/products.ts`, `orders.ts`, `variants.ts`) sans toucher au moteur
 (`engine/table.tsx`, `engine/form.tsx`, `engine/actions.ts`).
 
-Les points d'extension sont déclarés, pas bricolés : `libelles` surcharge la capitalisation
-automatique quand `categoryId` n'est pas présentable, `champsSysteme` surcharge la liste des
-colonnes gérées par la base. Aucun `if (resource.name === 'produits')` dans le moteur.
+Les points d'extension sont déclarés, pas bricolés : `labels` surcharge la capitalisation
+automatique quand `categoryId` n'est pas présentable, `systemFields` surcharge la liste des
+colonnes gérées par la base. Aucun `if (resource.name === 'products')` dans le moteur.
 
 ### L — Substitution de Liskov
 
-La famille `CommandeError` (`src/server/orders.ts`) : `RuptureStockError`,
-`QuantiteInvalideError`, `PanierVideError`, `ZoneInvalideError`,
-`ProduitIndisponibleError`, `VariantIntrouvableError` — et `TransitionInterditeError`,
+La famille `OrderError` (`src/server/orders.ts`) : `OutOfStockError`,
+`InvalidQuantityError`, `EmptyCartError`, `InvalidZoneError`,
+`ProductUnavailableError`, `VariantNotFoundError` — et `ForbiddenTransitionError`,
 déclarée ailleurs (`src/server/order-status-service.ts`) mais dérivée de la même base.
 
 Le contrat que toutes tiennent : *« je suis une faute métier rattrapable, pas une panne
-technique »*. `CommandeError` pose `this.name = new.target.name` dans son constructeur, donc
+technique »*. `OrderError` pose `this.name = new.target.name` dans son constructeur, donc
 chaque sous-classe se nomme elle-même sans avoir à le redire ; et la base sert de frontière —
-`changerStatutDepuisFormulaire` (`src/app/admin/commandes/actions.ts`) traduit en français
+`changeStatusFromForm` (`src/app/admin/commandes/actions.ts`) traduit en français
 les erreurs qu'elle attend et **relaie tout le reste tel quel**, y compris la redirection de
 `requireAdmin()`, qui s'implémente par un `throw` et ne doit surtout pas être avalée.
 
-Ce qui rend la substitution réelle : `TransitionInterditeError` est déclarée dans un autre
+Ce qui rend la substitution réelle : `ForbiddenTransitionError` est déclarée dans un autre
 fichier (`src/server/order-status-service.ts`) et l'appelant n'a rien eu à changer pour
-l'accueillir. Une nouvelle erreur métier qui dériverait d'`Error` au lieu de `CommandeError`
-romprait le contrat : elle remonterait comme une panne technique. Même schéma pour `AvisError`
+l'accueillir. Une nouvelle erreur métier qui dériverait d'`Error` au lieu de `OrderError`
+romprait le contrat : elle remonterait comme une panne technique. Même schéma pour `ReviewError`
 (`src/server/reviews.ts`).
 
 **État actuel, à ne pas embellir :** l'action d'administration attrape aujourd'hui les deux
-sous-classes concrètes qu'elle sait traduire (`RuptureStockError`, `TransitionInterditeError`),
-pas `CommandeError` en bloc. La base rend ce `catch` unique possible — elle n'est pas encore
+sous-classes concrètes qu'elle sait traduire (`OutOfStockError`, `ForbiddenTransitionError`),
+pas `OrderError` en bloc. La base rend ce `catch` unique possible — elle n'est pas encore
 utilisée ainsi.
 
 ### I — Ségrégation des interfaces
@@ -403,20 +428,20 @@ export type DelegatePrisma<T> = {
 }
 ```
 
-Ce n'est pas de la théorie : c'est ce qui permet à `tests/admin/champs-systeme.test.ts` de
+Ce n'est pas de la théorie : c'est ce qui permet à `tests/admin/system-fields.test.ts` de
 passer un delegate factice et de vérifier qu'un `id` forgé n'atteint jamais l'écriture, sans
 base de données.
 
 ### D — Inversion des dépendances
 
-- `creerRessource(resource, delegate, formData)` : le moteur **ne va pas chercher** son
+- `createResource(resource, delegate, formData)` : le moteur **ne va pas chercher** son
   delegate Prisma, il le reçoit. Le module haut niveau dépend d'un type abstrait, pas d'un
   modèle concret.
-- `enregistrerAudit(args, client = prisma)` : `appliquerStatut` lui **injecte son propre
+- `recordAudit(args, client = prisma)` : `applyStatus` lui **injecte son propre
   client de transaction**, de sorte que la trace ne survive pas à un `ROLLBACK`. Le module
   d'audit ne connaît ni la transaction ni l'appelant.
 - Le sens des dépendances entre couches (§ 2) est lui-même une inversion : `src/server/`
-  dépend des types de `src/domain/` (`Statut`, `transitionAutorisee`), jamais l'inverse.
+  dépend des types de `src/domain/` (`OrderStatus`, `transitionAllowed`), jamais l'inverse.
 
 **Point ouvert, à ne pas confondre avec du livré :** l'interface `PaymentProvider` décrite
 dans le plan (`docs/superpowers/plans/2026-08-12-summerclub-v1.0.md`, tâche 17) sera le
@@ -442,7 +467,7 @@ dans ce dépôt.
    onglets était reproductible. Tout invariant se ferme côté serveur.
 
 3. **Toute valeur venue du client est validée avant d'atteindre la base**, même quand une
-   couche plus basse la rejetterait. `estStatut(vers)` refuse une valeur forgée avant qu'elle
+   couche plus basse la rejetterait. `isOrderStatus(to)` refuse une valeur forgée avant qu'elle
    n'atteigne l'énumération PostgreSQL, avec un message compréhensible plutôt qu'une erreur
    SQL brute. Motif à surveiller, observé deux fois : **une passe de correction ferme un cas
    et laisse son symétrique ouvert, dans le même fichier.** Après avoir corrigé un champ,
@@ -463,9 +488,11 @@ dans ce dépôt.
    C'est faux, et l'erreur n'est pas anodine : elle désigne un danger que ce code n'a jamais
    couru, et laisse le vrai ouvert. Le nom envoyé par le navigateur (`fichier.name`)
    **n'atteignait déjà pas** la fonction d'écriture. Le vecteur était le **paramètre de
-   composition du chemin de sortie fourni par l'appelant** : `traiterImage(buffer, nomBase)`
-   (`src/server/media.ts`) construisait `path.join(DOSSIER, …)` à partir de `nomBase` sans le
-   borner. Le ledger de la tâche 8 le dit dans ces termes : « `nomBase` non assaini →
+   composition du chemin de sortie fourni par l'appelant** : `processImage(buffer, baseName)`
+   (`src/server/media.ts`, alors nommée `traiterImage(buffer, nomBase)` — renommée au
+   chantier `docs/RENOMMAGE.md`) construisait `path.join(UPLOAD_DIR, …)` à partir de
+   `baseName` sans le borner. Le ledger de la tâche 8 le dit dans ces termes, avec le
+   vocabulaire de l'époque : « `nomBase` (aujourd'hui `baseName`) non assaini →
    traversée de chemin confirmée ». Aujourd'hui l'unique appelant lui passe `productId`
    (`src/app/admin/produits/actions.ts`), une valeur qui ne vient pas du formulaire.
 
@@ -476,7 +503,7 @@ dans ce dépôt.
    d'écriture. **Une fonction qui écrit sur le disque n'accorde donc aucune confiance à sa
    propre signature.**
 
-   La forme à appliquer est un filtre par liste blanche, pas un nettoyage : `traiterImage`
+   La forme à appliquer est un filtre par liste blanche, pas un nettoyage : `processImage`
    réduit le nom à `path.basename(...)` puis **refuse** tout ce qui ne correspond pas à
    `/^[A-Za-z0-9_-]+$/`. Refuser, pas corriger — un nom qu'on répare en silence est un nom
    qu'on n'a pas compris. Quand la valeur ne peut pas se réduire à un nom simple
@@ -484,7 +511,7 @@ dans ce dépôt.
    chemin et vérifier qu'il reste sous le dossier cible. Enfin, **ce contrôle appartient à la
    fonction qui écrit, pas à son appelant** : c'est elle qui connaît le dossier cible, et
    c'est le seul endroit qu'un futur appelant ne peut pas oublier. (Même raisonnement pour le
-   suffixe anti-collision, remonté de l'appelant vers `traiterImage` à la même tâche.)
+   suffixe anti-collision, remonté de l'appelant vers `processImage` à la même tâche.)
 
 6. **Ce qu'une bibliothèque ouvre par défaut est fermé explicitement, et la fermeture se
    vérifie de l'extérieur, par une requête.** Monter une bibliothèque d'authentification,
@@ -523,13 +550,13 @@ dans ce dépôt.
 3. **Une décision qui touche l'inventaire se prend sur l'état RELU en base, à l'intérieur de
    la transaction** — jamais sur un état reçu en paramètre. Verrouiller, relire, décider,
    écrire, dans cet ordre et dans une seule transaction. C'est ce qui rend un second appel
-   inoffensif : il voit le statut déjà écrit et se heurte à `TransitionInterditeError` au lieu
+   inoffensif : il voit le statut déjà écrit et se heurte à `ForbiddenTransitionError` au lieu
    de rejouer l'effet sur le stock. Verrouillez aussi la ligne de commande elle-même : sans
    ce verrou, deux annulations concurrentes recréditaient le stock deux fois.
 
 4. **Une trace d'audit qui accompagne une écriture transactionnelle s'écrit dans la même
    transaction.** Écrite avec le client global, elle survivait à un `ROLLBACK` :
-   `enregistrerAudit(args, tx)` accepte le client de transaction pour cette raison.
+   `recordAudit(args, tx)` accepte le client de transaction pour cette raison.
 
 ## 6. Tests
 
@@ -539,7 +566,7 @@ dans ce dépôt.
    des chemins sensibles — stock, argent, statuts, authentification — se valident **par
    mutation** : on casse volontairement le code protégé, on vérifie que le test rougit
    **seul**, on restaure. Exemple réel : contrôle de stock de la confirmation retiré, le test
-   « lève `RuptureStockError` quand le stock est parti entre-temps » rougit seul, sur
+   « lève `OutOfStockError` quand le stock est parti entre-temps » rougit seul, sur
    `PrismaClientUnknownRequestError` — c'est-à-dire la contrainte CHECK à la place du contrôle
    métier. Restauré : 13/13.
 
@@ -649,8 +676,9 @@ trouvé :
 - **Le symétrique du cas déjà corrigé.** Une passe précédente a fermé `statut` et laissé
   `epingle`, dans le même fichier.
 - **Chemins de fichiers composés à partir d'une valeur, d'où qu'elle vienne.** Ne vous
-  arrêtez pas aux données du client : la traversée de la tâche 8 passait par `nomBase`, un
-  **paramètre fourni par l'appelant**, pas par le nom de fichier du navigateur — qui
+  arrêtez pas aux données du client : la traversée de la tâche 8 passait par `nomBase`
+  (aujourd'hui `baseName`), un **paramètre fourni par l'appelant**, pas par le nom de
+  fichier du navigateur — qui
   n'atteignait déjà pas la fonction. Partez donc du `writeFile` et remontez chaque composante
   du chemin, y compris celles qui « viennent de chez nous ». `path.join` normalise les `..`
   sans borner le résultat. Cherchez la liste blanche, et vérifiez qu'elle **refuse** au lieu

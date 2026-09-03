@@ -1,8 +1,17 @@
 # Table de correspondance du renommage
 
-**Ce document est la référence de l'agent chargé du renommage des identifiants français vers
-l'anglais.** Il existe pour que ce travail soit **mécanique et vérifiable** : chaque nom
-source y a son nom cible, chaque piège y est nommé, et l'ordre d'exécution est donné.
+**Chantier exécuté les 2026-09-03 et 2026-09-04** (journal `docs/journal/entries.jsonl`,
+tâche `renommage` : 7 étapes puis audit final puis une passe de correctifs, verdict
+`approved`). Ce document reste la **référence de ce qui a été appliqué** — table de
+correspondance, points de vigilance et ordre d'exécution suivi — pas une liste de travail en
+attente. La preuve que l'état courant du code correspond bien à cette table n'est pas un
+chiffre figé ici, mais deux commandes à relancer : la commande de détection de
+`docs/CONVENTIONS.md` § 1 (fichiers non conformes) et les greps de vérification finale du
+§ 7 ci-dessous — les deux ne renvoient plus rien au moment d'écrire cette note.
+
+**Ce document est la référence de l'agent qui a mené le renommage des identifiants français
+vers l'anglais.** Il existe pour que ce travail ait été **mécanique et vérifiable** : chaque
+nom source y a son nom cible, chaque piège y est nommé, et l'ordre d'exécution est donné.
 
 La règle qui le gouverne est `docs/CONVENTIONS.md` § 1. Ce document ne la rediscute pas : il
 l'applique. En cas de contradiction entre les deux, **c'est `CONVENTIONS.md` qui l'emporte**
