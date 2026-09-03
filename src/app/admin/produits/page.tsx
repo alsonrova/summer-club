@@ -56,14 +56,18 @@ export default async function ProductsPage({
         basePath="/admin/produits"
         page={currentPage}
         totalPages={totalPages}
-        filters={{ categoryId: categoryId ?? '', actif: rawActive ?? '' }}
-        columnFormatters={{ prixBase: (value) => formatAriary(Number(value)) }}
+        filters={{ categoryId: categoryId ?? '', active: rawActive ?? '' }}
+        // Le champ s'appelle `active`, l'adresse reste `?actif=` : une URL est lue par un
+        // être humain (docs/CONVENTIONS.md § 1), et c'est bien `sp.actif` qui est relu
+        // ci-dessus. Voir la prop `filterParams` (src/admin/engine/table.tsx).
+        filterParams={{ active: 'actif' }}
+        columnFormatters={{ basePrice: (value) => formatAriary(Number(value)) }}
         // `row['id']` en notation crochet, pas `row.id` : le paramètre générique T
         // d'AdminTable (ici ProductInput, dérivé de productSchema) n'a pas de champ `id`
         // propre — seule la contrainte structurelle `T extends Record<string, unknown>`
         // autorise l'indexation par une chaîne arbitraire. Le tableau réellement transmis
         // (ProductListRow) porte bien un `id` à l'exécution.
-        link={{ column: 'nom', to: (row) => `/admin/produits/${row['id']}` }}
+        link={{ column: 'name', to: (row) => `/admin/produits/${row['id']}` }}
       />
     </div>
   )

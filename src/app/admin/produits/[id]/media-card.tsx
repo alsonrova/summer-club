@@ -3,7 +3,7 @@
 import { useActionState, useId } from 'react'
 import type { SimpleActionState } from '../states'
 
-type Media = { id: string; chemin: string; alt: string; position: number; isPrimary: boolean }
+type Media = { id: string; path: string; alt: string; position: number; isPrimary: boolean }
 
 type ActionMedia = (previousState: SimpleActionState, formData: FormData) => Promise<SimpleActionState>
 
@@ -46,12 +46,12 @@ export function MediaCard({
     <div className="flex flex-col gap-2">
       <div className="aspect-[4/5] overflow-hidden rounded-arch border border-taupe/40 bg-clay">
         <picture>
-          <source srcSet={`${media.chemin}-400.avif`} type="image/avif" />
-          <source srcSet={`${media.chemin}-400.webp`} type="image/webp" />
+          <source srcSet={`${media.path}-400.avif`} type="image/avif" />
+          <source srcSet={`${media.path}-400.webp`} type="image/webp" />
           {/* eslint-disable-next-line @next/next/no-img-element -- fichier local déjà
               ré-encodé par processImage() aux largeurs utiles ; next/image le réoptimiserait
               inutilement une seconde fois. */}
-          <img src={`${media.chemin}-400.webp`} alt={media.alt} className="h-full w-full object-cover" />
+          <img src={`${media.path}-400.webp`} alt={media.alt} className="h-full w-full object-cover" />
         </picture>
       </div>
 

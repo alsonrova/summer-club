@@ -43,11 +43,13 @@ if (!secret || secret.length < 32) {
 }
 
 // Le modèle Prisma `User` a été aligné sur ce qu'attend Better Auth (voir le commentaire
-// dans prisma/schema.prisma). Le champ `name` de Better Auth est mappé sur la colonne
-// métier `nom` pour ne pas dupliquer/renommer un champ déjà utilisé ailleurs.
+// dans prisma/schema.prisma). La colonne s'appelle désormais `name`, exactement comme la
+// bibliothèque la nomme : aucun mapping `user.fields` n'est donc plus nécessaire — celui
+// qui traduisait `name` vers l'ancienne colonne `nom` a été retiré avec le renommage, sinon
+// l'adaptateur chercherait une colonne qui n'existe plus.
 //
 // Le plugin `admin` gère le rôle comme une simple chaîne : on le configure avec les deux
-// seules valeurs de l'énumération Prisma `Role` (`admin` / `membre`) plutôt que ses valeurs
+// seules valeurs de l'énumération Prisma `Role` (`admin` / `member`) plutôt que ses valeurs
 // par défaut (`admin` / `user`).
 export const auth = betterAuth({
   secret,
@@ -59,11 +61,8 @@ export const auth = betterAuth({
     // reste joignable sans session par n'importe qui.
     disableSignUp: true,
   },
-  user: {
-    fields: { name: 'nom' },
-  },
   plugins: [
-    admin({ defaultRole: 'membre', adminRoles: ['admin'] }),
+    admin({ defaultRole: 'member', adminRoles: ['admin'] }),
     // Doit rester le dernier plugin : il relaie les cookies de session posés par les
     // autres endpoints vers l'API `cookies()` de Next.js (utile pour les Server Actions).
     nextCookies(),

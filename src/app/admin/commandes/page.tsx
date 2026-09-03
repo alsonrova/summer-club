@@ -70,15 +70,19 @@ export default async function OrdersPage({
         page={currentPage}
         totalPages={totalPages}
         filters={{
-          statut: status ?? '',
-          canal: channel ?? '',
+          status: status ?? '',
+          channel: channel ?? '',
           reference: reference ?? '',
         }}
-        filterOptions={{ statut: STATUS_OPTIONS, canal: CHANNEL_OPTIONS }}
+        filterOptions={{ status: STATUS_OPTIONS, channel: CHANNEL_OPTIONS }}
+        // Les champs sont anglais, les adresses restent françaises : le <select> du filtre
+        // émet `?statut=`/`?canal=`, exactement ce que `sp.statut`/`sp.canal` relisent
+        // ci-dessus. Voir la prop `filterParams` (src/admin/engine/table.tsx).
+        filterParams={{ status: 'statut', channel: 'canal' }}
         columnFormatters={{
           total: (value) => formatAriary(Number(value)),
-          statut: (value) => statusLabel(String(value)),
-          canal: (value) => channelLabel(String(value)),
+          status: (value) => statusLabel(String(value)),
+          channel: (value) => channelLabel(String(value)),
           // L'heure compte autant que le jour pour retrouver une commande passée le matin
           // même : le formatage `date` générique d'AdminTable ne donne que la date.
           createdAt: (value) =>

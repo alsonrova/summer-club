@@ -31,11 +31,11 @@ export default async function ProductDetailPage({
     prisma.product.findUnique({
       where: { id },
       include: {
-        variants: { orderBy: { libelle: 'asc' } },
+        variants: { orderBy: { label: 'asc' } },
         media: { orderBy: { position: 'asc' } },
       },
     }),
-    prisma.category.findMany({ orderBy: { ordre: 'asc' }, select: { id: true, nom: true } }),
+    prisma.category.findMany({ orderBy: { displayOrder: 'asc' }, select: { id: true, name: true } }),
   ])
 
   if (!product) notFound()
@@ -47,7 +47,7 @@ export default async function ProductDetailPage({
   return (
     <div className="flex flex-col gap-10">
       <div>
-        <h1 className="mb-6 font-display text-2xl font-light text-bark">{product.nom}</h1>
+        <h1 className="mb-6 font-display text-2xl font-light text-bark">{product.name}</h1>
         <ProductForm
           action={updateThisProduct}
           initialState={{ ...initialProductFormState, initialValues: product }}
@@ -73,16 +73,16 @@ export default async function ProductDetailPage({
             <tbody>
               {product.variants.map((variant) => (
                 <tr key={variant.id} className="border-b border-taupe/40">
-                  <td className="px-3 py-2 text-bark">{variant.libelle}</td>
+                  <td className="px-3 py-2 text-bark">{variant.label}</td>
                   <td className="px-3 py-2 text-bark">{variant.sku}</td>
                   <td className="px-3 py-2 text-bark tabular-nums">
-                    {formatAriary(product.prixBase + variant.deltaPrix)}
+                    {formatAriary(product.basePrice + variant.priceDelta)}
                   </td>
                   <td className="px-3 py-2">
                     <StockForm
                       action={adjustStock.bind(null, variant.id)}
                       currentStock={variant.stock}
-                      lowStockThreshold={variant.seuilAlerte}
+                      lowStockThreshold={variant.lowStockThreshold}
                     />
                   </td>
                 </tr>
@@ -91,7 +91,7 @@ export default async function ProductDetailPage({
           </table>
         )}
 
-        <VariantForm action={createVariantForThisProduct} basePrice={product.prixBase} />
+        <VariantForm action={createVariantForThisProduct} basePrice={product.basePrice} />
       </section>
 
       <section>

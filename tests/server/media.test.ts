@@ -4,36 +4,36 @@ import path from 'node:path'
 import sharp from 'sharp'
 import { processImage } from '@/server/media'
 
-const LARGEURS_TEST = [400, 800, 1200] as const
-const DOSSIER_UPLOADS = path.join(process.cwd(), 'public', 'uploads')
+const TEST_WIDTHS = [400, 800, 1200] as const
+const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads')
 
 // Chaque test qui produit réellement des fichiers y enregistre le
 // `chemin` retourné par processImage. Le nom réel des fichiers
 // contenant désormais un suffixe aléatoire, le nettoyage ne peut se
 // faire qu'à partir de ces chemins retournés — jamais en devinant un
 // nom construit à la main.
-const cheminsUtilises: string[] = []
+const usedPaths: string[] = []
 
-function fichierPour(chemin: string, largeur: number, ext: 'avif' | 'webp') {
-  return path.join(process.cwd(), 'public', `${chemin}-${largeur}.${ext}`)
+function fileFor(mediaPath: string, width: number, ext: 'avif' | 'webp') {
+  return path.join(process.cwd(), 'public', `${mediaPath}-${width}.${ext}`)
 }
 
-async function creerSourceJpeg(largeur: number, hauteur: number, fond: string) {
+async function createJpegSource(width: number, height: number, fond: string) {
   return sharp({
-    create: { width: largeur, height: hauteur, channels: 3, background: fond },
+    create: { width: width, height: height, channels: 3, background: fond },
   }).jpeg().toBuffer()
 }
 
 afterAll(async () => {
   // Nettoyage à partir des chemins réellement retournés, quelle que
   // soit l'issue des tests (afterAll s'exécute même après un échec).
-  const fichiers = cheminsUtilises.flatMap((chemin) =>
-    LARGEURS_TEST.flatMap((largeur) => [
-      fichierPour(chemin, largeur, 'avif'),
-      fichierPour(chemin, largeur, 'webp'),
+  const files = usedPaths.flatMap((mediaPath) =>
+    TEST_WIDTHS.flatMap((width) => [
+      fileFor(mediaPath, width, 'avif'),
+      fileFor(mediaPath, width, 'webp'),
     ]),
   )
-  await Promise.all(fichiers.map((f) => rm(f, { force: true })))
+  await Promise.all(files.map((f) => rm(f, { force: true })))
 
   // Assertion automatisée : aucun résidu dans public/uploads SOUS LES
   // PRÉFIXES que ce fichier de test s'est attribués (`baseName` +
@@ -48,43 +48,43 @@ afterAll(async () => {
   //   calendrier dès qu'un autre fichier de test y écrivait au même
   //   moment — ce qui avait fait sérialiser toute la suite (voir
   //   vitest.config.ts).
-  const prefixes = cheminsUtilises.map((chemin) => `${path.basename(chemin)}-`)
-  const entrees = await readdir(DOSSIER_UPLOADS)
-  expect(entrees.filter((entree) => prefixes.some((p) => entree.startsWith(p)))).toEqual([])
+  const prefixes = usedPaths.map((mediaPath) => `${path.basename(mediaPath)}-`)
+  const entries = await readdir(UPLOAD_DIR)
+  expect(entries.filter((entry) => prefixes.some((p) => entry.startsWith(p)))).toEqual([])
 })
 
 describe('processImage', () => {
   it('produit un fichier au ratio 4:5 exact', async () => {
-    const source = await creerSourceJpeg(1000, 600, '#EDE5DA')
+    const source = await createJpegSource(1000, 600, '#EDE5DA')
 
-    const { chemin, widths } = await processImage(source, 'test-img')
-    cheminsUtilises.push(chemin)
+    const { path: mediaPath, widths } = await processImage(source, 'test-img')
+    usedPaths.push(mediaPath)
     expect(widths).toEqual([400, 800, 1200])
 
-    const meta = await sharp(fichierPour(chemin, 400, 'avif')).metadata()
+    const meta = await sharp(fileFor(mediaPath, 400, 'avif')).metadata()
     expect(meta.width).toBe(400)
     expect(meta.height).toBe(500)
   })
 
   it('écrit aussi une version webp de repli', async () => {
-    const source = await creerSourceJpeg(800, 800, '#EDE5DA')
-    const { chemin } = await processImage(source, 'test-img')
-    cheminsUtilises.push(chemin)
-    await expect(stat(fichierPour(chemin, 800, 'webp'))).resolves.toBeTruthy()
+    const source = await createJpegSource(800, 800, '#EDE5DA')
+    const { path: mediaPath } = await processImage(source, 'test-img')
+    usedPaths.push(mediaPath)
+    await expect(stat(fileFor(mediaPath, 800, 'webp'))).resolves.toBeTruthy()
   })
 
   it('produit les trois largeurs au ratio 4:5 exact, en avif comme en webp', async () => {
-    const source = await creerSourceJpeg(1000, 600, '#EDE5DA')
-    const { chemin, widths } = await processImage(source, 'dimensions')
-    cheminsUtilises.push(chemin)
+    const source = await createJpegSource(1000, 600, '#EDE5DA')
+    const { path: mediaPath, widths } = await processImage(source, 'dimensions')
+    usedPaths.push(mediaPath)
     expect(widths).toEqual([400, 800, 1200])
 
-    for (const largeur of LARGEURS_TEST) {
-      const hauteurAttendue = Math.round((largeur * 5) / 4)
+    for (const width of TEST_WIDTHS) {
+      const expectedHeight = Math.round((width * 5) / 4)
       for (const ext of ['avif', 'webp'] as const) {
-        const meta = await sharp(fichierPour(chemin, largeur, ext)).metadata()
-        expect(meta.width).toBe(largeur)
-        expect(meta.height).toBe(hauteurAttendue)
+        const meta = await sharp(fileFor(mediaPath, width, ext)).metadata()
+        expect(meta.width).toBe(width)
+        expect(meta.height).toBe(expectedHeight)
       }
     }
   })
@@ -94,62 +94,62 @@ describe('processImage', () => {
     // 6 (rotation de 90° à appliquer) : c'est le cas d'une photo prise
     // au téléphone en portrait. Sans rotate(), elle serait recadrée de
     // travers.
-    const brut = await creerSourceJpeg(1200, 800, '#445566')
-    const source = await sharp(brut).withMetadata({ orientation: 6 }).jpeg().toBuffer()
-    const metaSource = await sharp(source).metadata()
-    expect(metaSource.orientation).toBe(6)
+    const raw = await createJpegSource(1200, 800, '#445566')
+    const source = await sharp(raw).withMetadata({ orientation: 6 }).jpeg().toBuffer()
+    const sourceMeta = await sharp(source).metadata()
+    expect(sourceMeta.orientation).toBe(6)
 
-    const { chemin } = await processImage(source, 'exif-portrait')
-    cheminsUtilises.push(chemin)
+    const { path: mediaPath } = await processImage(source, 'exif-portrait')
+    usedPaths.push(mediaPath)
 
-    const meta = await sharp(fichierPour(chemin, 400, 'avif')).metadata()
+    const meta = await sharp(fileFor(mediaPath, 400, 'avif')).metadata()
     expect(meta.width).toBe(400)
     expect(meta.height).toBe(500)
     expect(meta.orientation).toBeUndefined()
   })
 
   it('garantit des chemins distincts et zéro collision entre deux téléversements concurrents du même baseName', async () => {
-    const source1 = await creerSourceJpeg(900, 900, '#111111')
-    const source2 = await creerSourceJpeg(900, 900, '#EEEEEE')
+    const source1 = await createJpegSource(900, 900, '#111111')
+    const source2 = await createJpegSource(900, 900, '#EEEEEE')
 
-    const [resultat1, resultat2] = await Promise.all([
+    const [first, second] = await Promise.all([
       processImage(source1, 'concurrent'),
       processImage(source2, 'concurrent'),
     ])
-    cheminsUtilises.push(resultat1.chemin, resultat2.chemin)
+    usedPaths.push(first.path, second.path)
 
-    expect(resultat1.chemin).not.toBe(resultat2.chemin)
+    expect(first.path).not.toBe(second.path)
 
-    for (const { chemin } of [resultat1, resultat2]) {
-      for (const largeur of LARGEURS_TEST) {
-        await expect(stat(fichierPour(chemin, largeur, 'avif'))).resolves.toBeTruthy()
-        await expect(stat(fichierPour(chemin, largeur, 'webp'))).resolves.toBeTruthy()
+    for (const { path: mediaPath } of [first, second]) {
+      for (const width of TEST_WIDTHS) {
+        await expect(stat(fileFor(mediaPath, width, 'avif'))).resolves.toBeTruthy()
+        await expect(stat(fileFor(mediaPath, width, 'webp'))).resolves.toBeTruthy()
       }
     }
   })
 
   it('confine une tentative de traversée de chemin à l\'intérieur de public/uploads', async () => {
-    const source = await creerSourceJpeg(500, 500, '#000000')
-    const nomBaseMalicieux = '../../../../evil'
+    const source = await createJpegSource(500, 500, '#000000')
+    const maliciousBaseName = '../../../../evil'
 
     // Reproduit le calcul non borné de l'ancien code : c'est
     // l'emplacement, hors de public/uploads, où le fichier aurait été
     // écrit avant correctif.
-    const cheminVulnerableAvant = path.join(
-      DOSSIER_UPLOADS,
-      `${nomBaseMalicieux}-400.avif`,
+    const vulnerablePathBefore = path.join(
+      UPLOAD_DIR,
+      `${maliciousBaseName}-400.avif`,
     )
 
-    const { chemin } = await processImage(source, nomBaseMalicieux)
-    cheminsUtilises.push(chemin)
+    const { path: mediaPath } = await processImage(source, maliciousBaseName)
+    usedPaths.push(mediaPath)
 
-    expect(path.basename(chemin).startsWith('evil-')).toBe(true)
-    await expect(stat(cheminVulnerableAvant)).rejects.toThrow()
-    await expect(stat(fichierPour(chemin, 400, 'avif'))).resolves.toBeTruthy()
+    expect(path.basename(mediaPath).startsWith('evil-')).toBe(true)
+    await expect(stat(vulnerablePathBefore)).rejects.toThrow()
+    await expect(stat(fileFor(mediaPath, 400, 'avif'))).resolves.toBeTruthy()
   })
 
   it('rejette un baseName dont le composant de base contient des caractères interdits', async () => {
-    const source = await creerSourceJpeg(400, 400, '#000000')
+    const source = await createJpegSource(400, 400, '#000000')
     await expect(processImage(source, '../../../../evil.png')).rejects.toThrow(
       /baseName invalide/,
     )

@@ -3,7 +3,7 @@
 import { useActionState } from 'react'
 import type { ProductFormState } from './states'
 
-type CategoryOption = { id: string; nom: string }
+type CategoryOption = { id: string; name: string }
 
 function initialText(values: Record<string, unknown>, name: string): string {
   const v = values[name]
@@ -57,34 +57,34 @@ export function ProductForm({
   const v = state.initialValues
 
   const defaultCategoryId = initialText(v, 'categoryId') || (categories[0]?.id ?? '')
-  const defaultCostPrice = initialText(v, 'prixAchat') || '0'
-  const defaultDisplayOrder = initialText(v, 'ordre') || '0'
-  const defaultActive = v.actif === undefined ? true : Boolean(v.actif)
+  const defaultCostPrice = initialText(v, 'costPrice') || '0'
+  const defaultDisplayOrder = initialText(v, 'displayOrder') || '0'
+  const defaultActive = v.active === undefined ? true : Boolean(v.active)
 
-  const nameHasError = Boolean(state.errors.nom?.length)
+  const nameHasError = Boolean(state.errors.name?.length)
   const slugHasError = Boolean(state.errors.slug?.length)
   const descriptionHasError = Boolean(state.errors.description?.length)
   const categoryIdHasError = Boolean(state.errors.categoryId?.length)
-  const basePriceHasError = Boolean(state.errors.prixBase?.length)
-  const costPriceHasError = Boolean(state.errors.prixAchat?.length)
-  const displayOrderHasError = Boolean(state.errors.ordre?.length)
+  const basePriceHasError = Boolean(state.errors.basePrice?.length)
+  const costPriceHasError = Boolean(state.errors.costPrice?.length)
+  const displayOrderHasError = Boolean(state.errors.displayOrder?.length)
 
   return (
     <form action={submit} className="flex max-w-lg flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <label htmlFor="produit-nom" className="text-small text-bark-soft">
+        <label htmlFor="produit-name" className="text-small text-bark-soft">
           Nom
         </label>
         <input
-          id="produit-nom"
-          name="nom"
+          id="produit-name"
+          name="name"
           type="text"
-          defaultValue={initialText(v, 'nom')}
+          defaultValue={initialText(v, 'name')}
           aria-invalid={nameHasError || undefined}
-          aria-describedby={nameHasError ? 'produit-nom-erreur' : undefined}
+          aria-describedby={nameHasError ? 'produit-name-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <FieldErrors id="produit-nom-erreur" messages={state.errors.nom} />
+        <FieldErrors id="produit-name-erreur" messages={state.errors.name} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -135,7 +135,7 @@ export function ProductForm({
           {categories.length === 0 ? <option value="">Aucune catégorie disponible</option> : null}
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.nom}
+              {category.name}
             </option>
           ))}
         </select>
@@ -143,66 +143,66 @@ export function ProductForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="produit-prixBase" className="text-small text-bark-soft">
+        <label htmlFor="produit-basePrice" className="text-small text-bark-soft">
           Prix
         </label>
         <input
-          id="produit-prixBase"
-          name="prixBase"
+          id="produit-basePrice"
+          name="basePrice"
           type="number"
-          defaultValue={initialText(v, 'prixBase')}
+          defaultValue={initialText(v, 'basePrice')}
           aria-invalid={basePriceHasError || undefined}
-          aria-describedby={basePriceHasError ? 'produit-prixBase-erreur' : undefined}
+          aria-describedby={basePriceHasError ? 'produit-basePrice-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
-        <FieldErrors id="produit-prixBase-erreur" messages={state.errors.prixBase} />
+        <FieldErrors id="produit-basePrice-erreur" messages={state.errors.basePrice} />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="produit-prixAchat" className="text-small text-bark-soft">
+        <label htmlFor="produit-costPrice" className="text-small text-bark-soft">
           Prix d&apos;achat
         </label>
         <input
-          id="produit-prixAchat"
-          name="prixAchat"
+          id="produit-costPrice"
+          name="costPrice"
           type="number"
           defaultValue={defaultCostPrice}
           aria-invalid={costPriceHasError || undefined}
-          aria-describedby={costPriceHasError ? 'produit-prixAchat-erreur' : undefined}
+          aria-describedby={costPriceHasError ? 'produit-costPrice-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
-        <FieldErrors id="produit-prixAchat-erreur" messages={state.errors.prixAchat} />
+        <FieldErrors id="produit-costPrice-erreur" messages={state.errors.costPrice} />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="produit-ordre" className="text-small text-bark-soft">
+        <label htmlFor="produit-displayOrder" className="text-small text-bark-soft">
           Ordre d&apos;affichage
         </label>
         <input
-          id="produit-ordre"
-          name="ordre"
+          id="produit-displayOrder"
+          name="displayOrder"
           type="number"
           defaultValue={defaultDisplayOrder}
           aria-invalid={displayOrderHasError || undefined}
-          aria-describedby={displayOrderHasError ? 'produit-ordre-erreur' : undefined}
+          aria-describedby={displayOrderHasError ? 'produit-displayOrder-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
         <p className="text-small text-bark-soft">
           Détermine la position du produit dans la vitrine ; les valeurs les plus basses
           apparaissent en premier.
         </p>
-        <FieldErrors id="produit-ordre-erreur" messages={state.errors.ordre} />
+        <FieldErrors id="produit-displayOrder-erreur" messages={state.errors.displayOrder} />
       </div>
 
       <div className="flex items-center gap-2">
         <input
-          id="produit-actif"
-          name="actif"
+          id="produit-active"
+          name="active"
           type="checkbox"
           defaultChecked={defaultActive}
           className="h-4 w-4 rounded border-taupe/40"
         />
-        <label htmlFor="produit-actif" className="text-small text-bark-soft">
+        <label htmlFor="produit-active" className="text-small text-bark-soft">
           Actif (visible en boutique)
         </label>
       </div>

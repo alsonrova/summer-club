@@ -33,7 +33,7 @@ import type {
 // de retour consommées par useActionState côté client, pas levées avec throw — lever ne
 // convient qu'aux erreurs réellement inattendues (ex. findUniqueOrThrow sur un id forgé).
 //
-// ProductFormState/SimpleActionState (et leurs valeurs initiales) vivent dans ./etats.ts,
+// ProductFormState/SimpleActionState (et leurs valeurs initiales) vivent dans ./states.ts,
 // pas ici : un fichier 'use server' ne peut exporter que des fonctions async (voir
 // https://nextjs.org/docs/messages/invalid-use-server-value).
 
@@ -74,8 +74,8 @@ export async function createProduct(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'creer',
-    entity: 'produits',
+    action: 'create',
+    entity: 'products',
     entityId: product.id,
     after: result.data,
   })
@@ -130,8 +130,8 @@ export async function updateProduct(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'modifier',
-    entity: 'produits',
+    action: 'update',
+    entity: 'products',
     entityId: productId,
     before: beforeSameKeys,
     after: result.data,
@@ -160,12 +160,12 @@ export async function createVariant(
   }
 
   const product = await prisma.product.findUniqueOrThrow({ where: { id: productId } })
-  const resultingPrice = product.prixBase + result.data.deltaPrix
+  const resultingPrice = product.basePrice + result.data.priceDelta
   if (resultingPrice <= 0) {
     return {
       success: false,
       errors: {
-        deltaPrix: ['Le prix de vente résultant (prix de base + écart) doit être positif.'],
+        priceDelta: ['Le prix de vente résultant (prix de base + écart) doit être positif.'],
       },
       initialValues: formDataToObject(formData, variantsResource),
     }
@@ -176,7 +176,7 @@ export async function createVariant(
     variant = await prisma.variant.create({ data: { productId, ...result.data } })
   } catch (error) {
     // Deux contraintes d'unicité distinctes sur Variant (voir prisma/schema.prisma) :
-    // `sku` (globale) et `(productId, libelle)` (par produit). Sans les distinguer,
+    // `sku` (globale) et `(productId, label)` (par produit). Sans les distinguer,
     // la propriétaire verrait une erreur technique au premier doublon.
     if (isUniqueViolation(error, 'sku')) {
       return {
@@ -185,10 +185,10 @@ export async function createVariant(
         initialValues: formDataToObject(formData, variantsResource),
       }
     }
-    if (isUniqueViolation(error, 'libelle')) {
+    if (isUniqueViolation(error, 'label')) {
       return {
         success: false,
-        errors: { libelle: ['Une déclinaison avec ce libellé existe déjà pour ce produit.'] },
+        errors: { label: ['Une déclinaison avec ce libellé existe déjà pour ce produit.'] },
         initialValues: formDataToObject(formData, variantsResource),
       }
     }
@@ -197,7 +197,7 @@ export async function createVariant(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'creer',
+    action: 'create',
     entity: 'Variant',
     entityId: variant.id,
     after: result.data,
@@ -238,7 +238,7 @@ export async function adjustStock(
   // ET la nouvelle valeur, jamais l'une sans l'autre.
   await recordAudit({
     actor: session.user.email,
-    action: 'ajustement_stock',
+    action: 'adjust_stock',
     entity: 'Variant',
     entityId: variantId,
     before: { stock: before.stock },
@@ -258,7 +258,7 @@ export async function uploadMedia(
 ): Promise<SimpleActionState> {
   const session = await requireAdmin()
 
-  const file = formData.get('fichier')
+  const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) {
     return { error: 'Aucun fichier sélectionné.' }
   }
@@ -277,13 +277,13 @@ export async function uploadMedia(
   // d'écrire six fichiers que plus aucune ligne ne référencerait.
   const product = await prisma.product.findUniqueOrThrow({
     where: { id: productId },
-    select: { nom: true },
+    select: { name: true },
   })
 
   const buffer = Buffer.from(await file.arrayBuffer())
   // processImage assainit le nom et y ajoute elle-même un suffixe aléatoire d'unicité :
   // inutile d'horodater ici, et surtout ne jamais lui passer le nom envoyé par le
-  // navigateur (fichier.name) — seul l'identifiant du produit, déjà validé, lui est confié.
+  // navigateur (file.name) — seul l'identifiant du produit, déjà validé, lui est confié.
   //
   // Un fichier au type MIME usurpé (un PDF renommé en .jpg, une image tronquée, un format
   // que sharp refuse malgré un en-tête accepté par validateMediaFile) fait lever
@@ -292,7 +292,7 @@ export async function uploadMedia(
   // trace technique.
   let imagePath: string
   try {
-    ;({ chemin: imagePath } = await processImage(buffer, productId))
+    ;({ path: imagePath } = await processImage(buffer, productId))
   } catch (error) {
     // Journalisé dans tous les cas, avec l'erreur réelle : sans cette trace, un disque
     // plein ou des droits refusés sur public/uploads seraient indiscernables côté serveur
@@ -319,7 +319,7 @@ export async function uploadMedia(
   const media = await prisma.media.create({
     data: {
       productId,
-      chemin: imagePath,
+      path: imagePath,
       // Texte alternatif de départ dérivé du nom du produit, jamais la chaîne vide :
       // updateMediaAlt refuse un alt vide, une photo fraîchement téléversée se
       // retrouvait donc dans un état que l'éditeur interdit de reproduire, et partait en
@@ -330,7 +330,7 @@ export async function uploadMedia(
       // modifiable — garantit le même invariant sans friction. Le nom seul, sans préfixe
       // « Photo de » : l'élément <img> annonce déjà qu'il s'agit d'une image, le répéter
       // dans l'alt est une redondance que les lecteurs d'écran font entendre deux fois.
-      alt: product.nom,
+      alt: product.name,
       position: count,
       isPrimary: count === 0,
     },
@@ -338,10 +338,10 @@ export async function uploadMedia(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'ajout_media',
+    action: 'add_media',
     entity: 'Media',
     entityId: media.id,
-    after: { chemin: imagePath },
+    after: { path: imagePath },
   })
 
   revalidatePath('/boutique')
@@ -379,7 +379,7 @@ export async function reorderMedia(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'reordonner_media',
+    action: 'reorder_media',
     entity: 'Media',
     entityId: mediaId,
     before: { position: before.position },
@@ -410,7 +410,7 @@ export async function updateMediaAlt(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'modifier_alt_media',
+    action: 'update_media_alt',
     entity: 'Media',
     entityId: mediaId,
     before: { alt: before.alt },
@@ -446,7 +446,7 @@ export async function setPrimaryPhoto(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'definir_photo_principale',
+    action: 'set_primary_photo',
     entity: 'Media',
     entityId: mediaId,
     before: { isPrimary: media.isPrimary },
@@ -471,7 +471,7 @@ export async function deleteMedia(
   // Efface les fichiers avant la ligne en base : si l'effacement disque échouait, mieux
   // vaut une ligne orpheline (photo cassée, visible, corrigible) qu'un fichier orphelin
   // sur disque qu'aucune fiche ne référence plus jamais.
-  await deleteMediaFiles(media.chemin)
+  await deleteMediaFiles(media.path)
 
   await prisma.$transaction(async (tx) => {
     await tx.media.delete({ where: { id: mediaId } })
@@ -491,10 +491,10 @@ export async function deleteMedia(
 
   await recordAudit({
     actor: session.user.email,
-    action: 'supprimer_media',
+    action: 'delete_media',
     entity: 'Media',
     entityId: mediaId,
-    before: { chemin: media.chemin, alt: media.alt, isPrimary: media.isPrimary },
+    before: { path: media.path, alt: media.alt, isPrimary: media.isPrimary },
   })
 
   revalidatePath('/boutique')

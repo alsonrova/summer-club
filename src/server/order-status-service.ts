@@ -64,7 +64,7 @@ export function pathsToRevalidate(orderId: string): string[] {
  *    ForbiddenTransitionError au lieu de rejouer l'effet sur le stock.
  *
  * 3. Une confirmation peut manquer de stock. Une commande WhatsApp
- *    (en_attente_confirmation) ne réserve rien à la création : le stock a pu partir
+ *    (pending_confirmation) ne réserve rien à la création : le stock a pu partir
  *    entre-temps. On verrouille les lignes de variantes, on les relit, et on lève
  *    OutOfStockError si le compte n'y est pas. La contrainte CHECK
  *    `variant_stock_non_negatif` (prisma/migrations/20260812204141_stock_non_negatif) est
@@ -75,7 +75,7 @@ export async function applyStatus(orderId: string, to: OrderStatus, actor: strin
   return prisma.$transaction(
     async (tx) => {
       // Verrou sur la LIGNE DE COMMANDE avant toute lecture : sans lui, deux changements
-      // de statut concurrents sur la même commande liraient tous deux « confirmee » et
+      // de statut concurrents sur la même commande liraient tous deux « confirmed » et
       // recréditeraient tous deux le stock. Le second appelant reste bloqué ici jusqu'à la
       // validation du premier, puis relit (Read Committed prend un nouvel instantané à
       // chaque instruction) le statut réellement écrit.
@@ -85,7 +85,7 @@ export async function applyStatus(orderId: string, to: OrderStatus, actor: strin
         where: { id: orderId },
         include: { items: true },
       })
-      const from = order.statut as OrderStatus
+      const from = order.status as OrderStatus
 
       if (!transitionAllowed(from, to)) {
         throw new ForbiddenTransitionError(from, to)
@@ -100,7 +100,7 @@ export async function applyStatus(orderId: string, to: OrderStatus, actor: strin
         // couvrait qu'un.
         const quantities = new Map<string, number>()
         for (const item of order.items) {
-          quantities.set(item.variantId, (quantities.get(item.variantId) ?? 0) + item.quantite)
+          quantities.set(item.variantId, (quantities.get(item.variantId) ?? 0) + item.quantity)
         }
 
         // Verrouillage de toutes les variantes en une instruction, dans un ordre stable
@@ -132,7 +132,7 @@ export async function applyStatus(orderId: string, to: OrderStatus, actor: strin
         }
       }
 
-      const updatedOrder = await tx.order.update({ where: { id: orderId }, data: { statut: to } })
+      const updatedOrder = await tx.order.update({ where: { id: orderId }, data: { status: to } })
 
       // Écrit avec `tx`, pas avec le client global : la trace ne doit exister que si le
       // changement est validé. Elle sert aussi d'historique de statut à l'écran de détail
@@ -140,11 +140,11 @@ export async function applyStatus(orderId: string, to: OrderStatus, actor: strin
       await recordAudit(
         {
           actor,
-          action: 'changement_statut',
+          action: 'change_status',
           entity: 'Order',
           entityId: orderId,
-          before: { statut: from },
-          after: { statut: to },
+          before: { status: from },
+          after: { status: to },
         },
         tx,
       )

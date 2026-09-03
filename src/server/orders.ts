@@ -58,7 +58,7 @@ function reference(): string {
 
 export type OrderInput = {
   lines: { variantId: string; quantity: number }[]
-  channel: 'orange_money' | 'whatsapp' | 'livraison'
+  channel: 'orange_money' | 'whatsapp' | 'cash_on_delivery'
   client: { customerName: string; phone: string; email?: string; address?: string }
   zoneId: string | null
   isMember: boolean
@@ -89,16 +89,16 @@ export async function createOrder(input: OrderInput): Promise<CreatedOrder> {
   }
 
   const initialStatus = input.channel === 'orange_money'
-    ? 'en_attente_paiement'
+    ? 'pending_payment'
     : input.channel === 'whatsapp'
-      ? 'en_attente_confirmation'
-      : 'confirmee'
+      ? 'pending_confirmation'
+      : 'confirmed'
 
   // Le stock est réservé dès la création pour les canaux orange_money et
-  // livraison (cf. STOCK_COMMITTED) : le paiement orange_money encaisse
+  // cash_on_delivery (cf. STOCK_COMMITTED) : le paiement orange_money encaisse
   // immédiatement, il ne doit pas pouvoir encaisser deux fois la même
   // dernière pièce en attendant la confirmation du webhook. Le canal
-  // whatsapp (en_attente_confirmation) ne réserve rien : ces commandes
+  // whatsapp (pending_confirmation) ne réserve rien : ces commandes
   // attendent un accord manuel qui peut ne jamais venir.
   const stockCommitted = STOCK_COMMITTED.includes(initialStatus)
 
@@ -136,7 +136,7 @@ export async function createOrder(input: OrderInput): Promise<CreatedOrder> {
       ids,
     )
 
-    const promotions = (await tx.promotion.findMany({ where: { actif: true } })) as PromotionRule[]
+    const promotions = (await tx.promotion.findMany({ where: { active: true } })) as PromotionRule[]
     const now = new Date()
 
     // Relecture des variantes après acquisition du verrou, via `tx` :
@@ -145,20 +145,20 @@ export async function createOrder(input: OrderInput): Promise<CreatedOrder> {
     // sinon), plutôt qu'une décision prise sur une donnée périmée.
     const computedLines: {
       variantId: string
-      nomFige: string
-      prixUnitaireFige: number
-      quantite: number
+      nameSnapshot: string
+      unitPriceSnapshot: number
+      quantity: number
     }[] = []
     for (const [variantId, quantity] of quantitiesByVariant) {
       const variant = await tx.variant.findUnique({
         where: { id: variantId }, include: { product: true },
       })
       if (!variant) throw new VariantNotFoundError(variantId)
-      if (!variant.product.actif) throw new ProductUnavailableError(variant.productId)
+      if (!variant.product.active) throw new ProductUnavailableError(variant.productId)
       if (variant.stock < quantity) throw new OutOfStockError(variantId)
 
       const { finalPrice } = resolvePrice({
-        basePrice: variant.product.prixBase + variant.deltaPrix,
+        basePrice: variant.product.basePrice + variant.priceDelta,
         productId: variant.productId,
         categoryId: variant.product.categoryId,
         promotions, now, isMember: input.isMember,
@@ -166,40 +166,40 @@ export async function createOrder(input: OrderInput): Promise<CreatedOrder> {
 
       computedLines.push({
         variantId: variant.id,
-        nomFige: `${variant.product.nom} — ${variant.libelle}`,
-        prixUnitaireFige: finalPrice,
-        quantite: quantity,
+        nameSnapshot: `${variant.product.name} — ${variant.label}`,
+        unitPriceSnapshot: finalPrice,
+        quantity,
       })
     }
 
-    let zone: { tarif: number } | null = null
+    let zone: { fee: number } | null = null
     if (input.zoneId) {
       const z = await tx.deliveryZone.findUnique({ where: { id: input.zoneId } })
-      if (!z || !z.actif) throw new InvalidZoneError(input.zoneId)
+      if (!z || !z.active) throw new InvalidZoneError(input.zoneId)
       zone = z
     }
 
     const totals = computeTotals(
       computedLines.map((l) => ({
-        variantId: l.variantId, unitPrice: l.prixUnitaireFige, quantity: l.quantite,
+        variantId: l.variantId, unitPrice: l.unitPriceSnapshot, quantity: l.quantity,
       })),
-      zone?.tarif ?? null,
+      zone?.fee ?? null,
     )
 
     const order = await tx.order.create({
       data: {
         reference: reference(),
-        tokenSuivi: randomBytes(24).toString('base64url'),
-        canal: input.channel,
-        statut: initialStatus,
-        clientNom: input.client.customerName,
-        tel: input.client.phone,
+        trackingToken: randomBytes(24).toString('base64url'),
+        channel: input.channel,
+        status: initialStatus,
+        customerName: input.client.customerName,
+        phone: input.client.phone,
         email: input.client.email ?? null,
-        adresse: input.client.address ?? null,
+        address: input.client.address ?? null,
         zoneId: input.zoneId,
-        sousTotal: totals.subtotal,
-        fraisLivraison: totals.shippingFee,
-        remise: totals.discount,
+        subtotal: totals.subtotal,
+        shippingFee: totals.shippingFee,
+        discount: totals.discount,
         total: totals.total,
         items: { create: computedLines },
       },
@@ -209,14 +209,14 @@ export async function createOrder(input: OrderInput): Promise<CreatedOrder> {
       for (const l of computedLines) {
         await tx.variant.update({
           where: { id: l.variantId },
-          data: { stock: { decrement: l.quantite } },
+          data: { stock: { decrement: l.quantity } },
         })
       }
     }
 
     return {
       id: order.id, reference: order.reference,
-      trackingToken: order.tokenSuivi, total: order.total,
+      trackingToken: order.trackingToken, total: order.total,
     }
   }, { timeout: 15000, maxWait: 5000 })
 }

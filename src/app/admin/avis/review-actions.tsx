@@ -56,14 +56,14 @@ export function ReviewActions({
   publish: ReviewAction
   reject: ReviewAction
   togglePinned: ReviewAction
-  status: 'en_attente' | 'publie' | 'rejete'
+  status: 'pending' | 'published' | 'rejected'
   pinned: boolean
 }) {
   return (
     <div className="flex flex-wrap items-start gap-2">
-      {status !== 'publie' ? <ActionButton action={publish} label="Publier" primary /> : null}
-      {status !== 'rejete' ? <ActionButton action={reject} label="Rejeter" /> : null}
-      {status === 'publie' ? (
+      {status !== 'published' ? <ActionButton action={publish} label="Publier" primary /> : null}
+      {status !== 'rejected' ? <ActionButton action={reject} label="Rejeter" /> : null}
+      {status === 'published' ? (
         <ActionButton
           action={togglePinned}
           label={pinned ? "Retirer de l'accueil" : "Épingler à l'accueil"}

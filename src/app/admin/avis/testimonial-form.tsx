@@ -14,7 +14,7 @@ function FieldErrors({ messages, id }: { messages: string[] | undefined; id: str
 
 /**
  * Saisie d'un témoignage reçu hors du site. Aucun champ « source » : un témoignage saisi
- * ici est toujours `importe` (voir importTestimonial) — le badge « Achat vérifié » ne
+ * ici est toujours `imported` (voir importTestimonial) — le badge « Achat vérifié » ne
  * s'obtient qu'en passant réellement commande.
  */
 export function TestimonialForm({
@@ -25,7 +25,7 @@ export function TestimonialForm({
     previousState: TestimonialFormState,
     formData: FormData,
   ) => Promise<TestimonialFormState>
-  products: { id: string; nom: string }[]
+  products: { id: string; name: string }[]
 }) {
   const [state, submit, isPending] = useActionState<TestimonialFormState, FormData>(action, {
     success: false,
@@ -42,31 +42,31 @@ export function TestimonialForm({
   return (
     <form action={submit} className="flex flex-col gap-4 sm:max-w-xl">
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefix}-auteur`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-author`} className="text-small text-bark-soft">
           Autrice
         </label>
         <input
-          id={`${prefix}-auteur`}
-          name="auteur"
+          id={`${prefix}-author`}
+          name="author"
           type="text"
-          defaultValue={value('auteur')}
-          aria-invalid={state.errors['auteur'] ? true : undefined}
-          aria-describedby={state.errors['auteur'] ? `${prefix}-auteur-erreur` : undefined}
+          defaultValue={value('author')}
+          aria-invalid={state.errors['author'] ? true : undefined}
+          aria-describedby={state.errors['author'] ? `${prefix}-author-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <FieldErrors messages={state.errors['auteur']} id={`${prefix}-auteur-erreur`} />
+        <FieldErrors messages={state.errors['author']} id={`${prefix}-author-erreur`} />
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefix}-note`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-rating`} className="text-small text-bark-soft">
           Note
         </label>
         <select
-          id={`${prefix}-note`}
-          name="note"
-          defaultValue={value('note') || '5'}
-          aria-invalid={state.errors['note'] ? true : undefined}
-          aria-describedby={state.errors['note'] ? `${prefix}-note-erreur` : undefined}
+          id={`${prefix}-rating`}
+          name="rating"
+          defaultValue={value('rating') || '5'}
+          aria-invalid={state.errors['rating'] ? true : undefined}
+          aria-describedby={state.errors['rating'] ? `${prefix}-rating-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         >
           {[5, 4, 3, 2, 1].map((n) => (
@@ -75,7 +75,7 @@ export function TestimonialForm({
             </option>
           ))}
         </select>
-        <FieldErrors messages={state.errors['note']} id={`${prefix}-note-erreur`} />
+        <FieldErrors messages={state.errors['rating']} id={`${prefix}-rating-erreur`} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -93,7 +93,7 @@ export function TestimonialForm({
           <option value="">Aucun produit en particulier</option>
           {products.map((product) => (
             <option key={product.id} value={product.id}>
-              {product.nom}
+              {product.name}
             </option>
           ))}
         </select>
@@ -101,19 +101,19 @@ export function TestimonialForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${prefix}-texte`} className="text-small text-bark-soft">
+        <label htmlFor={`${prefix}-body`} className="text-small text-bark-soft">
           Témoignage
         </label>
         <textarea
-          id={`${prefix}-texte`}
-          name="texte"
+          id={`${prefix}-body`}
+          name="body"
           rows={3}
-          defaultValue={value('texte')}
-          aria-invalid={state.errors['texte'] ? true : undefined}
-          aria-describedby={state.errors['texte'] ? `${prefix}-texte-erreur` : undefined}
+          defaultValue={value('body')}
+          aria-invalid={state.errors['body'] ? true : undefined}
+          aria-describedby={state.errors['body'] ? `${prefix}-body-erreur` : undefined}
           className="rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <FieldErrors messages={state.errors['texte']} id={`${prefix}-texte-erreur`} />
+        <FieldErrors messages={state.errors['body']} id={`${prefix}-body-erreur`} />
       </div>
 
       <div className="flex items-center gap-3">

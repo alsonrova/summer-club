@@ -25,7 +25,7 @@ if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
   )
 }
 
-export const CHEMIN_ETAT_ADMIN = path.join(__dirname, '.auth', 'admin.json')
+export const ADMIN_STATE_PATH = path.join(__dirname, '.auth', 'admin.json')
 
 setup('connexion administrateur (une seule fois pour toute la suite)', async ({ page }) => {
   await page.goto('/connexion')
@@ -34,5 +34,5 @@ setup('connexion administrateur (une seule fois pour toute la suite)', async ({ 
   await page.getByRole('button', { name: 'Se connecter' }).click()
   await expect(page).toHaveURL('/admin')
 
-  await page.context().storageState({ path: CHEMIN_ETAT_ADMIN })
+  await page.context().storageState({ path: ADMIN_STATE_PATH })
 })

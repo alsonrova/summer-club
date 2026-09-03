@@ -17,20 +17,19 @@ export type OrderFilters = {
 // `orderSchema`) mais il est nécessaire à la clé de rendu et au lien vers la fiche — même
 // motif que ProductListRow.
 //
-// ⚠ `clientNom`/`tel`/`canal`/`statut` gardent leur nom français : cette ligne est passée
-// telle quelle en `rows` à <AdminTable resource={ordersResource} ...>, dont le paramètre
-// générique T est lié à `OrderListInput` (src/admin/resources/orders.ts, `orderSchema`,
-// lui-même miroir des colonnes Prisma pas encore renommées — étape 6). Renommer ces quatre
-// champs romprait l'assignabilité structurelle à la compilation ; c'est la même frontière
-// que `Media.chemin` en § 3.7 (couche src/server/).
+// Ses champs suivent `OrderListInput` (src/admin/resources/orders.ts, dérivé d'`orderSchema`,
+// miroir des colonnes Prisma) : cette ligne est passée telle quelle en `rows` à
+// <AdminTable resource={ordersResource} ...>, dont le paramètre générique T y est lié par
+// inférence. Les quatre champs restés français jusqu'à l'étape 5 le sont devenus en même
+// temps que les colonnes, à l'étape 6 — la contrainte qui les retenait a disparu avec elles.
 export type OrderListRow = {
   id: string
   reference: string
   createdAt: Date
-  clientNom: string
-  tel: string
-  canal: Channel
-  statut: OrderStatus
+  customerName: string
+  phone: string
+  channel: Channel
+  status: OrderStatus
   total: number
 }
 
@@ -53,8 +52,8 @@ export async function listOrdersPaginated(
   params: { page: number; filters?: OrderFilters },
 ): Promise<{ rows: OrderListRow[]; page: number; totalPages: number; total: number }> {
   const where: Prisma.OrderWhereInput = {}
-  if (params.filters?.status) where.statut = params.filters.status
-  if (params.filters?.channel) where.canal = params.filters.channel
+  if (params.filters?.status) where.status = params.filters.status
+  if (params.filters?.channel) where.channel = params.filters.channel
   if (params.filters?.reference) {
     // `contains` insensible à la casse : la propriétaire recopie une référence lue sur
     // WhatsApp, souvent partiellement et sans respecter la casse.
@@ -81,10 +80,10 @@ export async function listOrdersPaginated(
     id: o.id,
     reference: o.reference,
     createdAt: o.createdAt,
-    clientNom: o.clientNom,
-    tel: o.tel,
-    canal: o.canal,
-    statut: o.statut,
+    customerName: o.customerName,
+    phone: o.phone,
+    channel: o.channel,
+    status: o.status,
     total: o.total,
   }))
 

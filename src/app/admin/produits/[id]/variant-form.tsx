@@ -45,9 +45,9 @@ export function VariantForm({
   })
   const v = state.initialValues
 
-  const labelHasError = Boolean(state.errors.libelle?.length)
+  const labelHasError = Boolean(state.errors.label?.length)
   const skuHasError = Boolean(state.errors.sku?.length)
-  const priceDeltaHasError = Boolean(state.errors.deltaPrix?.length)
+  const priceDeltaHasError = Boolean(state.errors.priceDelta?.length)
   const stockHasError = Boolean(state.errors.stock?.length)
 
   return (
@@ -55,19 +55,19 @@ export function VariantForm({
       <h3 className="font-display text-lg font-light text-bark">Nouvelle déclinaison</h3>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="declinaison-libelle" className="text-small text-bark-soft">
+        <label htmlFor="declinaison-label" className="text-small text-bark-soft">
           Libellé
         </label>
         <input
-          id="declinaison-libelle"
-          name="libelle"
+          id="declinaison-label"
+          name="label"
           type="text"
-          defaultValue={initialText(v, 'libelle')}
+          defaultValue={initialText(v, 'label')}
           aria-invalid={labelHasError || undefined}
-          aria-describedby={labelHasError ? 'declinaison-libelle-erreur' : undefined}
+          aria-describedby={labelHasError ? 'declinaison-label-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark"
         />
-        <FieldErrors id="declinaison-libelle-erreur" messages={state.errors.libelle} />
+        <FieldErrors id="declinaison-label-erreur" messages={state.errors.label} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -88,23 +88,23 @@ export function VariantForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor="declinaison-deltaPrix" className="text-small text-bark-soft">
+        <label htmlFor="declinaison-priceDelta" className="text-small text-bark-soft">
           Écart de prix
         </label>
         <input
-          id="declinaison-deltaPrix"
-          name="deltaPrix"
+          id="declinaison-priceDelta"
+          name="priceDelta"
           type="number"
-          defaultValue={initialText(v, 'deltaPrix') || '0'}
+          defaultValue={initialText(v, 'priceDelta') || '0'}
           aria-invalid={priceDeltaHasError || undefined}
-          aria-describedby={priceDeltaHasError ? 'declinaison-deltaPrix-erreur' : undefined}
+          aria-describedby={priceDeltaHasError ? 'declinaison-priceDelta-erreur' : undefined}
           className="w-full rounded border border-taupe/40 bg-shell px-3 py-2 text-bark tabular-nums"
         />
         <p className="text-small text-bark-soft">
           Ajouté au prix de base ({formatAriary(basePrice)}) ; peut être négatif. Le résultat
           doit rester positif.
         </p>
-        <FieldErrors id="declinaison-deltaPrix-erreur" messages={state.errors.deltaPrix} />
+        <FieldErrors id="declinaison-priceDelta-erreur" messages={state.errors.priceDelta} />
       </div>
 
       <div className="flex flex-col gap-1">

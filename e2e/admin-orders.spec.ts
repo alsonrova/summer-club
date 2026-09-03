@@ -13,8 +13,8 @@ const prisma = new PrismaClient()
 // Chaque test possède SES données, dérivées de son identité (leçon de la tâche 11 :
 // `test.afterAll` s'exécute une fois par worker, un nettoyage global détruit les données
 // d'un test que ce worker n'a jamais joué). Aucun test ne touche à celles d'un autre.
-function cleTest(testInfo: TestInfo): string {
-  const identite = testInfo.title
+function testKey(testInfo: TestInfo): string {
+  const identity = testInfo.title
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toUpperCase()
@@ -25,86 +25,86 @@ function cleTest(testInfo: TestInfo): string {
   // Rang de répétition toujours suffixé : sans lui, la référence de la première
   // répétition serait un préfixe de celle des suivantes, et le filtre par sous-chaîne de
   // la liste ferait voir à un test les commandes d'un autre sous `--repeat-each`.
-  return `E2ECMD-${identite}-R${testInfo.repeatEachIndex}`
+  return `E2ECMD-${identity}-R${testInfo.repeatEachIndex}`
 }
 
-const slugProduit = (cle: string) => cle.toLowerCase()
+const productSlug = (key: string) => key.toLowerCase()
 // Une catégorie PAR TEST, pas une catégorie partagée : une catégorie commune resterait en
 // base après la suite (aucun test ne pouvant la supprimer sans risquer de la retirer sous
 // les pieds d'un autre worker), et polluerait le catalogue de la boutique.
-const slugCategorie = (cle: string) => `cat-${cle.toLowerCase()}`
+const categorySlug = (key: string) => `cat-${key.toLowerCase()}`
 
-async function nettoyer(cle: string) {
-  const commandes = await prisma.order.findMany({
-    where: { reference: { startsWith: cle } },
+async function cleanUp(key: string) {
+  const orders = await prisma.order.findMany({
+    where: { reference: { startsWith: key } },
     select: { id: true },
   })
-  const ids = commandes.map((c) => c.id)
+  const ids = orders.map((c) => c.id)
   if (ids.length > 0) {
-    await prisma.auditLog.deleteMany({ where: { entite: 'Order', entiteId: { in: ids } } })
+    await prisma.auditLog.deleteMany({ where: { entity: 'Order', entityId: { in: ids } } })
     await prisma.order.deleteMany({ where: { id: { in: ids } } })
   }
   // Le produit part avec sa déclinaison en cascade — mais seulement après les commandes,
   // qui référencent la déclinaison (OrderItem → Variant n'est pas en cascade). Puis la
   // catégorie, qui n'a plus de produit (Product → Category n'est pas en cascade non plus).
-  await prisma.product.deleteMany({ where: { slug: slugProduit(cle) } })
-  await prisma.category.deleteMany({ where: { slug: slugCategorie(cle) } })
+  await prisma.product.deleteMany({ where: { slug: productSlug(key) } })
+  await prisma.category.deleteMany({ where: { slug: categorySlug(key) } })
 }
 
 /** Crée un produit, une déclinaison et une commande propres au test appelant. */
-async function preparerCommande(
-  cle: string,
-  options: { canal: 'whatsapp' | 'livraison'; statut: 'en_attente_confirmation' | 'annulee'; stock: number; quantite: number },
+async function prepareOrder(
+  key: string,
+  options: { channel: 'whatsapp' | 'cash_on_delivery'; status: 'pending_confirmation' | 'cancelled'; stock: number; quantity: number },
 ) {
-  const categorie = await prisma.category.upsert({
-    where: { slug: slugCategorie(cle) },
+  const category = await prisma.category.upsert({
+    where: { slug: categorySlug(key) },
     update: {},
-    create: { slug: slugCategorie(cle), nom: `Catégorie ${cle}`, ordre: 997 },
+    create: { slug: categorySlug(key), name: `Catégorie ${key}`, displayOrder: 997 },
   })
-  const produit = await prisma.product.create({
+  const product = await prisma.product.create({
     data: {
-      slug: slugProduit(cle),
-      nom: `Produit ${cle}`,
+      slug: productSlug(key),
+      name: `Produit ${key}`,
       description: 'Produit créé uniquement pour un test de bout en bout.',
-      categoryId: categorie.id,
-      prixBase: 45000,
-      variants: { create: { libelle: 'Unique', sku: cle, stock: options.stock } },
+      categoryId: category.id,
+      basePrice: 45000,
+      variants: { create: { label: 'Unique', sku: key, stock: options.stock } },
     },
     include: { variants: true },
   })
-  const variant = produit.variants[0]!
+  const variant = product.variants[0]!
 
-  const commande = await prisma.order.create({
+  const order = await prisma.order.create({
     data: {
-      reference: cle,
-      tokenSuivi: `token-${cle}`,
-      canal: options.canal,
-      statut: options.statut,
-      clientNom: 'Cliente e2e',
-      tel: '0320000000',
-      sousTotal: 45000 * options.quantite,
-      fraisLivraison: 0,
-      total: 45000 * options.quantite,
+      reference: key,
+      trackingToken: `token-${key}`,
+      channel: options.channel,
+      status: options.status,
+      customerName: 'Cliente e2e',
+      phone: '0320000000',
+      subtotal: 45000 * options.quantity,
+      shippingFee: 0,
+      total: 45000 * options.quantity,
       items: {
         create: {
           variantId: variant.id,
-          nomFige: `Produit ${cle} — Unique`,
-          prixUnitaireFige: 45000,
-          quantite: options.quantite,
+          nameSnapshot: `Produit ${key} — Unique`,
+          unitPriceSnapshot: 45000,
+          quantity: options.quantity,
         },
       },
     },
   })
 
-  return { commande, variantId: variant.id }
+  return { order, variantId: variant.id }
 }
 
 test.beforeEach(async ({}, testInfo) => {
-  await nettoyer(cleTest(testInfo))
+  await cleanUp(testKey(testInfo))
 })
 
 test.afterEach(async ({}, testInfo) => {
-  await nettoyer(cleTest(testInfo))
+  await cleanUp(testKey(testInfo))
 })
 
 test.afterAll(async () => {
@@ -112,28 +112,28 @@ test.afterAll(async () => {
 })
 
 test('la liste retrouve une commande par sa référence et ouvre sa fiche', async ({ page }, testInfo) => {
-  const cle = cleTest(testInfo)
-  await preparerCommande(cle, {
-    canal: 'whatsapp', statut: 'en_attente_confirmation', stock: 5, quantite: 2,
+  const key = testKey(testInfo)
+  await prepareOrder(key, {
+    channel: 'whatsapp', status: 'pending_confirmation', stock: 5, quantity: 2,
   })
 
   await page.goto('/admin/commandes')
-  await page.getByLabel('Référence').fill(cle)
+  await page.getByLabel('Référence').fill(key)
   await page.getByRole('button', { name: 'Filtrer' }).click()
 
-  await page.getByRole('link', { name: cle }).click()
-  await expect(page.getByRole('heading', { name: `Commande ${cle}` })).toBeVisible()
+  await page.getByRole('link', { name: key }).click()
+  await expect(page.getByRole('heading', { name: `Commande ${key}` })).toBeVisible()
   // Les lignes sont figées à la commande : le nom conservé, pas celui du catalogue courant.
-  await expect(page.getByText(`Produit ${cle} — Unique`)).toBeVisible()
+  await expect(page.getByText(`Produit ${key} — Unique`)).toBeVisible()
 })
 
 test('confirmer une commande WhatsApp décrémente le stock', async ({ page }, testInfo) => {
-  const cle = cleTest(testInfo)
-  const { commande, variantId } = await preparerCommande(cle, {
-    canal: 'whatsapp', statut: 'en_attente_confirmation', stock: 5, quantite: 2,
+  const key = testKey(testInfo)
+  const { order, variantId } = await prepareOrder(key, {
+    channel: 'whatsapp', status: 'pending_confirmation', stock: 5, quantity: 2,
   })
 
-  await page.goto(`/admin/commandes/${commande.id}`)
+  await page.goto(`/admin/commandes/${order.id}`)
   // Une commande WhatsApp n'a rien réservé : le stock est encore entier avant l'accord.
   expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(5)
 
@@ -146,12 +146,12 @@ test('confirmer une commande WhatsApp décrémente le stock', async ({ page }, t
 })
 
 test("une commande annulée n'offre plus aucune transition", async ({ page }, testInfo) => {
-  const cle = cleTest(testInfo)
-  const { commande } = await preparerCommande(cle, {
-    canal: 'livraison', statut: 'annulee', stock: 5, quantite: 1,
+  const key = testKey(testInfo)
+  const { order } = await prepareOrder(key, {
+    channel: 'cash_on_delivery', status: 'cancelled', stock: 5, quantity: 1,
   })
 
-  await page.goto(`/admin/commandes/${commande.id}`)
+  await page.goto(`/admin/commandes/${order.id}`)
   await expect(page.getByText('Cette commande a atteint un état final')).toBeVisible()
   await expect(page.getByRole('button', { name: /Confirmer|Marquer|Mettre|Annuler/ })).toHaveCount(0)
 })

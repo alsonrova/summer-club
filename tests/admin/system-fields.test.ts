@@ -17,26 +17,26 @@ vi.mock('@/server/audit', () => ({
 
 describe('champs système (id, createdAt, updatedAt)', () => {
   it("un schéma contenant 'id' ne produit pas de champ de formulaire 'id'", () => {
-    const schema = z.object({ id: z.string().optional(), nom: z.string().min(1) })
-    const resource = defineResource({ name: 'test', label: 'Test', schema, columns: ['nom'] })
-    expect(resource.fields.map((f) => f.name)).toEqual(['nom'])
+    const schema = z.object({ id: z.string().optional(), name: z.string().min(1) })
+    const resource = defineResource({ name: 'test', label: 'Test', schema, columns: ['name'] })
+    expect(resource.fields.map((f) => f.name)).toEqual(['name'])
   })
 
   it("createResource ne transmet pas 'id' au delegate, même si le schéma lui donne une valeur par défaut", async () => {
     const schema = z.object({
       id: z.string().default('id-par-defaut-du-schema'),
-      nom: z.string().min(1),
+      name: z.string().min(1),
     })
-    const resource = defineResource({ name: 'test', label: 'Test', schema, columns: ['nom'] })
+    const resource = defineResource({ name: 'test', label: 'Test', schema, columns: ['name'] })
 
     const formData = new FormData()
-    formData.set('nom', 'Bracelet')
+    formData.set('name', 'Bracelet')
 
-    let donneesRecues: Record<string, unknown> | undefined
+    let receivedData: Record<string, unknown> | undefined
     const delegate = {
       findUnique: vi.fn(),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
-        donneesRecues = data
+        receivedData = data
         return { ...data, id: 'id-genere-par-prisma' } as never
       }),
       update: vi.fn(),
@@ -45,8 +45,8 @@ describe('champs système (id, createdAt, updatedAt)', () => {
 
     await createResource(resource as never, delegate as never, formData)
 
-    expect(donneesRecues).toBeDefined()
-    expect(donneesRecues).not.toHaveProperty('id')
-    expect(donneesRecues).toEqual({ nom: 'Bracelet' })
+    expect(receivedData).toBeDefined()
+    expect(receivedData).not.toHaveProperty('id')
+    expect(receivedData).toEqual({ name: 'Bracelet' })
   })
 })

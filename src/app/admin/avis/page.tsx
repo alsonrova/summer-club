@@ -1,6 +1,6 @@
 import type { Route } from 'next'
 import Link from 'next/link'
-import type { StatutAvis } from '@prisma/client'
+import type { ReviewStatus } from '@prisma/client'
 import { requireAdmin } from '@/server/auth'
 import { prisma } from '@/server/db'
 import {
@@ -23,7 +23,7 @@ function toValidPage(value: string | undefined): number {
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1
 }
 
-function toReviewStatus(value: string | undefined): StatutAvis | undefined {
+function toReviewStatus(value: string | undefined): ReviewStatus | undefined {
   return isReviewStatus(value) ? value : undefined
 }
 
@@ -48,8 +48,8 @@ export default async function ReviewsPage({
 
   const [result, products, pendingCount] = await Promise.all([
     listReviewsPaginated(prisma.review, { page, filters: { status } }),
-    prisma.product.findMany({ orderBy: { nom: 'asc' }, select: { id: true, nom: true } }),
-    prisma.review.count({ where: { statut: 'en_attente' } }),
+    prisma.product.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.review.count({ where: { status: 'pending' } }),
   ])
 
   const { rows, page: currentPage, totalPages, total } = result
@@ -122,8 +122,8 @@ export default async function ReviewsPage({
                       <ReviewActions
                         status={review.status}
                         pinned={review.pinned}
-                        publish={moderateReviewFromForm.bind(null, review.id, 'publie')}
-                        reject={moderateReviewFromForm.bind(null, review.id, 'rejete')}
+                        publish={moderateReviewFromForm.bind(null, review.id, 'published')}
+                        reject={moderateReviewFromForm.bind(null, review.id, 'rejected')}
                         togglePinned={pinReviewFromForm.bind(
                           null,
                           review.id,

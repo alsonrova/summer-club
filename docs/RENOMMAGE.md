@@ -552,10 +552,12 @@ Couche `src/app/` et `src/components/` (étape 4) :
 | `ProductFilters` (`FiltresProduits`, paramètre de `listProductsPaginated`) | `actif` | `active` — `categoryId` était déjà conforme |
 | `listReviewsPaginated` / `listOrdersPaginated` / `listProductsPaginated` (forme de retour) | `lignes` | `rows` — miroir du prop déjà anglais `AdminTable.rows` (§ 3.7, couche `src/admin/`, ci-dessus) |
 | `ReviewListRow` (`LigneAvisListe`) | `auteur` / `note` / `texte` / `statut` / `epingle` / `produit` | `author` / `rating` / `body` / `status` / `pinned` / `product` — libre de toute contrainte, contrairement aux deux lignes suivantes : l'écran avis ne passe jamais cette ligne à `<AdminTable>`, il construit son propre `<table>` |
-| ⚠ `OrderListRow` (`LigneCommandeListe`) | `clientNom` / `tel` / `canal` / `statut` | **inchangés, restent français** | 
-| ⚠ `ProductListRow` (`LigneProduitListe`) | `nom` / `prixBase` / `prixAchat` / `actif` / `ordre` | **inchangés, restent français** |
+| ⚠ `OrderListRow` (`LigneCommandeListe`) | `clientNom` / `tel` / `canal` / `statut` | **inchangés à l'étape 4 ; renommés à l'étape 6** (`customerName` / `phone` / `channel` / `status`) |
+| ⚠ `ProductListRow` (`LigneProduitListe`) | `nom` / `prixBase` / `prixAchat` / `actif` / `ordre` | **inchangés à l'étape 4 ; renommés à l'étape 6** (`name` / `basePrice` / `costPrice` / `active` / `displayOrder`) |
 
-**Sur ces deux derniers ⚠ : seul le NOM du type change, pas ses champs.** `OrderListRow`/`ProductListRow` sont passées telles quelles en prop `rows` à `<AdminTable resource={ordersResource|productsResource} ...>` (`src/admin/engine/table.tsx`), dont le paramètre générique `T` est lié par inférence à `OrderListInput`/`ProductInput` (`src/admin/resources/{orders,products}.ts`, dérivés par `z.infer` des schémas `orderSchema`/`productSchema` — miroirs des colonnes Prisma, § 2, pas encore renommées). Renommer ces champs romprait l'assignabilité structurelle à la compilation (`tsc` refuse alors `rows={rows}` : propriétés requises manquantes). C'est la même frontière que `Media.chemin`, déjà documentée pour `src/server/` ci-dessus — une propriété qui semble appartenir à cette couche mais qui est en réalité contrainte par un point de consommation encore français. Vérifié en compilant les deux sens (renommé → `tsc` échoue ; inchangé → `tsc` passe) avant de trancher.
+**Sur ces deux derniers ⚠ : à l'étape 4, seul le NOM du type changeait, pas ses champs.** `OrderListRow`/`ProductListRow` sont passées telles quelles en prop `rows` à `<AdminTable resource={ordersResource|productsResource} ...>` (`src/admin/engine/table.tsx`), dont le paramètre générique `T` est lié par inférence à `OrderListInput`/`ProductInput` (`src/admin/resources/{orders,products}.ts`, dérivés par `z.infer` des schémas `orderSchema`/`productSchema` — miroirs des colonnes Prisma, § 2, pas encore renommées alors). Renommer ces champs à l'étape 4 aurait rompu l'assignabilité structurelle à la compilation (`tsc` refuse alors `rows={rows}` : propriétés requises manquantes). C'était la même frontière que `Media.chemin`, documentée pour `src/server/` ci-dessus — une propriété qui semble appartenir à cette couche mais qui est en réalité contrainte par un point de consommation encore français. Vérifié en compilant les deux sens (renommé → `tsc` échoue ; inchangé → `tsc` passe) avant de trancher.
+
+**Levé à l'étape 6.** La contrainte disparaissait avec la cause : dès que `orderSchema`/`productSchema` ont suivi les colonnes renommées, les deux lignes ont dû suivre à leur tour, dans le même commit. Il ne restait rien à arbitrer — le vocabulaire est celui de la table § 2.
 
 | Type ou paramètre | Actuel | Cible |
 | --- | --- | --- |
@@ -579,6 +581,27 @@ Couche `src/app/` et `src/components/` (étape 4) :
 | `FicheProduitPage` | `ProductDetailPage` | `src/app/admin/produits/[id]/page.tsx` |
 | `AccesRefusePage` | `AccessDeniedPage` | `src/app/acces-refuse/page.tsx` |
 | `ConnexionPage` | `SignInPage` | `src/app/connexion/page.tsx` |
+
+Couche « schéma, base et consommateurs » (étape 6) — les propriétés qu'aucune étape
+précédente ne pouvait toucher, parce qu'elles étaient contraintes par la frontière Prisma :
+
+| Type ou paramètre | Actuel | Cible |
+| --- | --- | --- |
+| `PromotionRule` (`src/domain/types.ts`) | `valeur` / `portee` / `cibleId` / `debut` / `fin` / `joursSemaine` / `heureDebut` / `heureFin` / `membresSeulement` / `priorite` / `actif` | `value` / `scope` / `targetId` / `startsAt` / `endsAt` / `weekdays` / `startHour` / `endHour` / `membersOnly` / `priority` / `active` — miroir exact des colonnes `Promotion` (§ 2) ; le type est lu directement depuis `promotion.findMany()` par un `as PromotionRule[]` (`src/server/orders.ts`), il ne pouvait donc pas devancer la colonne |
+| `processImage` (forme de retour) | `chemin` | `path` — la contrainte notée en § 3.7 (couche `src/server/`) tombe avec le renommage de `Media.chemin` : ses appelants réinjectent la valeur dans `prisma.media.create({ data: { path } })` |
+| `orderSchema` / `productSchema` / `variantSchema` (clés) | miroirs des colonnes | idem § 2 — et, par ricochet, les `columns`/`filters`/`labels` de chaque ressource, les `name=` des formulaires hand-écrits et les clés de `state.errors` qui en dérivent |
+| `resource.name` | `'produits'` / `'commandes'` / `'declinaisons'` | `'products'` / `'orders'` / `'variants'` — écrites en base dans `AuditLog.entity`, d'où l'`UPDATE` de § 6.3 |
+| `DetailRow` (`src/app/admin/commandes/[id]/page.tsx`, prop) | `libelle` | `label` — trou du même ordre que ceux des étapes 1 et 4 : un composant local dont la prop n'a jamais été recensée |
+| `TestimonialForm` (champs de formulaire) | `auteur` / `note` / `texte` | `author` / `rating` / `body` — les `name=` suivent les clés de `testimonialSchema`, elles-mêmes miroirs des colonnes `Review` ; les libellés affichés (« Autrice », « Note », « Témoignage ») ne bougent pas |
+| `MediaForm` (champ de formulaire) | `fichier` | `file` |
+
+**Nouveauté d'interface introduite par cette étape : `AdminTable.filterParams`.** Les champs
+sont passés à l'anglais, les adresses restent françaises (`CONVENTIONS.md` § 1) : sans
+indirection, le `<select name={...}>` du filtre aurait émis `?status=`/`?canal=` alors que
+les pages relisent `sp.statut`/`sp.canal`/`sp.actif`, et **le filtrage aurait cessé de
+fonctionner en silence** — aucun test unitaire ne le couvre, et les deux `page.goto` de
+§ 6.1 ne visent que l'écran avis. La prop mappe nom de champ → nom de paramètre d'URL, et
+reste optionnelle : un filtre absent de l'objet porte son propre nom.
 
 ---
 
@@ -679,6 +702,24 @@ rend telle quelle une valeur inconnue. L'historique de la fiche commande affiche
 `AuditLog.apres`, pour les entrées `action = 'changement_statut'`. Et la clé JSON `statut`
 elle-même devient `status` si l'on renomme le champ — deux transformations, pas une.
 
+**Ce que l'étape 6 a migré, et ce qu'elle a délibérément laissé.** Les colonnes Json portent
+bien plus de clés françaises que les seules lignes de changement de statut : `moderer_avis`
+écrit `{ statut, epingle }`, `epingler_avis` `{ epingle }`, `supprimer_media`
+`{ alt, chemin, isPrimary }`, `importer_temoignage` `{ auteur, note, source, statut }`, et
+`creer`/`modifier` y déversent l'objet validé entier (donc toutes les colonnes du modèle).
+
+La migration ne réécrit **que** les lignes `changement_statut`, celles que § 6.2 nomme. Le
+critère retenu est celui du raisonnement de cette section elle-même : **on migre le JSON qui
+est RELU par du code, on laisse le reste.** Un seul lecteur existe —
+`statusFromTrace` (`src/app/admin/commandes/[id]/page.tsx`), qui lit la clé `statut` des
+lignes `change_status` pour rendre l'historique de la fiche commande ; c'est exactement le
+cas que § 6.2 décrit. Tous les autres contenus sont des **instantanés d'archive** : ils
+disent ce que la ligne valait au moment de l'écriture, sous le nom que la colonne portait
+alors. Les réécrire ne corrigerait aucun affichage et falsifierait une trace d'audit — dont
+l'intérêt est précisément d'être fidèle à son époque. Si un futur écran d'audit affiche ces
+objets, il devra tolérer les deux vocabulaires ; c'est une conséquence à connaître, pas une
+dette masquée.
+
 ### 6.3 `AuditLog.entite` porte des valeurs mixtes, dont trois qui changent
 
 Vérifié : la colonne reçoit à la fois des noms de modèle anglais (`'Order'`, `'Review'`,
@@ -709,6 +750,18 @@ colonne en `name` **rend ce mapping caduc** — il faut le retirer dans le même
 l'adaptateur cherche une colonne `nom` qui n'existe plus.
 
 Même vigilance sur `defaultRole: 'membre'` (§ 1.2).
+
+⚠ **Ce mapping existe en TROIS exemplaires, pas un** *(constaté à l'exécution de l'étape 6)* :
+`src/server/auth.ts`, mais aussi `prisma/seed.ts` et `e2e/utils/member-account.ts`, qui
+montent chacun leur propre instance `betterAuth` minimale (la première parce que
+`disableSignUp: true` interdit l'inscription publique, la seconde pour la même raison côté
+tests). Cette section n'en nommait qu'un.
+
+Le symptôme du troisième oubli n'est pas une erreur de compilation — `tsc`, `npm test` et
+`npm run build` passent tous les trois — mais **un unique test de bout en bout qui rougit
+sur `APIError: Failed to create user`**, l'adaptateur cherchant une colonne `nom` disparue.
+C'est la raison d'être de la quatrième commande de vérification (`CONVENTIONS.md` § 7) :
+sans Playwright, ce défaut partait en revue invisible.
 
 ### 6.6 Les sélecteurs de bout en bout ciblent des libellés français
 

@@ -13,12 +13,12 @@ export function MediaForm({
   return (
     <form action={submit} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
-        <label htmlFor="media-fichier" className="text-small text-bark-soft">
+        <label htmlFor="media-file" className="text-small text-bark-soft">
           Ajouter une photo
         </label>
         <input
-          id="media-fichier"
-          name="fichier"
+          id="media-file"
+          name="file"
           type="file"
           accept="image/jpeg,image/png,image/webp,image/avif"
           className="text-small text-bark"

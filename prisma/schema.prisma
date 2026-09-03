@@ -9,25 +9,25 @@ datasource db {
 
 enum Role {
   admin
-  membre
+  member
 }
 
 // Modèle aligné sur le schéma attendu par Better Auth (cf. node_modules/@better-auth/core
-// db/schema/user.ts et le plugin admin) : `name` est mappé sur la colonne métier `nom`
-// via la configuration `user.fields` de src/server/auth.ts, ce qui évite de renommer les
-// champs déjà en français. `role` reste l'énumération Prisma existante ; le plugin admin
-// est configuré avec `adminRoles: ['admin']` et `defaultRole: 'membre'` pour rester
-// compatible avec ses deux seules valeurs. `banned`/`banReason`/`banExpires` sont exigés
-// par le plugin admin (fonctionnalités de bannissement non utilisées ici mais nécessaires
-// pour que l'adaptateur Prisma puisse lire/écrire le modèle sans erreur).
+// db/schema/user.ts et le plugin admin) : la colonne s'appelle désormais `name`, comme la
+// bibliothèque l'attend, donc la configuration `user.fields` de src/server/auth.ts n'a plus
+// de mapping à faire. `role` reste l'énumération Prisma existante ; le plugin admin est
+// configuré avec `adminRoles: ['admin']` et `defaultRole: 'member'` pour rester compatible
+// avec ses deux seules valeurs. `banned`/`banReason`/`banExpires` sont exigés par le plugin
+// admin (fonctionnalités de bannissement non utilisées ici mais nécessaires pour que
+// l'adaptateur Prisma puisse lire/écrire le modèle sans erreur).
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
   emailVerified Boolean   @default(false)
-  nom           String
+  name          String
   image         String?
-  tel           String?
-  role          Role      @default(membre)
+  phone         String?
+  role          Role      @default(member)
   banned        Boolean   @default(false)
   banReason     String?
   banExpires    DateTime?
@@ -85,26 +85,26 @@ model Verification {
 }
 
 model Category {
-  id          String    @id @default(cuid())
-  slug        String    @unique
-  nom         String
-  description String?
-  image       String?
-  ordre       Int       @default(0)
-  products    Product[]
+  id           String    @id @default(cuid())
+  slug         String    @unique
+  name         String
+  description  String?
+  image        String?
+  displayOrder Int       @default(0)
+  products     Product[]
 }
 
 model Product {
   id          String    @id @default(cuid())
   slug        String    @unique
-  nom         String
+  name        String
   description String
   categoryId  String
   category    Category  @relation(fields: [categoryId], references: [id])
-  prixBase    Int
-  prixAchat   Int       @default(0)
-  actif       Boolean   @default(true)
-  ordre       Int       @default(0)
+  basePrice   Int
+  costPrice   Int       @default(0)
+  active      Boolean   @default(true)
+  displayOrder Int      @default(0)
   metaTitle       String?
   metaDescription String?
   variants    Variant[]
@@ -113,30 +113,30 @@ model Product {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@index([actif, ordre])
+  @@index([active, displayOrder])
   @@index([categoryId])
 }
 
 model Variant {
-  id          String  @id @default(cuid())
-  productId   String
-  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  libelle     String
-  sku         String  @unique
-  deltaPrix   Int     @default(0)
-  stock       Int     @default(0)
-  seuilAlerte Int     @default(2)
-  orderItems  OrderItem[]
+  id                String  @id @default(cuid())
+  productId         String
+  product           Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label             String
+  sku               String  @unique
+  priceDelta        Int     @default(0)
+  stock             Int     @default(0)
+  lowStockThreshold Int     @default(2)
+  orderItems        OrderItem[]
 
   @@index([productId])
-  @@unique([productId, libelle])
+  @@unique([productId, label])
 }
 
 model Media {
   id        String  @id @default(cuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  chemin    String
+  path      String
   alt       String
   position  Int     @default(0)
   isPrimary Boolean @default(false)
@@ -144,39 +144,39 @@ model Media {
   @@index([productId, position])
 }
 
-enum Canal {
+enum Channel {
   orange_money
   whatsapp
-  livraison
+  cash_on_delivery
 }
 
-enum StatutCommande {
-  en_attente_confirmation
-  en_attente_paiement
-  confirmee
-  en_preparation
-  expediee
-  prete_retrait
-  livree
-  annulee
-  echec_paiement
+enum OrderStatus {
+  pending_confirmation
+  pending_payment
+  confirmed
+  preparing
+  shipped
+  ready_for_pickup
+  delivered
+  cancelled
+  payment_failed
 }
 
 model Order {
   id            String   @id @default(cuid())
   reference     String   @unique
-  tokenSuivi    String   @unique
-  canal         Canal
-  statut        StatutCommande @default(en_attente_confirmation)
-  clientNom     String
-  tel           String
+  trackingToken String   @unique
+  channel       Channel
+  status        OrderStatus @default(pending_confirmation)
+  customerName  String
+  phone         String
   email         String?
   zoneId        String?
   zone          DeliveryZone? @relation(fields: [zoneId], references: [id])
-  adresse       String?
-  sousTotal     Int
-  fraisLivraison Int
-  remise        Int      @default(0)
+  address       String?
+  subtotal      Int
+  shippingFee   Int
+  discount      Int      @default(0)
   total         Int
   items         OrderItem[]
   payments      Payment[]
@@ -184,18 +184,18 @@ model Order {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@index([statut, createdAt])
+  @@index([status, createdAt])
 }
 
 model OrderItem {
-  id              String  @id @default(cuid())
-  orderId         String
-  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variantId       String
-  variant         Variant @relation(fields: [variantId], references: [id])
-  nomFige         String
-  prixUnitaireFige Int
-  quantite        Int
+  id                String  @id @default(cuid())
+  orderId           String
+  order             Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId         String
+  variant           Variant @relation(fields: [variantId], references: [id])
+  nameSnapshot      String
+  unitPriceSnapshot Int
+  quantity          Int
 
   @@index([orderId])
 }
@@ -205,53 +205,53 @@ model Payment {
   orderId        String
   order          Order  @relation(fields: [orderId], references: [id])
   provider       String
-  montant        Int
-  statut         String
-  refExterne     String?
-  payloadBrut    Json?
+  amount         Int
+  status         String
+  externalRef    String?
+  rawPayload     Json?
   idempotencyKey String @unique
   createdAt      DateTime @default(now())
 
   @@index([orderId])
 }
 
-enum PortePromo {
-  produit
-  categorie
-  tout
+enum PromotionScope {
+  product
+  category
+  all
 }
 
-enum TypePromo {
+enum PromotionType {
   percent
   fixed
 }
 
 model Promotion {
-  id               String     @id @default(cuid())
-  nom              String
-  type             TypePromo
-  valeur           Int
-  portee           PortePromo
-  cibleId          String?
-  debut            DateTime?
-  fin              DateTime?
-  joursSemaine     Int        @default(127)
-  heureDebut       Int?
-  heureFin         Int?
-  membresSeulement Boolean    @default(false)
-  priorite         Int        @default(0)
-  actif            Boolean    @default(true)
+  id          String        @id @default(cuid())
+  name        String
+  type        PromotionType
+  value       Int
+  scope       PromotionScope
+  targetId    String?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  weekdays    Int           @default(127)
+  startHour   Int?
+  endHour     Int?
+  membersOnly Boolean       @default(false)
+  priority    Int           @default(0)
+  active      Boolean       @default(true)
 }
 
-enum SourceAvis {
-  verifie
-  importe
+enum ReviewSource {
+  verified
+  imported
 }
 
-enum StatutAvis {
-  en_attente
-  publie
-  rejete
+enum ReviewStatus {
+  pending
+  published
+  rejected
 }
 
 model Review {
@@ -260,43 +260,43 @@ model Review {
   product   Product? @relation(fields: [productId], references: [id])
   orderId   String?
   order     Order?   @relation(fields: [orderId], references: [id])
-  note      Int
-  texte     String
-  auteur    String
-  source    SourceAvis
-  statut    StatutAvis @default(en_attente)
-  epingle   Boolean    @default(false)
-  position  Int        @default(0)
-  createdAt DateTime   @default(now())
+  rating    Int
+  body      String
+  author    String
+  source    ReviewSource
+  status    ReviewStatus @default(pending)
+  pinned    Boolean      @default(false)
+  position  Int          @default(0)
+  createdAt DateTime     @default(now())
 
   @@index([productId])
-  @@index([statut, epingle])
+  @@index([status, pinned])
 }
 
 model DeliveryZone {
-  id      String  @id @default(cuid())
-  nom     String
-  tarif   Int
-  delai   String
-  actif   Boolean @default(true)
-  ordre   Int     @default(0)
-  orders  Order[]
+  id           String  @id @default(cuid())
+  name         String
+  fee          Int
+  leadTime     String
+  active       Boolean @default(true)
+  displayOrder Int     @default(0)
+  orders       Order[]
 }
 
 model Setting {
-  cle    String @id
-  valeur Json
+  key   String @id
+  value Json
 }
 
 model AuditLog {
   id        String   @id @default(cuid())
-  acteur    String
+  actor     String
   action    String
-  entite    String
-  entiteId  String
-  avant     Json?
-  apres     Json?
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
   createdAt DateTime @default(now())
 
-  @@index([entite, createdAt])
+  @@index([entity, createdAt])
 }

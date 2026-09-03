@@ -15,27 +15,25 @@ export type ProductFilters = {
 // est une décision d'écran, prise à la frontière entre la base et l'UI ; le nom du champ
 // reste `categoryId` pour correspondre à `productsResource.columns`.
 //
-// ⚠ `nom`/`prixBase`/`prixAchat`/`actif`/`ordre` gardent leur nom français : cette ligne est
-// passée telle quelle en `rows` à <AdminTable resource={productsResource} ...>, dont le
-// paramètre générique T est lié à `ProductInput` (src/admin/resources/products.ts,
-// `productSchema`, miroir des colonnes Prisma pas encore renommées — étape 6). Renommer ces
-// champs romprait l'assignabilité structurelle à la compilation ; même frontière que
-// `Media.chemin` en § 3.7 (couche src/server/) et qu'`OrderListRow` ci-contre
-// (src/app/admin/commandes/query.ts).
+// Ses champs suivent `ProductInput` (src/admin/resources/products.ts, dérivé de
+// `productSchema`, miroir des colonnes Prisma) : cette ligne est passée telle quelle en
+// `rows` à <AdminTable resource={productsResource} ...>, dont le paramètre générique T y est
+// lié par inférence. Les cinq champs restés français jusqu'à l'étape 5 le sont devenus en
+// même temps que les colonnes, à l'étape 6.
 export type ProductListRow = {
   id: string
-  nom: string
+  name: string
   slug: string
   description: string
   categoryId: string
-  prixBase: number
-  prixAchat: number
-  actif: boolean
+  basePrice: number
+  costPrice: number
+  active: boolean
   // Pas affiché en colonne (productsResource.columns ne le liste pas) : présent ici
   // uniquement pour que ce type reste structurellement compatible avec `ProductInput`
-  // (productSchema, désormais porteur de `ordre` — voir resources/products.ts), que
+  // (productSchema, désormais porteur de `displayOrder` — voir resources/products.ts), que
   // <AdminTable> exige de sa prop `rows`.
-  ordre: number
+  displayOrder: number
 }
 
 // Sous-ensemble du delegate Prisma dont cette fonction a besoin — même esprit que
@@ -62,21 +60,22 @@ export async function listProductsPaginated(
 ): Promise<{ rows: ProductListRow[]; page: number; totalPages: number }> {
   const where: Prisma.ProductWhereInput = {}
   if (params.filters?.categoryId) where.categoryId = params.filters.categoryId
-  if (params.filters?.active !== undefined) where.actif = params.filters.active
+  if (params.filters?.active !== undefined) where.active = params.filters.active
 
   const total = await delegate.count({ where })
   const totalPages = Math.max(1, Math.ceil(total / PRODUCTS_PER_PAGE))
   const page = Math.min(Math.max(1, Math.trunc(params.page) || 1), totalPages)
 
-  // `ordre` vaut 0 par défaut pour tout produit créé depuis l'interface (voir
+  // `displayOrder` vaut 0 par défaut pour tout produit créé depuis l'interface (voir
   // resources/products.ts) : trier sur ce seul critère laisse une clé intégralement
   // constante entre plusieurs produits, et PostgreSQL ne garantit alors aucun ordre stable
   // d'une requête à l'autre — skip/take peut renvoyer deux fois la même ligne sur deux
   // pages, et en oublier une autre. `id` (unique) en second critère rend le tri
-  // déterministe sans changer l'ordre voulu par la propriétaire tant que `ordre` diffère.
+  // déterministe sans changer l'ordre voulu par la propriétaire tant que `displayOrder`
+  // diffère.
   const products = await delegate.findMany({
     where,
-    orderBy: [{ ordre: 'asc' }, { id: 'asc' }],
+    orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
     skip: (page - 1) * PRODUCTS_PER_PAGE,
     take: PRODUCTS_PER_PAGE,
     include: { category: true },
@@ -84,14 +83,14 @@ export async function listProductsPaginated(
 
   const rows: ProductListRow[] = products.map((p) => ({
     id: p.id,
-    nom: p.nom,
+    name: p.name,
     slug: p.slug,
     description: p.description,
-    categoryId: p.category.nom,
-    prixBase: p.prixBase,
-    prixAchat: p.prixAchat,
-    actif: p.actif,
-    ordre: p.ordre,
+    categoryId: p.category.name,
+    basePrice: p.basePrice,
+    costPrice: p.costPrice,
+    active: p.active,
+    displayOrder: p.displayOrder,
   }))
 
   return { rows, page, totalPages }

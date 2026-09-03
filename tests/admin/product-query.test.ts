@@ -10,12 +10,12 @@ const PREFIXE = 'pagtest-'
 let categoryId: string
 
 beforeAll(async () => {
-  const categorie = await prisma.category.upsert({
+  const category = await prisma.category.upsert({
     where: { slug: 'pagination-test' },
     update: {},
-    create: { slug: 'pagination-test', nom: 'Pagination Test', ordre: 99 },
+    create: { slug: 'pagination-test', name: 'Pagination Test', displayOrder: 99 },
   })
-  categoryId = categorie.id
+  categoryId = category.id
 
   // Nettoyage défensif : une exécution précédente interrompue (Ctrl-C, crash worker)
   // peut avoir laissé des produits de test en base.
@@ -29,11 +29,11 @@ beforeAll(async () => {
   await prisma.product.createMany({
     data: Array.from({ length: total }, (_, i) => ({
       slug: `${PREFIXE}${i}`,
-      nom: `Produit pagination ${i}`,
+      name: `Produit pagination ${i}`,
       description: 'Produit créé uniquement pour vérifier la pagination admin.',
       categoryId,
-      prixBase: 10000,
-      ordre: i,
+      basePrice: 10000,
+      displayOrder: i,
     })),
   })
 })
@@ -57,7 +57,7 @@ describe('listProductsPaginated', () => {
     const espionFindMany = vi.spyOn(prisma.product, 'findMany')
     const espionCount = vi.spyOn(prisma.product, 'count')
 
-    const resultat = await listProductsPaginated(prisma.product, {
+    const result = await listProductsPaginated(prisma.product, {
       page: 1,
       filters: { categoryId },
     })
@@ -66,8 +66,8 @@ describe('listProductsPaginated', () => {
     expect(espionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: PRODUCTS_PER_PAGE }),
     )
-    expect(resultat.rows).toHaveLength(PRODUCTS_PER_PAGE)
-    expect(resultat.totalPages).toBe(2)
+    expect(result.rows).toHaveLength(PRODUCTS_PER_PAGE)
+    expect(result.totalPages).toBe(2)
   })
 
   it('renvoie la seconde page avec le reste des lignes, pas les mêmes', async () => {
@@ -76,30 +76,30 @@ describe('listProductsPaginated', () => {
 
     expect(page2.rows).toHaveLength(5)
     expect(page2.page).toBe(2)
-    const slugsPage1 = new Set(page1.rows.map((l) => l.slug))
-    for (const ligne of page2.rows) {
-      expect(slugsPage1.has(ligne.slug)).toBe(false)
+    const page1Slugs = new Set(page1.rows.map((l) => l.slug))
+    for (const row of page2.rows) {
+      expect(page1Slugs.has(row.slug)).toBe(false)
     }
   })
 
   it('filtre par catégorie', async () => {
-    const resultat = await listProductsPaginated(prisma.product, {
+    const result = await listProductsPaginated(prisma.product, {
       page: 1,
       filters: { categoryId: 'categorie-totalement-inexistante' },
     })
-    expect(resultat.rows).toHaveLength(0)
-    expect(resultat.totalPages).toBe(1)
+    expect(result.rows).toHaveLength(0)
+    expect(result.totalPages).toBe(1)
   })
 
   it('affiche le nom de la catégorie plutôt que son identifiant brut', async () => {
-    const resultat = await listProductsPaginated(prisma.product, { page: 1, filters: { categoryId } })
-    expect(resultat.rows[0]?.categoryId).toBe('Pagination Test')
+    const result = await listProductsPaginated(prisma.product, { page: 1, filters: { categoryId } })
+    expect(result.rows[0]?.categoryId).toBe('Pagination Test')
   })
 
   it('ramène une page demandée hors bornes à la dernière page existante', async () => {
-    const resultat = await listProductsPaginated(prisma.product, { page: 999, filters: { categoryId } })
-    expect(resultat.page).toBe(resultat.totalPages)
-    expect(resultat.rows.length).toBeGreaterThan(0)
+    const result = await listProductsPaginated(prisma.product, { page: 999, filters: { categoryId } })
+    expect(result.page).toBe(result.totalPages)
+    expect(result.rows.length).toBeGreaterThan(0)
   })
 })
 
@@ -117,12 +117,12 @@ describe('listProductsPaginated avec un `ordre` identique pour tous les produits
   let categoryIdOrdreConstant: string
 
   beforeAll(async () => {
-    const categorie = await prisma.category.upsert({
+    const category = await prisma.category.upsert({
       where: { slug: 'pagination-test-ordre-constant' },
       update: {},
-      create: { slug: 'pagination-test-ordre-constant', nom: 'Pagination Test Ordre Constant', ordre: 98 },
+      create: { slug: 'pagination-test-ordre-constant', name: 'Pagination Test Ordre Constant', displayOrder: 98 },
     })
-    categoryIdOrdreConstant = categorie.id
+    categoryIdOrdreConstant = category.id
 
     await prisma.product.deleteMany({ where: { slug: { startsWith: PREFIXE_ORDRE_CONSTANT } } })
 
@@ -132,14 +132,14 @@ describe('listProductsPaginated avec un `ordre` identique pour tous les produits
     await prisma.product.createMany({
       data: Array.from({ length: total }, (_, i) => ({
         slug: `${PREFIXE_ORDRE_CONSTANT}${i}`,
-        nom: `Produit ordre constant ${i}`,
+        name: `Produit ordre constant ${i}`,
         description: 'Produit créé uniquement pour vérifier la stabilité de la pagination.',
         categoryId: categoryIdOrdreConstant,
-        prixBase: 10000,
+        basePrice: 10000,
         // Valeur constante volontaire : c'est le cas réel, tout produit créé depuis
         // l'interface a `ordre: 0` (défaut Prisma, jamais exposé au formulaire avant
         // ce correctif — voir formulaire-produit.tsx).
-        ordre: 0,
+        displayOrder: 0,
       })),
     })
   })
@@ -167,7 +167,7 @@ describe('listProductsPaginated avec un `ordre` identique pour tous les produits
     })
 
     expect(espionFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: [{ ordre: 'asc' }, { id: 'asc' }] }),
+      expect.objectContaining({ orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }] }),
     )
 
     expect(page1.rows).toHaveLength(PRODUCTS_PER_PAGE)

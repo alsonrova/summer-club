@@ -9,20 +9,20 @@ const POSTGRES_INT_MAX = 2147483647
 
 export const productSchema = z.object({
   // .trim() avant .min(2) : le texte alternatif de départ d'une photo est dérivé du nom du
-  // produit (voir televerserMedia), et modifierAltMedia refuse un alt vide ou fait
+  // produit (voir uploadMedia), et updateMediaAlt refuse un alt vide ou fait
   // d'espaces. Sans ce trim, un nom de deux espaces passait la validation et fabriquait
   // exactement l'état interdit qu'on prétend fermer.
-  nom: z.string().trim().min(2, 'Le nom est requis'),
+  name: z.string().trim().min(2, 'Le nom est requis'),
   slug: z.string().regex(/^[a-z0-9-]+$/, 'Minuscules, chiffres et tirets uniquement'),
   description: z.string().min(10, 'Décrivez le produit en une phrase au moins'),
   categoryId: z.string().min(1, 'Choisissez une catégorie'),
-  prixBase: z.number().int().positive('Le prix doit être positif').max(POSTGRES_INT_MAX),
-  prixAchat: z.number().int().min(0).max(POSTGRES_INT_MAX),
-  actif: z.boolean(),
+  basePrice: z.number().int().positive('Le prix doit être positif').max(POSTGRES_INT_MAX),
+  costPrice: z.number().int().min(0).max(POSTGRES_INT_MAX),
+  active: z.boolean(),
   // Sert au tri de la vitrine (voir query.ts) : sans ce champ, tout produit créé depuis
   // l'interface hérite de la même valeur par défaut (0) que la colonne Prisma, rendant la
   // propriétaire incapable d'ordonner son catalogue.
-  ordre: z.number().int().min(0).max(POSTGRES_INT_MAX),
+  displayOrder: z.number().int().min(0).max(POSTGRES_INT_MAX),
 })
 
 export type ProductInput = z.infer<typeof productSchema>
@@ -32,15 +32,15 @@ export type ProductInput = z.infer<typeof productSchema>
 // écran ne l'invoque encore. AdminTable/AdminForm ne lisent d'ailleurs pas ce champ ; il ne
 // documenterait que des fonctionnalités non livrées si on le remplissait par anticipation.
 export const productsResource = defineResource<ProductInput>({
-  name: 'produits',
+  name: 'products',
   label: 'Produits',
   schema: productSchema,
-  columns: ['nom', 'categoryId', 'prixBase', 'actif'],
-  filters: ['categoryId', 'actif'],
+  columns: ['name', 'categoryId', 'basePrice', 'active'],
+  filters: ['categoryId', 'active'],
   actions: [],
   labels: {
-    prixBase: 'Prix',
-    prixAchat: "Prix d'achat",
+    basePrice: 'Prix',
+    costPrice: "Prix d'achat",
     categoryId: 'Catégorie',
   },
 })

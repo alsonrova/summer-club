@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**67 entrées** · 16 tâches · Développeur 43 · Auditeur qualité et sécurité 18 · Coordinateur 6
+**68 entrées** · 16 tâches · Développeur 44 · Auditeur qualité et sécurité 18 · Coordinateur 6
 
 ## Vue d'ensemble
 
@@ -72,6 +72,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | 13 | Développeur | livré | — |
 | 2026-09-03 | 13 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-03 | 13 | Coordinateur | livré | — |
+| 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Développeur | livré | — |
@@ -729,3 +730,12 @@ Etape 5 - git mv des 27 fichiers du lot mesure vers leurs noms cibles anglais (s
 - **Tests** : Test Files 25 passed (25), Tests 249 passed (249) → Test Files 25 passed (25), Tests 249 passed (249)
 - **Fichiers** : `e2e/admin-orders.spec.ts`, `e2e/admin-products.spec.ts`, `e2e/admin-reviews.spec.ts`, `e2e/utils/member-account.ts`, `e2e/admin-auth.spec.ts`, `src/app/admin/avis/states.ts`, `src/app/admin/avis/review-actions.tsx`, `src/app/admin/avis/testimonial-form.tsx`, `src/app/admin/avis/actions.ts`, `src/app/admin/avis/page.tsx`, `src/app/admin/commandes/states.ts`, `src/app/admin/commandes/[id]/status-buttons.tsx`, `src/app/admin/commandes/[id]/page.tsx`, `src/app/admin/commandes/actions.ts`, `src/app/admin/produits/states.ts`, `src/app/admin/produits/product-form.tsx`, `src/app/admin/produits/[id]/variant-form.tsx`, `src/app/admin/produits/[id]/media-form.tsx`, `src/app/admin/produits/[id]/stock-form.tsx`, `src/app/admin/produits/[id]/media-card.tsx`, `src/app/admin/produits/[id]/page.tsx`, `src/app/admin/produits/actions.ts`, `src/app/admin/produits/nouveau/page.tsx`, `src/app/admin/layout.tsx`, `src/app/acces-refuse/page.tsx`, `src/components/sign-out-button.tsx`, `src/server/prisma-errors.ts`, `tests/admin/review-actions.test.ts`, `tests/admin/review-query.test.ts`, `tests/admin/system-fields.test.ts`, `tests/admin/order-actions.test.ts`, `tests/admin/order-query.test.ts`, `tests/admin/csv-numbers.test.ts`, `tests/admin/product-actions.test.ts`, `tests/admin/product-query.test.ts`, `tests/server/prisma-errors.test.ts`, `tests/server/order-status-service.test.ts`
 - **Réserve** : vitest.config.ts:25, src/server/products.ts:35 et src/admin/resources/variants.ts:25 citent encore un ancien chemin (tests/admin/produits-actions.test.ts, e2e/admin-produits.spec.ts, formulaire-produit.tsx) dans un commentaire ; hors perimetre de l'etape 5 car ces fichiers ne sont pas autrement touches (aucun import a corriger) - a signaler pour une passe ulterieure.
+
+### 2026-09-03 · Développeur — livré
+
+Étape 6 — schéma, base et consommateurs en anglais : 7 énumérations et leurs valeurs, ~55 colonnes, migration transactionnelle écrite à la main en RENAME (la sortie de prisma migrate diff était en DROP/ADD COLUMN, donc destructrice), UPDATE des colonnes Json d'audit (§ 6.2), de AuditLog.entity (§ 6.3) et des 13 valeurs d'action (§ 6.9), 6 ALTER INDEX pour éliminer la dérive, mapping Better Auth retiré de ses TROIS exemplaires (src/server/auth.ts, prisma/seed.ts, e2e/utils/member-account.ts — § 6.5 n'en nommait qu'un), nouvelle prop AdminTable.filterParams pour garder les paramètres d'URL en français, balayage des identifiants locaux français de tests/ et e2e/, 61 fichiers orphelins de public/uploads supprimés
+
+- **Modèle** : claude-opus-5
+- **Tests** : npm test : Test Files 25 passed (25), Tests 249 passed (249) → npm test : Test Files 25 passed (25), Tests 249 passed (249) | npx --no-install tsc --noEmit : aucune sortie (exit 0) | npm run build : Compiled successfully, Generating static pages (11/11) | npx --no-install playwright test : 13 passed (18.6s) | prisma migrate diff --exit-code : No difference detected (exit 0) | comptage CONVENTIONS § 1 hors migrations : 0 littéral français, 30 valeurs déjà anglaises conservées
+- **Fichiers** : `prisma/schema.prisma,prisma/migrations/20260903223000_english_identifiers/migration.sql,prisma/seed.ts,src/domain/types.ts,src/domain/pricing.ts,src/domain/order-status.ts,src/server/orders.ts,src/server/order-status-service.ts,src/server/audit.ts,src/server/auth.ts,src/server/media.ts,src/server/products.ts,src/server/reviews.ts,src/admin/engine/table.tsx,src/admin/engine/actions.ts,src/admin/resources/orders.ts,src/admin/resources/products.ts,src/admin/resources/variants.ts,src/app/admin/**,e2e/**,tests/**,docs/RENOMMAGE.md,vitest.config.ts`
+- **Réserve** : Migration exercée sur la base de développement seulement (AuditLog 5 lignes, Media 0, Order 0) : écrite comme si les tables étaient pleines, mais non mesurée sur un volume réel. Le JSON d'audit hors changement de statut reste volontairement en français (instantanés d'archive, relus par aucun code — décision documentée en § 6.2). Les signets de filtre portant une ancienne valeur d'énumération cesseront de filtrer (§ 6.1, attendu). Étape 7 du § 7 (connexion réelle en navigateur hors Playwright) non faite.

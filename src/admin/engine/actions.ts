@@ -80,7 +80,7 @@ function omitSystemFields(
   return copy
 }
 
-// Sous-ensemble du delegate Prisma généré (ex. `prisma.produit`) dont l'engine a besoin.
+// Sous-ensemble du delegate Prisma généré (ex. `prisma.product`) dont l'engine a besoin.
 // Une ressource concrète (tâche 11+) fournit son propre delegate : l'engine reste
 // indépendant de tout modèle Prisma précis.
 export type DelegatePrisma<T> = {
@@ -113,7 +113,7 @@ export async function createResource<T extends Record<string, unknown>>(
   const created = await delegate.create({ data: dataToWrite })
   await recordAudit({
     actor: session.user.email,
-    action: 'creer',
+    action: 'create',
     entity: resource.name,
     entityId: created.id,
     after: result.data,
@@ -138,7 +138,7 @@ export async function updateResource<T extends Record<string, unknown>>(
   const after = await delegate.update({ where: { id: entityId }, data: dataToWrite })
   await recordAudit({
     actor: session.user.email,
-    action: 'modifier',
+    action: 'update',
     entity: resource.name,
     entityId,
     before,
@@ -158,7 +158,7 @@ export async function deleteResource<T extends Record<string, unknown>>(
   await delegate.delete({ where: { id: entityId } })
   await recordAudit({
     actor: session.user.email,
-    action: 'supprimer',
+    action: 'delete',
     entity: resource.name,
     entityId,
     before,

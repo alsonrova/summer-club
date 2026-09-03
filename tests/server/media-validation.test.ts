@@ -14,16 +14,16 @@ describe('validateMediaFile', () => {
   })
 
   it('refuse un type de fichier non autorisé (ex. PDF)', () => {
-    const erreur = validateMediaFile({ type: 'application/pdf', size: 1024 })
-    expect(erreur).toMatch(/Format non accepté/)
+    const error = validateMediaFile({ type: 'application/pdf', size: 1024 })
+    expect(error).toMatch(/Format non accepté/)
   })
 
   it('refuse une image dépassant la taille maximale', () => {
-    const erreur = validateMediaFile({
+    const error = validateMediaFile({
       type: 'image/png',
       size: MAX_MEDIA_BYTES + 1,
     })
-    expect(erreur).toMatch(/trop lourde/)
+    expect(error).toMatch(/trop lourde/)
   })
 
   it('accepte une image exactement à la taille maximale', () => {
@@ -33,7 +33,7 @@ describe('validateMediaFile', () => {
   })
 
   it("refuse l'absence de fichier (type et taille vides)", () => {
-    const erreur = validateMediaFile({ type: '', size: 0 })
-    expect(erreur).toMatch(/Aucun fichier/)
+    const error = validateMediaFile({ type: '', size: 0 })
+    expect(error).toMatch(/Aucun fichier/)
   })
 })

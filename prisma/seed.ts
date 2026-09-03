@@ -12,58 +12,57 @@ const prisma = new PrismaClient()
 const authSeed = betterAuth({
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
   emailAndPassword: { enabled: true, minPasswordLength: 12 },
-  user: { fields: { name: 'nom' } },
 })
 
-async function creerCompteAdmin() {
+async function createAdminAccount() {
   const email = process.env.ADMIN_EMAIL
-  const motDePasse = process.env.ADMIN_PASSWORD
+  const password = process.env.ADMIN_PASSWORD
 
-  if (!email || !motDePasse) {
+  if (!email || !password) {
     console.log(
       "Seed : ADMIN_EMAIL / ADMIN_PASSWORD absents, aucun compte administrateur créé.",
     )
     return
   }
 
-  const existant = await prisma.user.findUnique({ where: { email } })
-  if (existant) {
-    if (existant.role !== 'admin') {
-      await prisma.user.update({ where: { id: existant.id }, data: { role: 'admin' } })
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing) {
+    if (existing.role !== 'admin') {
+      await prisma.user.update({ where: { id: existing.id }, data: { role: 'admin' } })
     }
     console.log(`Seed : compte administrateur déjà présent (${email}).`)
     return
   }
 
   const { user } = await authSeed.api.signUpEmail({
-    body: { email, password: motDePasse, name: 'Administrateur' },
+    body: { email, password, name: 'Administrateur' },
   })
   await prisma.user.update({ where: { id: user.id }, data: { role: 'admin' } })
   console.log(`Seed : compte administrateur créé (${email}).`)
 }
 
 async function main() {
-  await creerCompteAdmin()
+  await createAdminAccount()
 
   const cat = await prisma.category.upsert({
     where: { slug: 'colliers' }, update: {},
-    create: { slug: 'colliers', nom: 'Colliers', ordre: 1 },
+    create: { slug: 'colliers', name: 'Colliers', displayOrder: 1 },
   })
-  const produit = await prisma.product.upsert({
+  const product = await prisma.product.upsert({
     where: { slug: 'collier-vahine' }, update: {},
     create: {
-      slug: 'collier-vahine', nom: 'Collier Vahiné',
+      slug: 'collier-vahine', name: 'Collier Vahiné',
       description: 'Acier inoxydable plaqué or 18k, chaîne fine.',
-      categoryId: cat.id, prixBase: 45000, prixAchat: 18000,
+      categoryId: cat.id, basePrice: 45000, costPrice: 18000,
     },
   })
   await prisma.variant.upsert({
     where: { sku: 'VAH-45' }, update: {},
-    create: { productId: produit.id, libelle: '45 cm', sku: 'VAH-45', stock: 5 },
+    create: { productId: product.id, label: '45 cm', sku: 'VAH-45', stock: 5 },
   })
   await prisma.deliveryZone.upsert({
     where: { id: 'zone-tana' }, update: {},
-    create: { id: 'zone-tana', nom: 'Antananarivo centre', tarif: 5000, delai: '24 h' },
+    create: { id: 'zone-tana', name: 'Antananarivo centre', fee: 5000, leadTime: '24 h' },
   })
 }
 

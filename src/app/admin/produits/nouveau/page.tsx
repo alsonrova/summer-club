@@ -11,8 +11,8 @@ export default async function NewProductPage() {
   await requireAdmin()
 
   const categories = await prisma.category.findMany({
-    orderBy: { ordre: 'asc' },
-    select: { id: true, nom: true },
+    orderBy: { displayOrder: 'asc' },
+    select: { id: true, name: true },
   })
 
   return (

@@ -1,16 +1,16 @@
-import type { Prisma, SourceAvis, StatutAvis } from '@prisma/client'
+import type { Prisma, ReviewSource, ReviewStatus } from '@prisma/client'
 
 export const REVIEWS_PER_PAGE = 20
 
-export const REVIEW_STATUSES = ['en_attente', 'publie', 'rejete'] as const satisfies readonly StatutAvis[]
+export const REVIEW_STATUSES = ['pending', 'published', 'rejected'] as const satisfies readonly ReviewStatus[]
 
 /**
- * Les deux statuts qu'une décision de modération peut écrire. `en_attente` n'en est pas
+ * Les deux statuts qu'une décision de modération peut écrire. `pending` n'en est pas
  * une : c'est l'état d'ENTRÉE de la file, pas une décision qu'on y prend. Déclaré
- * `satisfies readonly StatutAvis[]` pour qu'un renommage dans l'énumération Prisma casse
+ * `satisfies readonly ReviewStatus[]` pour qu'un renommage dans l'énumération Prisma casse
  * ici, à la compilation, plutôt qu'à l'exécution.
  */
-export const MODERATION_STATUSES = ['publie', 'rejete'] as const satisfies readonly StatutAvis[]
+export const MODERATION_STATUSES = ['published', 'rejected'] as const satisfies readonly ReviewStatus[]
 
 export type ModerationStatus = (typeof MODERATION_STATUSES)[number]
 
@@ -20,28 +20,28 @@ export type ModerationStatus = (typeof MODERATION_STATUSES)[number]
  * Action exportée est une route publique, protégée par `requireAdmin()` mais pas typée à
  * l'exécution.
  */
-export function isReviewStatus(value: unknown): value is StatutAvis {
+export function isReviewStatus(value: unknown): value is ReviewStatus {
   return typeof value === 'string' && (REVIEW_STATUSES as readonly string[]).includes(value)
 }
 
-/** Vrai si la valeur est une décision de modération recevable (`publie` ou `rejete`). */
+/** Vrai si la valeur est une décision de modération recevable (`published` ou `rejected`). */
 export function isModerationStatus(value: unknown): value is ModerationStatus {
   return isReviewStatus(value) && (MODERATION_STATUSES as readonly string[]).includes(value)
 }
 
 export const REVIEW_STATUS_LABELS = {
-  en_attente: 'En attente',
-  publie: 'Publié',
-  rejete: 'Rejeté',
-} as const satisfies Record<StatutAvis, string>
+  pending: 'En attente',
+  published: 'Publié',
+  rejected: 'Rejeté',
+} as const satisfies Record<ReviewStatus, string>
 
 export const REVIEW_SOURCE_LABELS = {
-  verifie: 'Achat vérifié',
-  importe: 'Importé',
-} as const satisfies Record<SourceAvis, string>
+  verified: 'Achat vérifié',
+  imported: 'Importé',
+} as const satisfies Record<ReviewSource, string>
 
 export type ReviewFilters = {
-  status?: StatutAvis
+  status?: ReviewStatus
   pinned?: boolean
 }
 
@@ -50,8 +50,8 @@ export type ReviewListRow = {
   author: string
   rating: number
   body: string
-  source: SourceAvis
-  status: StatutAvis
+  source: ReviewSource
+  status: ReviewStatus
   pinned: boolean
   createdAt: Date
   product: string | null
@@ -66,8 +66,8 @@ export type ReviewListDelegate = {
     orderBy: Prisma.ReviewOrderByWithRelationInput[]
     skip: number
     take: number
-    include: { product: { select: { nom: true } } }
-  }) => Promise<Prisma.ReviewGetPayload<{ include: { product: { select: { nom: true } } } }>[]>
+    include: { product: { select: { name: true } } }
+  }) => Promise<Prisma.ReviewGetPayload<{ include: { product: { select: { name: true } } } }>[]>
 }
 
 export async function listReviewsPaginated(
@@ -75,8 +75,8 @@ export async function listReviewsPaginated(
   params: { page: number; filters?: ReviewFilters },
 ): Promise<{ rows: ReviewListRow[]; page: number; totalPages: number; total: number }> {
   const where: Prisma.ReviewWhereInput = {}
-  if (params.filters?.status) where.statut = params.filters.status
-  if (params.filters?.pinned !== undefined) where.epingle = params.filters.pinned
+  if (params.filters?.status) where.status = params.filters.status
+  if (params.filters?.pinned !== undefined) where.pinned = params.filters.pinned
 
   const total = await delegate.count({ where })
   const totalPages = Math.max(1, Math.ceil(total / REVIEWS_PER_PAGE))
@@ -88,22 +88,22 @@ export async function listReviewsPaginated(
   // ligne d'une page à l'autre.
   const reviews = await delegate.findMany({
     where,
-    orderBy: [{ epingle: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+    orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
     skip: (page - 1) * REVIEWS_PER_PAGE,
     take: REVIEWS_PER_PAGE,
-    include: { product: { select: { nom: true } } },
+    include: { product: { select: { name: true } } },
   })
 
   const rows: ReviewListRow[] = reviews.map((r) => ({
     id: r.id,
-    author: r.auteur,
-    rating: r.note,
-    body: r.texte,
+    author: r.author,
+    rating: r.rating,
+    body: r.body,
     source: r.source,
-    status: r.statut,
-    pinned: r.epingle,
+    status: r.status,
+    pinned: r.pinned,
     createdAt: r.createdAt,
-    product: r.product?.nom ?? null,
+    product: r.product?.name ?? null,
   }))
 
   return { rows, page, totalPages, total }

@@ -31,8 +31,8 @@ const { changeStatus, changeStatusFromForm } = await import(
 // Jeu de données propre à ce fichier — ni la déclinaison de seed VAH-45, ni celle de
 // tests/server/statut.test.ts : les fichiers s'exécutent en parallèle (vitest.config.ts) et
 // aucun ne possède les lignes d'un autre.
-const SLUG_CATEGORIE = 'test-cmd-actions-categorie'
-const SLUG_PRODUIT = 'test-cmd-actions-produit'
+const CATEGORY_SLUG = 'test-cmd-actions-categorie'
+const PRODUCT_SLUG = 'test-cmd-actions-produit'
 const SKU = 'CMDACT-45'
 
 const client = { customerName: 'Cliente de test (actions commandes)', phone: '0320000000' }
@@ -40,55 +40,55 @@ const client = { customerName: 'Cliente de test (actions commandes)', phone: '03
 let variantId: string
 
 /** Toutes les commandes de ce fichier — et elles seules — portent cette déclinaison. */
-async function purgerMesCommandes() {
-  const miennes = await prisma.order.findMany({
+async function purgeMyOrders() {
+  const mine = await prisma.order.findMany({
     where: { items: { some: { variantId } } },
     select: { id: true },
   })
-  const ids = miennes.map((o) => o.id)
+  const ids = mine.map((o) => o.id)
   if (ids.length === 0) return
   // Bornée à mes propres identifiants : le journal d'audit est une table globale que ce
   // fichier ne possède pas, on n'y touche que les lignes qu'on y a écrites.
-  await prisma.auditLog.deleteMany({ where: { entite: 'Order', entiteId: { in: ids } } })
+  await prisma.auditLog.deleteMany({ where: { entity: 'Order', entityId: { in: ids } } })
   await prisma.order.deleteMany({ where: { id: { in: ids } } })
 }
 
 // Idempotent : la suite repart d'une base laissée dans n'importe quel état par une
 // exécution interrompue (Ctrl-C, crash du worker), sans intervention manuelle.
 beforeAll(async () => {
-  const categorie = await prisma.category.upsert({
-    where: { slug: SLUG_CATEGORIE },
+  const category = await prisma.category.upsert({
+    where: { slug: CATEGORY_SLUG },
     update: {},
-    create: { slug: SLUG_CATEGORIE, nom: 'Catégorie de test (actions commandes)', ordre: 997 },
+    create: { slug: CATEGORY_SLUG, name: 'Catégorie de test (actions commandes)', displayOrder: 997 },
   })
-  const produit = await prisma.product.upsert({
-    where: { slug: SLUG_PRODUIT },
-    update: { actif: true, prixBase: 45000, categoryId: categorie.id },
+  const product = await prisma.product.upsert({
+    where: { slug: PRODUCT_SLUG },
+    update: { active: true, basePrice: 45000, categoryId: category.id },
     create: {
-      slug: SLUG_PRODUIT,
-      nom: 'Produit de test (actions commandes)',
+      slug: PRODUCT_SLUG,
+      name: 'Produit de test (actions commandes)',
       description: 'Jeu de données réservé à tests/admin/commandes-actions.test.ts.',
-      categoryId: categorie.id,
-      prixBase: 45000,
-      prixAchat: 18000,
+      categoryId: category.id,
+      basePrice: 45000,
+      costPrice: 18000,
     },
   })
-  const variante = await prisma.variant.upsert({
+  const variant = await prisma.variant.upsert({
     where: { sku: SKU },
-    update: { stock: 10, deltaPrix: 0, productId: produit.id },
-    create: { productId: produit.id, libelle: '45 cm', sku: SKU, stock: 10 },
+    update: { stock: 10, priceDelta: 0, productId: product.id },
+    create: { productId: product.id, label: '45 cm', sku: SKU, stock: 10 },
   })
-  variantId = variante.id
+  variantId = variant.id
 })
 
 beforeEach(async () => {
-  await purgerMesCommandes()
+  await purgeMyOrders()
   await prisma.variant.update({ where: { id: variantId }, data: { stock: 10 } })
   vi.mocked(revalidatePath).mockClear()
 })
 
 afterEach(async () => {
-  await purgerMesCommandes()
+  await purgeMyOrders()
   // `vitest.config.ts` n'active pas `restoreMocks` : sans ceci, un espion posé par un test
   // qui échoue avant son propre nettoyage resterait posé pour les suivants.
   vi.restoreAllMocks()
@@ -99,13 +99,13 @@ afterEach(async () => {
 // disparaissent. Un fichier qui ne nettoie qu'au DÉBUT de chaque test laisse toujours les
 // données de son dernier test derrière lui.
 afterAll(async () => {
-  await purgerMesCommandes()
-  await prisma.product.deleteMany({ where: { slug: SLUG_PRODUIT } })
-  await prisma.category.deleteMany({ where: { slug: SLUG_CATEGORIE } })
+  await purgeMyOrders()
+  await prisma.product.deleteMany({ where: { slug: PRODUCT_SLUG } })
+  await prisma.category.deleteMany({ where: { slug: CATEGORY_SLUG } })
   await prisma.$disconnect()
 })
 
-async function commandeWhatsapp(quantity: number) {
+async function whatsappOrder(quantity: number) {
   return createOrder({
     lines: [{ variantId, quantity }],
     channel: 'whatsapp',
@@ -115,10 +115,10 @@ async function commandeWhatsapp(quantity: number) {
   })
 }
 
-async function commandeConfirmee(quantity: number) {
+async function confirmedOrder(quantity: number) {
   return createOrder({
     lines: [{ variantId, quantity }],
-    channel: 'livraison',
+    channel: 'cash_on_delivery',
     client,
     zoneId: null,
     isMember: false,
@@ -127,7 +127,7 @@ async function commandeConfirmee(quantity: number) {
 
 describe('changeStatus — garde de type sur le statut', () => {
   it("refuse un statut forgé avant qu'il n'atteigne l'énumération PostgreSQL", async () => {
-    const c = await commandeConfirmee(1)
+    const c = await confirmedOrder(1)
 
     // Une Server Action exportée est une route publique : protégée par requireAdmin(),
     // mais pas typée à l'exécution.
@@ -135,8 +135,8 @@ describe('changeStatus — garde de type sur le statut', () => {
       'Statut inconnu : supprimee',
     )
 
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'confirmee',
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'confirmed',
     )
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(9)
   })
@@ -144,81 +144,81 @@ describe('changeStatus — garde de type sur le statut', () => {
 
 describe('changeStatus — chemin nominal', () => {
   it('applique la transition et invalide tous les chemins publiés par le cœur métier', async () => {
-    const c = await commandeWhatsapp(2)
+    const c = await whatsappOrder(2)
 
-    await changeStatus(c.id, 'confirmee')
+    await changeStatus(c.id, 'confirmed')
 
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'confirmee',
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'confirmed',
     )
     // La liste vient du module métier, elle n'est pas recopiée ici : c'est ce qui garantit
     // qu'aucun chemin ajouté à `pathsToRevalidate` ne sera oublié par l'action.
-    for (const chemin of pathsToRevalidate(c.id)) {
-      expect(revalidatePath).toHaveBeenCalledWith(chemin)
+    for (const mediaPath of pathsToRevalidate(c.id)) {
+      expect(revalidatePath).toHaveBeenCalledWith(mediaPath)
     }
   })
 })
 
 describe('changeStatusFromForm — traduction des erreurs métier', () => {
   it("traduit une transition devenue impossible en français, avec les libellés d'écran", async () => {
-    const c = await commandeConfirmee(2)
+    const c = await confirmedOrder(2)
 
     // confirmee → livree n'est pas une transition déclarée : c'est ce que voit un onglet
     // resté sur un rendu périmé.
-    const etat = await changeStatusFromForm(
+    const state = await changeStatusFromForm(
       c.id,
-      'livree',
+      'delivered',
       initialStatusChangeState,
       new FormData(),
     )
 
-    expect(etat.error).toContain('« Confirmée »')
-    expect(etat.error).toContain('« Livrée »')
-    expect(etat.error).toContain('Rechargez la page.')
+    expect(state.error).toContain('« Confirmée »')
+    expect(state.error).toContain('« Livrée »')
+    expect(state.error).toContain('Rechargez la page.')
     // Ni valeur brute d'énumération, ni nom de classe d'erreur sous les yeux de la
     // propriétaire.
-    expect(etat.error).not.toMatch(/confirmee|livree|ForbiddenTransition/)
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'confirmee',
+    expect(state.error).not.toMatch(/confirmed|delivered|ForbiddenTransition/)
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'confirmed',
     )
   })
 
   it('traduit une rupture de stock en français plutôt que de la laisser remonter', async () => {
     // Une commande WhatsApp ne réserve rien : le stock peut partir entre la prise de
     // commande et son acceptation.
-    const c = await commandeWhatsapp(3)
+    const c = await whatsappOrder(3)
     await prisma.variant.update({ where: { id: variantId }, data: { stock: 1 } })
 
-    const etat = await changeStatusFromForm(
+    const state = await changeStatusFromForm(
       c.id,
-      'confirmee',
+      'confirmed',
       initialStatusChangeState,
       new FormData(),
     )
 
-    expect(etat.error).toContain('Stock insuffisant')
-    expect(etat.error).toContain('Réapprovisionnez')
-    expect(etat.error).not.toMatch(/OutOfStock|prisma|constraint/i)
+    expect(state.error).toContain('Stock insuffisant')
+    expect(state.error).toContain('Réapprovisionnez')
+    expect(state.error).not.toMatch(/OutOfStock|prisma|constraint/i)
     // Refusée avant toute écriture : ni stock entamé, ni statut avancé à tort.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(1)
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'en_attente_confirmation',
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'pending_confirmation',
     )
   })
 
   it('rend { error: null } quand la transition passe', async () => {
-    const c = await commandeWhatsapp(2)
+    const c = await whatsappOrder(2)
 
-    const etat = await changeStatusFromForm(
+    const state = await changeStatusFromForm(
       c.id,
-      'confirmee',
+      'confirmed',
       initialStatusChangeState,
       new FormData(),
     )
 
-    expect(etat).toEqual({ error: null })
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'confirmee',
+    expect(state).toEqual({ error: null })
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'confirmed',
     )
   })
 
@@ -226,9 +226,9 @@ describe('changeStatusFromForm — traduction des erreurs métier', () => {
     // Une commande inexistante n'est pas une situation normale que la propriétaire devrait
     // lire sous le bouton : c'est un défaut. L'avaler ici la masquerait — au même titre
     // que la redirection de requireAdmin(), qui s'implémente par un throw.
-    const erreur = await changeStatusFromForm(
+    const error = await changeStatusFromForm(
       'commande-totalement-inexistante',
-      'annulee',
+      'cancelled',
       initialStatusChangeState,
       new FormData(),
     ).then(() => null, (e: unknown) => e)
@@ -237,8 +237,8 @@ describe('changeStatusFromForm — traduction des erreurs métier', () => {
     // n'importe quel rejet — OutOfStockError et ForbiddenTransitionError compris, c'est-à-dire
     // précisément les deux erreurs que cette action est censée TRADUIRE au lieu de les laisser
     // remonter : le test ne distinguerait donc pas le comportement voulu de son contraire.
-    expect(erreur).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
-    expect((erreur as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
-    expect(erreur).not.toBeInstanceOf(OrderError)
+    expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+    expect((error as Prisma.PrismaClientKnownRequestError).code).toBe('P2025')
+    expect(error).not.toBeInstanceOf(OrderError)
   })
 })

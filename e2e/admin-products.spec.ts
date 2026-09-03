@@ -34,8 +34,8 @@ const prisma = new PrismaClient()
 // exactement le partage de données que ce correctif supprime. Il n'apparaît qu'au-delà de
 // la première répétition, pour garder des slugs lisibles en base lors d'une exécution
 // ordinaire.
-function slugPourTest(testInfo: TestInfo): string {
-  const identite = testInfo.title
+function testSlug(testInfo: TestInfo): string {
+  const identity = testInfo.title
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
@@ -43,23 +43,23 @@ function slugPourTest(testInfo: TestInfo): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
     .replace(/-+$/, '')
-  const repetition = testInfo.repeatEachIndex > 0 ? `-r${testInfo.repeatEachIndex}` : ''
-  return `e2e-${identite}${repetition}`
+  const repeat = testInfo.repeatEachIndex > 0 ? `-r${testInfo.repeatEachIndex}` : ''
+  return `e2e-${identity}${repeat}`
 }
 
 // Dupliqué plutôt qu'importé de src/server/media.ts : même choix que
 // tests/server/media.test.ts (fichierPour/LARGEURS_TEST), pour ne pas faire dépendre ce
 // fichier e2e de la résolution de l'alias `@/*` par le test runner Playwright.
-const LARGEURS = [400, 800, 1200] as const
+const WIDTHS = [400, 800, 1200] as const
 
-async function effacerFichiersMediaTest(chemin: string) {
-  const racinePublic = path.join(process.cwd(), 'public')
-  const fichiers = LARGEURS.flatMap((largeur) =>
+async function deleteTestMediaFiles(mediaPath: string) {
+  const publicRoot = path.join(process.cwd(), 'public')
+  const files = WIDTHS.flatMap((width) =>
     (['avif', 'webp'] as const).map((extension) =>
-      path.join(racinePublic, `${chemin}-${largeur}.${extension}`),
+      path.join(publicRoot, `${mediaPath}-${width}.${extension}`),
     ),
   )
-  await Promise.all(fichiers.map((fichier) => rm(fichier, { force: true })))
+  await Promise.all(files.map((file) => rm(file, { force: true })))
 }
 
 // Supprime un produit de test avec tout ce qui en dépend : ses fichiers média sur disque
@@ -72,18 +72,18 @@ async function effacerFichiersMediaTest(chemin: string) {
 // n'interdit à deux passes de nettoyage (celle d'avant le test, celle d'après) de se
 // croiser. `deleteMany` supprime zéro ligne sans broncher là où `delete` lèverait P2025,
 // et `rm(force: true)` ignore un fichier déjà effacé.
-async function nettoyerProduitDeTest(slug: string) {
-  const produit = await prisma.product.findUnique({
+async function cleanUpTestProduct(slug: string) {
+  const product = await prisma.product.findUnique({
     where: { slug },
     include: { variants: true, media: true },
   })
-  if (!produit) return
+  if (!product) return
 
-  await Promise.all(produit.media.map((media) => effacerFichiersMediaTest(media.chemin)))
+  await Promise.all(product.media.map((media) => deleteTestMediaFiles(media.path)))
 
-  const entiteIds = [produit.id, ...produit.variants.map((v) => v.id), ...produit.media.map((m) => m.id)]
-  await prisma.product.deleteMany({ where: { id: produit.id } })
-  await prisma.auditLog.deleteMany({ where: { entiteId: { in: entiteIds } } })
+  const entityIds = [product.id, ...product.variants.map((v) => v.id), ...product.media.map((m) => m.id)]
+  await prisma.product.deleteMany({ where: { id: product.id } })
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: entityIds } } })
 }
 
 // Avant : rattrape une exécution précédente tuée sans laisser tourner son `afterEach`
@@ -91,11 +91,11 @@ async function nettoyerProduitDeTest(slug: string) {
 // création au lieu de rejouer le scénario. Après : nettoie ce que ce test vient de créer.
 // Les deux ne touchent QUE le slug de ce test.
 test.beforeEach(async ({}, testInfo) => {
-  await nettoyerProduitDeTest(slugPourTest(testInfo))
+  await cleanUpTestProduct(testSlug(testInfo))
 })
 
 test.afterEach(async ({}, testInfo) => {
-  await nettoyerProduitDeTest(slugPourTest(testInfo))
+  await cleanUpTestProduct(testSlug(testInfo))
 })
 
 // Une connexion Prisma par worker : celle-ci, en revanche, est bien une ressource du
@@ -109,7 +109,7 @@ test('création d\'un produit', async ({ page }, testInfo) => {
   await page.getByRole('link', { name: 'Nouveau produit' }).click()
 
   await page.getByLabel('Nom').fill('Bracelet Soleil')
-  await page.getByLabel('Slug').fill(slugPourTest(testInfo))
+  await page.getByLabel('Slug').fill(testSlug(testInfo))
   await page.getByLabel('Description').fill('Acier inoxydable plaqué or 18k.')
   // "Prix" est aussi une sous-chaîne de "Prix d'achat" : correspondance exacte requise pour
   // ne viser que le bon champ.
@@ -140,7 +140,7 @@ test('création d\'un produit avec déclinaison et photo (critère d\'acceptatio
 }, testInfo) => {
   await page.goto('/admin/produits/nouveau')
   await page.getByLabel('Nom').fill('Collier Étoile')
-  await page.getByLabel('Slug').fill(slugPourTest(testInfo))
+  await page.getByLabel('Slug').fill(testSlug(testInfo))
   await page.getByLabel('Description').fill('Collier en argent massif, pendentif étoile.')
   await page.getByLabel('Prix', { exact: true }).fill('45000')
   await page.getByRole('button', { name: 'Enregistrer' }).click()
@@ -151,7 +151,7 @@ test('création d\'un produit avec déclinaison et photo (critère d\'acceptatio
   // SKU dérivé lui aussi de l'identité du test : la contrainte d'unicité sur `sku` est
   // GLOBALE (voir prisma/schema.prisma), pas limitée au produit — une valeur littérale
   // partagée redeviendrait une donnée commune entre deux exécutions concurrentes.
-  const sku = slugPourTest(testInfo).toUpperCase()
+  const sku = testSlug(testInfo).toUpperCase()
   await page.getByLabel('SKU').fill(sku)
   await page.getByLabel('Écart de prix').fill('-2000')
   await page.getByLabel('Stock').fill('7')

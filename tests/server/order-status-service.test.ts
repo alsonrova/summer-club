@@ -6,7 +6,7 @@ import { applyStatus, ForbiddenTransitionError } from '@/server/order-status-ser
 
 // Les tests visent applyStatus : changerStatut n'en est que
 // l'enveloppe authentifiée, et requireAdmin n'a pas de sens hors requête.
-const changerStatut = (id: string, vers: Parameters<typeof applyStatus>[1]) =>
+const changeStatus = (id: string, vers: Parameters<typeof applyStatus>[1]) =>
   applyStatus(id, vers, 'test')
 
 let variantId: string
@@ -31,62 +31,62 @@ let variantId: string
 //
 // Les trois tests du brief (describe « changerStatut » ci-dessous) sont repris mot pour
 // mot ; seule cette fixture partagée a changé.
-const SLUG_CATEGORIE = 'test-statuts-categorie'
-const SLUG_PRODUIT = 'test-statuts-produit'
+const CATEGORY_SLUG = 'test-statuts-categorie'
+const PRODUCT_SLUG = 'test-statuts-produit'
 const SKU = 'STATUT-45'
 
 const client = { customerName: 'T', phone: '0320000000' }
 
 /** Toutes les commandes de ce fichier — et elles seules — portent cette déclinaison. */
-function mesCommandes() {
+function myOrders() {
   return { items: { some: { variantId } } }
 }
 
-async function purgerMesCommandes() {
-  const miennes = await prisma.order.findMany({ where: mesCommandes(), select: { id: true } })
-  const ids = miennes.map((o) => o.id)
+async function purgeMyOrders() {
+  const mine = await prisma.order.findMany({ where: myOrders(), select: { id: true } })
+  const ids = mine.map((o) => o.id)
   if (ids.length === 0) return
   // Bornée à mes propres identifiants : le journal d'audit est une table globale que ce
   // fichier ne possède pas, on n'y touche que les lignes qu'on y a écrites.
-  await prisma.auditLog.deleteMany({ where: { entite: 'Order', entiteId: { in: ids } } })
+  await prisma.auditLog.deleteMany({ where: { entity: 'Order', entityId: { in: ids } } })
   await prisma.order.deleteMany({ where: { id: { in: ids } } })
 }
 
 // Idempotent : la suite repart d'une base laissée dans n'importe quel état par une
 // exécution interrompue (Ctrl-C, crash du worker), sans intervention manuelle.
 beforeAll(async () => {
-  const categorie = await prisma.category.upsert({
-    where: { slug: SLUG_CATEGORIE },
+  const category = await prisma.category.upsert({
+    where: { slug: CATEGORY_SLUG },
     update: {},
-    create: { slug: SLUG_CATEGORIE, nom: 'Catégorie de test (statuts)', ordre: 999 },
+    create: { slug: CATEGORY_SLUG, name: 'Catégorie de test (statuts)', displayOrder: 999 },
   })
-  const produit = await prisma.product.upsert({
-    where: { slug: SLUG_PRODUIT },
-    update: { actif: true, prixBase: 45000, categoryId: categorie.id },
+  const product = await prisma.product.upsert({
+    where: { slug: PRODUCT_SLUG },
+    update: { active: true, basePrice: 45000, categoryId: category.id },
     create: {
-      slug: SLUG_PRODUIT,
-      nom: 'Produit de test (statuts)',
+      slug: PRODUCT_SLUG,
+      name: 'Produit de test (statuts)',
       description: 'Jeu de données réservé à tests/server/statut.test.ts.',
-      categoryId: categorie.id,
-      prixBase: 45000,
-      prixAchat: 18000,
+      categoryId: category.id,
+      basePrice: 45000,
+      costPrice: 18000,
     },
   })
   await prisma.variant.upsert({
     where: { sku: SKU },
-    update: { stock: 10, deltaPrix: 0, productId: produit.id },
-    create: { productId: produit.id, libelle: '45 cm', sku: SKU, stock: 10 },
+    update: { stock: 10, priceDelta: 0, productId: product.id },
+    create: { productId: product.id, label: '45 cm', sku: SKU, stock: 10 },
   })
 })
 
 beforeEach(async () => {
   const v = await prisma.variant.findUniqueOrThrow({ where: { sku: SKU } })
   variantId = v.id
-  await purgerMesCommandes()
+  await purgeMyOrders()
   await prisma.variant.update({ where: { id: v.id }, data: { stock: 10 } })
 })
 
-afterEach(purgerMesCommandes)
+afterEach(purgeMyOrders)
 
 // `vitest.config.ts` n'active pas `restoreMocks` : un espion posé par un test resterait
 // posé pour les suivants si son `mockRestore()` n'était pas atteint. Filet, en plus du
@@ -96,42 +96,42 @@ afterEach(() => {
 })
 
 afterAll(async () => {
-  await purgerMesCommandes()
+  await purgeMyOrders()
   // Le produit est supprimé avec sa déclinaison en cascade (schema.prisma) : le catalogue
   // de la boutique ne garde aucune trace de ce jeu de données une fois la suite terminée.
-  await prisma.product.deleteMany({ where: { slug: SLUG_PRODUIT } })
-  await prisma.category.deleteMany({ where: { slug: SLUG_CATEGORIE } })
+  await prisma.product.deleteMany({ where: { slug: PRODUCT_SLUG } })
+  await prisma.category.deleteMany({ where: { slug: CATEGORY_SLUG } })
   await prisma.$disconnect()
 })
 
 describe('changerStatut', () => {
   it('recrédite le stock à l\'annulation d\'une commande confirmée', async () => {
     const c = await createOrder({
-      lines: [{ variantId, quantity: 3 }], channel: 'livraison',
+      lines: [{ variantId, quantity: 3 }], channel: 'cash_on_delivery',
       client: { customerName: 'T', phone: '0320000000' }, zoneId: null, isMember: false,
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
-    await changerStatut(c.id, 'annulee')
+    await changeStatus(c.id, 'cancelled')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })
 
   it('refuse une transition interdite', async () => {
     const c = await createOrder({
-      lines: [{ variantId, quantity: 1 }], channel: 'livraison',
+      lines: [{ variantId, quantity: 1 }], channel: 'cash_on_delivery',
       client: { customerName: 'T', phone: '0320000000' }, zoneId: null, isMember: false,
     })
-    await changerStatut(c.id, 'annulee')
-    await expect(changerStatut(c.id, 'expediee')).rejects.toThrow(/transition/i)
+    await changeStatus(c.id, 'cancelled')
+    await expect(changeStatus(c.id, 'shipped')).rejects.toThrow(/transition/i)
   })
 
   it('ne recrédite pas deux fois si l\'annulation est rejouée', async () => {
     const c = await createOrder({
-      lines: [{ variantId, quantity: 2 }], channel: 'livraison',
+      lines: [{ variantId, quantity: 2 }], channel: 'cash_on_delivery',
       client: { customerName: 'T', phone: '0320000000' }, zoneId: null, isMember: false,
     })
-    await changerStatut(c.id, 'annulee')
-    await changerStatut(c.id, 'annulee').catch(() => {})
+    await changeStatus(c.id, 'cancelled')
+    await changeStatus(c.id, 'cancelled').catch(() => {})
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })
 })
@@ -139,17 +139,17 @@ describe('changerStatut', () => {
 describe('applyStatus — transitions interdites', () => {
   it('lève ForbiddenTransitionError (famille OrderError) avec un message français, sans toucher au stock', async () => {
     const c = await createOrder({
-      lines: [{ variantId, quantity: 2 }], channel: 'livraison', client,
+      lines: [{ variantId, quantity: 2 }], channel: 'cash_on_delivery', client,
       zoneId: null, isMember: false,
     })
-    // confirmee → livree n'est pas une transition déclarée : il faut passer par
-    // en_preparation, puis expediee ou prete_retrait.
-    await expect(changerStatut(c.id, 'livree')).rejects.toBeInstanceOf(ForbiddenTransitionError)
-    await expect(changerStatut(c.id, 'livree')).rejects.toThrow(
-      'Transition interdite : confirmee → livree',
+    // confirmed → delivered n'est pas une transition déclarée : il faut passer par
+    // preparing, puis shipped ou ready_for_pickup.
+    await expect(changeStatus(c.id, 'delivered')).rejects.toBeInstanceOf(ForbiddenTransitionError)
+    await expect(changeStatus(c.id, 'delivered')).rejects.toThrow(
+      'Transition interdite : confirmed → delivered',
     )
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe('confirmee')
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe('confirmed')
   })
 })
 
@@ -161,7 +161,7 @@ describe('applyStatus — confirmation d\'une commande WhatsApp', () => {
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
 
-    await changerStatut(c.id, 'confirmee')
+    await changeStatus(c.id, 'confirmed')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
   })
 
@@ -174,13 +174,13 @@ describe('applyStatus — confirmation d\'une commande WhatsApp', () => {
     // c'est le scénario métier réel, une commande WhatsApp ne réserve rien.
     await prisma.variant.update({ where: { id: variantId }, data: { stock: 1 } })
 
-    await expect(changerStatut(c.id, 'confirmee')).rejects.toBeInstanceOf(OutOfStockError)
+    await expect(changeStatus(c.id, 'confirmed')).rejects.toBeInstanceOf(OutOfStockError)
 
     // Le contrôle métier doit avoir refusé AVANT toute écriture : ni stock négatif rattrapé
     // par la contrainte `variant_stock_non_negatif`, ni statut avancé à tort.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(1)
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'en_attente_confirmation',
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'pending_confirmation',
     )
   })
 
@@ -189,8 +189,8 @@ describe('applyStatus — confirmation d\'une commande WhatsApp', () => {
       lines: [{ variantId, quantity: 4 }], channel: 'whatsapp', client,
       zoneId: null, isMember: false,
     })
-    await changerStatut(c.id, 'confirmee')
-    await changerStatut(c.id, 'confirmee').catch(() => {})
+    await changeStatus(c.id, 'confirmed')
+    await changeStatus(c.id, 'confirmed').catch(() => {})
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(6)
   })
 })
@@ -204,7 +204,7 @@ describe('applyStatus — stock déjà engagé', () => {
     // en_attente_paiement appartient à STOCK_COMMITTED : la réservation a eu lieu à la création.
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
 
-    await changerStatut(c.id, 'confirmee')
+    await changeStatus(c.id, 'confirmed')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(8)
   })
 
@@ -216,11 +216,11 @@ describe('applyStatus — stock déjà engagé', () => {
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
     // en_attente_paiement → echec_paiement sort de STOCK_COMMITTED : le stock revient.
-    await changerStatut(c.id, 'echec_paiement')
+    await changeStatus(c.id, 'payment_failed')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
 
     // echec_paiement → annulee : les deux sont hors de STOCK_COMMITTED, rien ne bouge.
-    await changerStatut(c.id, 'annulee')
+    await changeStatus(c.id, 'cancelled')
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })
 })
@@ -228,18 +228,18 @@ describe('applyStatus — stock déjà engagé', () => {
 describe('applyStatus — accès concurrent sur la même commande', () => {
   it('n\'applique qu\'un seul des deux changements de statut simultanés', async () => {
     const c = await createOrder({
-      lines: [{ variantId, quantity: 3 }], channel: 'livraison', client,
+      lines: [{ variantId, quantity: 3 }], channel: 'cash_on_delivery', client,
       zoneId: null, isMember: false,
     })
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(7)
 
-    const resultats = await Promise.allSettled([
-      changerStatut(c.id, 'annulee'),
-      changerStatut(c.id, 'annulee'),
+    const results = await Promise.allSettled([
+      changeStatus(c.id, 'cancelled'),
+      changeStatus(c.id, 'cancelled'),
     ])
 
-    expect(resultats.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
-    const echouees = resultats.filter(
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const echouees = results.filter(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
     )
     expect(echouees).toHaveLength(1)
@@ -256,21 +256,21 @@ describe('applyStatus — accès concurrent sur la même commande', () => {
   it('sert deux annulations concurrentes de commandes DIFFÉRENTES sans en rejeter une à tort', async () => {
     const [a, b] = await Promise.all([
       createOrder({
-        lines: [{ variantId, quantity: 2 }], channel: 'livraison', client,
+        lines: [{ variantId, quantity: 2 }], channel: 'cash_on_delivery', client,
         zoneId: null, isMember: false,
       }),
       createOrder({
-        lines: [{ variantId, quantity: 3 }], channel: 'livraison', client,
+        lines: [{ variantId, quantity: 3 }], channel: 'cash_on_delivery', client,
         zoneId: null, isMember: false,
       }),
     ])
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(5)
 
-    const resultats = await Promise.allSettled([
-      changerStatut(a.id, 'annulee'),
-      changerStatut(b.id, 'annulee'),
+    const results = await Promise.allSettled([
+      changeStatus(a.id, 'cancelled'),
+      changeStatus(b.id, 'cancelled'),
     ])
-    expect(resultats.filter((r) => r.status === 'fulfilled')).toHaveLength(2)
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2)
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })
 })
@@ -281,19 +281,19 @@ describe('applyStatus — journal d\'audit', () => {
       lines: [{ variantId, quantity: 1 }], channel: 'whatsapp', client,
       zoneId: null, isMember: false,
     })
-    await applyStatus(c.id, 'confirmee', 'proprietaire@summerclub.mg')
+    await applyStatus(c.id, 'confirmed', 'proprietaire@summerclub.mg')
 
     // Assertion bornée à MA commande : le journal d'audit est une table globale que ce
     // fichier ne possède pas.
-    const traces = await prisma.auditLog.findMany({
-      where: { entite: 'Order', entiteId: c.id },
+    const auditTraces = await prisma.auditLog.findMany({
+      where: { entity: 'Order', entityId: c.id },
       orderBy: { createdAt: 'asc' },
     })
-    expect(traces).toHaveLength(1)
-    expect(traces[0]!.acteur).toBe('proprietaire@summerclub.mg')
-    expect(traces[0]!.action).toBe('changement_statut')
-    expect(traces[0]!.avant).toEqual({ statut: 'en_attente_confirmation' })
-    expect(traces[0]!.apres).toEqual({ statut: 'confirmee' })
+    expect(auditTraces).toHaveLength(1)
+    expect(auditTraces[0]!.actor).toBe('proprietaire@summerclub.mg')
+    expect(auditTraces[0]!.action).toBe('change_status')
+    expect(auditTraces[0]!.before).toEqual({ status: 'pending_confirmation' })
+    expect(auditTraces[0]!.after).toEqual({ status: 'confirmed' })
   })
 
   it("écrit la trace AVEC le client de transaction, donc l'annule avec elle", async () => {
@@ -313,7 +313,7 @@ describe('applyStatus — journal d\'audit', () => {
     // global. Le test voisin (« n'écrit aucune trace quand la transition est refusée ») ne
     // le ferait pas : sur ce chemin, la fonction lève AVANT l'écriture d'audit, qui n'est
     // jamais atteinte.
-    class EchecApresEcriture extends Error {}
+    class FailureAfterWrite extends Error {}
     const transactionReelle = prisma.$transaction.bind(prisma) as (
       corps: (tx: Prisma.TransactionClient) => Promise<unknown>,
       options?: unknown,
@@ -325,13 +325,13 @@ describe('applyStatus — journal d\'audit', () => {
     ) =>
       transactionReelle(async (tx) => {
         await corps(tx)
-        throw new EchecApresEcriture()
+        throw new FailureAfterWrite()
       }, options)) as never)
 
     try {
       await expect(
-        applyStatus(c.id, 'confirmee', 'proprietaire@summerclub.mg'),
-      ).rejects.toBeInstanceOf(EchecApresEcriture)
+        applyStatus(c.id, 'confirmed', 'proprietaire@summerclub.mg'),
+      ).rejects.toBeInstanceOf(FailureAfterWrite)
     } finally {
       // Restauré même si l'assertion ci-dessus échoue.
       espion.mockRestore()
@@ -339,24 +339,24 @@ describe('applyStatus — journal d\'audit', () => {
 
     // Assertion bornée à MA commande : le journal d'audit est une table globale.
     expect(
-      await prisma.auditLog.count({ where: { entite: 'Order', entiteId: c.id } }),
+      await prisma.auditLog.count({ where: { entity: 'Order', entityId: c.id } }),
     ).toBe(0)
     // Contrôle du contrôle : c'est bien la transaction ENTIÈRE qui a été annulée, sinon
     // l'absence de trace ne prouverait rien.
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).statut).toBe(
-      'en_attente_confirmation',
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: c.id } })).status).toBe(
+      'pending_confirmation',
     )
     expect((await prisma.variant.findUniqueOrThrow({ where: { id: variantId } })).stock).toBe(10)
   })
 
   it('n\'écrit aucune trace quand la transition est refusée', async () => {
     const c = await createOrder({
-      lines: [{ variantId, quantity: 1 }], channel: 'livraison', client,
+      lines: [{ variantId, quantity: 1 }], channel: 'cash_on_delivery', client,
       zoneId: null, isMember: false,
     })
-    await changerStatut(c.id, 'livree').catch(() => {})
+    await changeStatus(c.id, 'delivered').catch(() => {})
     expect(
-      await prisma.auditLog.count({ where: { entite: 'Order', entiteId: c.id } }),
+      await prisma.auditLog.count({ where: { entity: 'Order', entityId: c.id } }),
     ).toBe(0)
   })
 })

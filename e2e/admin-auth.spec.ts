@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { creerCompteMembre, supprimerCompte, fermerConnexionTest } from './utils/member-account'
+import { createMemberAccount, deleteAccount, closeTestConnection } from './utils/member-account'
 
 // Réutilise directement ADMIN_EMAIL / ADMIN_PASSWORD (les variables consommées par
 // `prisma/seed.ts` pour créer le compte administrateur) plutôt que d'introduire une
@@ -46,22 +46,22 @@ test('un administrateur connecté atteint le tableau de bord', async ({ page }) 
 
 test.describe('rôle membre', () => {
   const email = `membre-e2e-${Date.now()}@test.summerclub.mg`
-  const motDePasse = 'motdepassetreslongpourletest'
+  const password = 'motdepassetreslongpourletest'
   let userId: string | undefined
 
   test.afterAll(async () => {
-    if (userId) await supprimerCompte(userId)
-    await fermerConnexionTest()
+    if (userId) await deleteAccount(userId)
+    await closeTestConnection()
   })
 
   test('un compte membre atteint /admin et obtient la page accès réservé, pas la connexion', async ({
     page,
   }) => {
-    userId = await creerCompteMembre(email, motDePasse)
+    userId = await createMemberAccount(email, password)
 
     await page.goto('/connexion')
     await page.getByLabel('Adresse e-mail').fill(email)
-    await page.getByLabel('Mot de passe').fill(motDePasse)
+    await page.getByLabel('Mot de passe').fill(password)
     await page.getByRole('button', { name: 'Se connecter' }).click()
 
     await expect(page).toHaveURL('/acces-refuse')

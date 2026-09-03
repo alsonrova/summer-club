@@ -4,12 +4,12 @@ import { prisma } from '@/server/db'
 let variantId: string
 
 beforeAll(async () => {
-  const cat = await prisma.category.create({ data: { slug: 'test-cat', nom: 'Test' } })
+  const cat = await prisma.category.create({ data: { slug: 'test-cat', name: 'Test' } })
   const p = await prisma.product.create({
-    data: { slug: 'test-prod', nom: 'Test', description: 'x', categoryId: cat.id, prixBase: 10000 },
+    data: { slug: 'test-prod', name: 'Test', description: 'x', categoryId: cat.id, basePrice: 10000 },
   })
   const v = await prisma.variant.create({
-    data: { productId: p.id, libelle: 'unique', sku: 'TEST-1', stock: 1 },
+    data: { productId: p.id, label: 'unique', sku: 'TEST-1', stock: 1 },
   })
   variantId = v.id
 })

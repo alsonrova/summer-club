@@ -17,25 +17,25 @@ const TOTAL = ORDERS_PER_PAGE + 5
 // `createdAt` seul (une rafale de commandes, un import). Voir le test de stabilité ci-dessous.
 const MEME_INSTANT = new Date('2026-08-01T10:00:00.000Z')
 
-async function purger() {
+async function purge() {
   await prisma.order.deleteMany({ where: { reference: { startsWith: PREFIXE } } })
 }
 
 beforeAll(async () => {
   // Défensif : rattrape une exécution précédente interrompue (Ctrl-C, crash du worker).
-  await purger()
+  await purge()
 
   for (let i = 0; i < TOTAL; i++) {
     await prisma.order.create({
       data: {
         reference: `${PREFIXE}${String(i).padStart(4, '0')}`,
-        tokenSuivi: `token-${PREFIXE}${i}`,
-        canal: i % 2 === 0 ? 'whatsapp' : 'livraison',
-        statut: i % 3 === 0 ? 'confirmee' : 'en_attente_confirmation',
-        clientNom: `Cliente ${i}`,
-        tel: '0320000000',
-        sousTotal: 45000,
-        fraisLivraison: 0,
+        trackingToken: `token-${PREFIXE}${i}`,
+        channel: i % 2 === 0 ? 'whatsapp' : 'cash_on_delivery',
+        status: i % 3 === 0 ? 'confirmed' : 'pending_confirmation',
+        customerName: `Cliente ${i}`,
+        phone: '0320000000',
+        subtotal: 45000,
+        shippingFee: 0,
         total: 45000,
         createdAt: MEME_INSTANT,
       },
@@ -44,7 +44,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await purger()
+  await purge()
   await prisma.$disconnect()
 })
 
@@ -60,7 +60,7 @@ describe('listOrdersPaginated', () => {
     const espionFindMany = vi.spyOn(prisma.order, 'findMany')
     const espionCount = vi.spyOn(prisma.order, 'count')
 
-    const resultat = await listOrdersPaginated(prisma.order, {
+    const result = await listOrdersPaginated(prisma.order, {
       page: 1,
       filters: { reference: PREFIXE },
     })
@@ -69,9 +69,9 @@ describe('listOrdersPaginated', () => {
     expect(espionFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0, take: ORDERS_PER_PAGE }),
     )
-    expect(resultat.rows).toHaveLength(ORDERS_PER_PAGE)
-    expect(resultat.total).toBe(TOTAL)
-    expect(resultat.totalPages).toBe(2)
+    expect(result.rows).toHaveLength(ORDERS_PER_PAGE)
+    expect(result.total).toBe(TOTAL)
+    expect(result.totalPages).toBe(2)
   })
 
   it("trie sur une clé unique en second critère, sans quoi une même ligne peut sortir sur deux pages", async () => {
@@ -101,38 +101,38 @@ describe('listOrdersPaginated', () => {
   })
 
   it('filtre par statut', async () => {
-    const attendu = await prisma.order.count({
-      where: { reference: { startsWith: PREFIXE }, statut: 'confirmee' },
+    const expected = await prisma.order.count({
+      where: { reference: { startsWith: PREFIXE }, status: 'confirmed' },
     })
-    const resultat = await listOrdersPaginated(prisma.order, {
-      page: 1, filters: { reference: PREFIXE, status: 'confirmee' },
+    const result = await listOrdersPaginated(prisma.order, {
+      page: 1, filters: { reference: PREFIXE, status: 'confirmed' },
     })
-    expect(resultat.total).toBe(attendu)
-    expect(resultat.rows.every((l) => l.statut === 'confirmee')).toBe(true)
+    expect(result.total).toBe(expected)
+    expect(result.rows.every((l) => l.status === 'confirmed')).toBe(true)
   })
 
   it('filtre par canal', async () => {
-    const resultat = await listOrdersPaginated(prisma.order, {
+    const result = await listOrdersPaginated(prisma.order, {
       page: 1, filters: { reference: PREFIXE, channel: 'whatsapp' },
     })
-    expect(resultat.rows.length).toBeGreaterThan(0)
-    expect(resultat.rows.every((l) => l.canal === 'whatsapp')).toBe(true)
+    expect(result.rows.length).toBeGreaterThan(0)
+    expect(result.rows.every((l) => l.channel === 'whatsapp')).toBe(true)
   })
 
   it('retrouve une commande par un fragment de référence, sans respect de la casse', async () => {
-    const resultat = await listOrdersPaginated(prisma.order, {
+    const result = await listOrdersPaginated(prisma.order, {
       page: 1, filters: { reference: 'pagcmd-0007' },
     })
-    expect(resultat.total).toBe(1)
-    expect(resultat.rows[0]?.reference).toBe(`${PREFIXE}0007`)
+    expect(result.total).toBe(1)
+    expect(result.rows[0]?.reference).toBe(`${PREFIXE}0007`)
   })
 
   it('ramène une page demandée hors bornes à la dernière page existante', async () => {
-    const resultat = await listOrdersPaginated(prisma.order, {
+    const result = await listOrdersPaginated(prisma.order, {
       page: 999, filters: { reference: PREFIXE },
     })
-    expect(resultat.page).toBe(resultat.totalPages)
-    expect(resultat.rows.length).toBeGreaterThan(0)
+    expect(result.page).toBe(result.totalPages)
+    expect(result.rows.length).toBeGreaterThan(0)
   })
 })
 

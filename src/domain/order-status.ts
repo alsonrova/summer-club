@@ -6,9 +6,9 @@
  * type `OrderStatus` en est dérivé, ce qui interdit à la liste et à l'union de diverger.
  */
 export const ORDER_STATUSES = [
-  'en_attente_confirmation', 'en_attente_paiement', 'confirmee',
-  'en_preparation', 'expediee', 'prete_retrait', 'livree',
-  'annulee', 'echec_paiement',
+  'pending_confirmation', 'pending_payment', 'confirmed',
+  'preparing', 'shipped', 'ready_for_pickup', 'delivered',
+  'cancelled', 'payment_failed',
 ] as const
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
@@ -19,32 +19,32 @@ export function isOrderStatus(value: unknown): value is OrderStatus {
 }
 
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  en_attente_confirmation: ['confirmee', 'annulee'],
-  en_attente_paiement: ['confirmee', 'echec_paiement', 'annulee'],
-  confirmee: ['en_preparation', 'annulee'],
-  en_preparation: ['expediee', 'prete_retrait', 'annulee'],
-  expediee: ['livree', 'annulee'],
-  prete_retrait: ['livree', 'annulee'],
-  livree: [],
-  annulee: [],
-  echec_paiement: ['en_attente_paiement', 'annulee'],
+  pending_confirmation: ['confirmed', 'cancelled'],
+  pending_payment: ['confirmed', 'payment_failed', 'cancelled'],
+  confirmed: ['preparing', 'cancelled'],
+  preparing: ['shipped', 'ready_for_pickup', 'cancelled'],
+  shipped: ['delivered', 'cancelled'],
+  ready_for_pickup: ['delivered', 'cancelled'],
+  delivered: [],
+  cancelled: [],
+  payment_failed: ['pending_payment', 'cancelled'],
 }
 
 /**
  * États dans lesquels le stock est déjà retiré de l'inventaire.
  *
- * `en_attente_paiement` y figure : le canal orange_money réserve le stock
+ * `pending_payment` y figure : le canal orange_money réserve le stock
  * dès la création de la commande (avant même la confirmation du paiement),
  * pour empêcher deux clientes de payer la même dernière pièce. Comme cet
- * état est déjà dans l'ensemble, la transition en_attente_paiement →
- * confirmee n'y ajoute rien : pas de second décrément sur un stock déjà
- * réservé. En_attente_confirmation (canal whatsapp) n'y figure pas : ces
+ * état est déjà dans l'ensemble, la transition pending_payment →
+ * confirmed n'y ajoute rien : pas de second décrément sur un stock déjà
+ * réservé. `pending_confirmation` (canal whatsapp) n'y figure pas : ces
  * commandes attendent un accord manuel qui peut ne jamais venir, donc rien
  * n'est réservé avant la confirmation effective.
  */
 export const STOCK_COMMITTED: readonly OrderStatus[] = [
-  'confirmee', 'en_preparation', 'expediee', 'prete_retrait', 'livree',
-  'en_attente_paiement',
+  'confirmed', 'preparing', 'shipped', 'ready_for_pickup', 'delivered',
+  'pending_payment',
 ]
 
 /**

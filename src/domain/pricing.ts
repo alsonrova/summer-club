@@ -43,29 +43,29 @@ function isApplicable(
   p: PromotionRule, productId: string, categoryId: string,
   now: Date, isMember: boolean,
 ): boolean {
-  if (!p.actif) return false
-  if (p.membresSeulement && !isMember) return false
+  if (!p.active) return false
+  if (p.membersOnly && !isMember) return false
 
-  if (p.portee === 'produit' && p.cibleId !== productId) return false
-  if (p.portee === 'categorie' && p.cibleId !== categoryId) return false
+  if (p.scope === 'product' && p.targetId !== productId) return false
+  if (p.scope === 'category' && p.targetId !== categoryId) return false
 
-  if (p.debut && now < p.debut) return false
-  if (p.fin && now > p.fin) return false
+  if (p.startsAt && now < p.startsAt) return false
+  if (p.endsAt && now > p.endsAt) return false
 
   const { hour, day } = localTime(now)
-  if (((p.joursSemaine >> day) & 1) === 0) return false
+  if (((p.weekdays >> day) & 1) === 0) return false
 
   // Une plage horaire à moitié renseignée (un seul des deux bornes migré/
   // saisi) n'est pas une restriction qu'on peut interpréter : entre laisser
   // la promotion s'appliquer 24 h/24 par erreur et ne pas l'appliquer du
   // tout, la seconde option est la seule sans risque financier.
-  if ((p.heureDebut === null) !== (p.heureFin === null)) return false
+  if ((p.startHour === null) !== (p.endHour === null)) return false
 
-  if (p.heureDebut !== null && p.heureFin !== null) {
+  if (p.startHour !== null && p.endHour !== null) {
     // Une plage qui franchit minuit (22h → 2h) est traitée comme deux intervalles.
-    const inRange = p.heureDebut <= p.heureFin
-      ? hour >= p.heureDebut && hour < p.heureFin
-      : hour >= p.heureDebut || hour < p.heureFin
+    const inRange = p.startHour <= p.endHour
+      ? hour >= p.startHour && hour < p.endHour
+      : hour >= p.startHour || hour < p.endHour
     if (!inRange) return false
   }
 
@@ -74,8 +74,8 @@ function isApplicable(
 
 function priceAfter(p: PromotionRule, basePrice: number): number {
   return p.type === 'percent'
-    ? applyPercentage(basePrice, p.valeur)
-    : Math.max(0, basePrice - p.valeur)
+    ? applyPercentage(basePrice, p.value)
+    : Math.max(0, basePrice - p.value)
 }
 
 export function resolvePrice(args: {
@@ -98,7 +98,7 @@ export function resolvePrice(args: {
 
   // Priorité décroissante, puis prix le plus bas pour la cliente.
   candidates.sort((a, b) =>
-    b.promo.priorite - a.promo.priorite || a.price - b.price,
+    b.promo.priority - a.promo.priority || a.price - b.price,
   )
 
   const winner = candidates[0]!

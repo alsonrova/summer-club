@@ -1,17 +1,17 @@
 export type PromotionRule = {
   id: string
   type: 'percent' | 'fixed'
-  valeur: number
-  portee: 'produit' | 'categorie' | 'tout'
-  cibleId: string | null
-  debut: Date | null
-  fin: Date | null
-  joursSemaine: number
-  heureDebut: number | null
-  heureFin: number | null
-  membresSeulement: boolean
-  priorite: number
-  actif: boolean
+  value: number
+  scope: 'product' | 'category' | 'all'
+  targetId: string | null
+  startsAt: Date | null
+  endsAt: Date | null
+  weekdays: number
+  startHour: number | null
+  endHour: number | null
+  membersOnly: boolean
+  priority: number
+  active: boolean
 }
 
 export type EffectivePrice = {

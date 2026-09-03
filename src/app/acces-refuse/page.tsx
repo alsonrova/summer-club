@@ -1,7 +1,7 @@
 import { SignOutButton } from '@/components/sign-out-button'
 
 // Atteinte par requireAdmin() quand une session valide n'a pas le rôle `admin` (ex. un
-// compte `membre`). Volontairement distincte de /connexion : rediriger un utilisateur déjà
+// compte `member`). Volontairement distincte de /connexion : rediriger un utilisateur déjà
 // authentifié vers un formulaire de connexion produirait un va-et-vient sans fin.
 //
 // `forbidden()` de Next.js aurait été l'option idiomatique, mais elle nécessite le drapeau

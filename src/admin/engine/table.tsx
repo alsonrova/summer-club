@@ -13,11 +13,18 @@ function formatValue(value: unknown, kind: AdminField['kind']): string {
 }
 
 // Reconstruit une querystring en conservant les filtres actifs lors d'un changement de
-// page, pour ne pas les perdre à la pagination.
-function buildUrl(basePath: string, filters: Record<string, string>, page?: number): string {
+// page, pour ne pas les perdre à la pagination. `filters` est indexé par NOM DE CHAMP
+// (anglais) ; `paramNames` traduit chacun en nom de PARAMÈTRE D'URL (français) — voir le
+// commentaire de la prop `filterParams`.
+function buildUrl(
+  basePath: string,
+  filters: Record<string, string>,
+  paramNames: Record<string, string>,
+  page?: number,
+): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
-    if (value) params.set(key, value)
+    if (value) params.set(paramNames[key] ?? key, value)
   }
   if (page && page > 1) params.set('page', String(page))
   const qs = params.toString()
@@ -37,6 +44,7 @@ export function AdminTable<T extends Record<string, unknown>>({
   filters = {},
   columnFormatters = {},
   filterOptions = {},
+  filterParams = {},
   link,
 }: {
   resource: ResourceConfig<T>
@@ -56,6 +64,14 @@ export function AdminTable<T extends Record<string, unknown>>({
   // de frappe qui ne renvoie jamais rien. Optionnel et rétrocompatible : un filtre absent
   // de cet objet conserve exactement le champ texte précédent.
   filterOptions?: Record<string, { value: string; label: string }[]>
+  // Nom du PARAMÈTRE D'URL que porte un filtre, quand il diffère du nom du champ. Les deux
+  // ont divergé au renommage : les champs du schéma sont passés à l'anglais (`status`,
+  // `channel`, `active`) mais une adresse reste du français, parce qu'un être humain la lit,
+  // la recopie et la prononce (docs/CONVENTIONS.md § 1). `?statut=confirmed` filtre donc sur
+  // le champ `status`. Sans cette indirection, le <select> ci-dessous émettrait `?status=` et
+  // la page, qui lit toujours `sp.statut`, cesserait silencieusement de filtrer.
+  // Optionnel et rétrocompatible : un filtre absent de cet objet porte son propre nom.
+  filterParams?: Record<string, string>
   // Rend une colonne cliquable vers la fiche de la ligne (ex. la fiche produit) — sans quoi
   // AdminTable ne pose aucun lien et la seule façon d'atteindre une fiche existante est de
   // taper l'URL à la main. Optionnel et rétrocompatible : une ressource qui ne le fournit
@@ -63,6 +79,7 @@ export function AdminTable<T extends Record<string, unknown>>({
   link?: { column: keyof T; to: (row: T) => string }
 }) {
   const fieldsByName = new Map(resource.fields.map((field) => [field.name, field]))
+  const paramOf = (name: string): string => filterParams[name] ?? name
 
   return (
     <div>
@@ -70,12 +87,13 @@ export function AdminTable<T extends Record<string, unknown>>({
         <form method="get" action={basePath} className="mb-4 flex flex-wrap items-end gap-3">
           {resource.filters.map((name) => {
             const options = filterOptions[name]
+            const param = paramOf(name)
             return (
               <label key={name} className="flex flex-col text-small text-bark-soft">
                 {fieldsByName.get(name)?.label ?? name}
                 {options ? (
                   <select
-                    name={name}
+                    name={param}
                     defaultValue={filters[name] ?? ''}
                     className="rounded border border-taupe/40 bg-shell px-2 py-1 text-bark"
                   >
@@ -89,7 +107,7 @@ export function AdminTable<T extends Record<string, unknown>>({
                 ) : (
                   <input
                     type="text"
-                    name={name}
+                    name={param}
                     defaultValue={filters[name] ?? ''}
                     className="rounded border border-taupe/40 bg-shell px-2 py-1 text-bark"
                   />
@@ -110,7 +128,7 @@ export function AdminTable<T extends Record<string, unknown>>({
         <thead>
           <tr className="border-b border-taupe/40">
             {resource.columns.map((col) => {
-              // La clé brute du schéma ("categoryId", "prixBase"…) n'est présentable que
+              // La clé brute du schéma ("categoryId", "basePrice"…) n'est présentable que
               // par accident ; resource.fields porte déjà le libellé français dérivé (ou
               // surchargé via `labels` dans defineResource).
               const field = fieldsByName.get(String(col))
@@ -179,7 +197,7 @@ export function AdminTable<T extends Record<string, unknown>>({
       {totalPages > 1 ? (
         <nav className="mt-4 flex items-center gap-4 text-small text-bark-soft">
           {page > 1 ? (
-            <a href={buildUrl(basePath, filters, page - 1)} className="underline">
+            <a href={buildUrl(basePath, filters, filterParams, page - 1)} className="underline">
               Précédent
             </a>
           ) : (
@@ -189,7 +207,7 @@ export function AdminTable<T extends Record<string, unknown>>({
             Page {page} / {totalPages}
           </span>
           {page < totalPages ? (
-            <a href={buildUrl(basePath, filters, page + 1)} className="underline">
+            <a href={buildUrl(basePath, filters, filterParams, page + 1)} className="underline">
               Suivant
             </a>
           ) : (

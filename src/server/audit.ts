@@ -31,19 +31,19 @@ export async function recordAudit(
 ) {
   await client.auditLog.create({
     data: {
-      acteur: args.actor,
+      actor: args.actor,
       action: args.action,
-      entite: args.entity,
-      entiteId: args.entityId,
-      // `avant`/`apres` sont des colonnes Prisma `Json?` : le type d'entrée généré
+      entity: args.entity,
+      entityId: args.entityId,
+      // `before`/`after` sont des colonnes Prisma `Json?` : le type d'entrée généré
       // (`Prisma.InputJsonValue | typeof DbNull | null`, voir
       // node_modules/.prisma/client/index.d.ts) n'accepte pas `unknown`, seulement des
       // valeurs déjà connues comme sérialisables en JSON. Ici la valeur vient soit de
-      // `null`, soit de `resultat.donnees`/`avant` (déjà passés par `safeParse` ou lus
+      // `null`, soit de `result.data`/`before` (déjà passés par `safeParse` ou lus
       // depuis Prisma), donc toujours sérialisable — le cast est sûr, mais le type de
       // Prisma ne peut pas le vérifier statiquement pour un `unknown` générique.
-      avant: (args.before ?? null) as never,
-      apres: (args.after ?? null) as never,
+      before: (args.before ?? null) as never,
+      after: (args.after ?? null) as never,
     },
   })
 }

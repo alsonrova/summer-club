@@ -9,12 +9,12 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads')
 // Types MIME acceptés pour un téléversement de photo produit, et taille maximale avant
 // même de tenter le décodage par sharp. Exportés pour rester la source unique de vérité
 // entre le contrôle (validateMediaFile, ci-dessous) et ses tests — dupliquer ces valeurs
-// dans televerserMedia() les ferait diverger silencieusement d'ici.
+// dans uploadMedia() les ferait diverger silencieusement d'ici.
 export const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const
 export const MAX_MEDIA_BYTES = 8 * 1024 * 1024
 
 // Validation pure, sans effet de bord : ni écriture disque, ni session, ni base de
-// données. Elle doit s'exécuter AVANT processImage() dans televerserMedia(), pour qu'un
+// données. Elle doit s'exécuter AVANT processImage() dans uploadMedia(), pour qu'un
 // fichier refusé (mauvais format, trop lourd, absent) ne déclenche jamais mkdir/sharp sur
 // un fichier qui sera de toute façon rejeté. Retourne le message d'erreur en français à
 // afficher, ou null si le fichier est acceptable.
@@ -33,7 +33,7 @@ export function validateMediaFile(file: { type: string; size: number }): string 
 
 // Erreur dédiée au seul cas « le contenu envoyé n'est pas une image décodable » : type MIME
 // usurpé (un PDF renommé en .jpg), fichier tronqué, format que libvips ne sait pas lire.
-// Elle existe pour que televerserMedia puisse distinguer ce cas — le seul auquel le message
+// Elle existe pour que uploadMedia puisse distinguer ce cas — le seul auquel le message
 // « cette image n'a pas pu être lue » s'applique — d'une panne d'écriture (disque plein,
 // droits refusés sur public/uploads), qui n'est pas la faute du fichier envoyé et ne doit
 // pas être imputée à la propriétaire. `cause` conserve l'erreur sharp d'origine pour la
@@ -107,11 +107,11 @@ export async function processImage(buffer: Buffer, baseName: string) {
     await writeFile(path.join(UPLOAD_DIR, `${fileName}-${width}.webp`), webp)
   }
 
-  return { chemin: `/uploads/${fileName}`, widths: [...WIDTHS] }
+  return { path: `/uploads/${fileName}`, widths: [...WIDTHS] }
 }
 
 // Contrepartie de processImage() : efface du disque les six fichiers (trois largeurs, deux
-// formats) qu'elle a produits pour un `chemin` donné (la valeur stockée dans Media.chemin,
+// formats) qu'elle a produits pour un `path` donné (la valeur stockée dans Media.path,
 // ex. `/uploads/xyz-abcdef12`). `force: true` (via rm) rend l'appel idempotent — un fichier
 // déjà absent ne fait pas échouer la suppression de la ligne Media qui le référençait.
 export async function deleteMediaFiles(mediaPath: string): Promise<void> {

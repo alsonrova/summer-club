@@ -71,7 +71,7 @@ type InternalZodDef = {
 }
 
 // Première lettre en majuscule : un minimum de présentabilité pour un libellé de
-// formulaire dérivé automatiquement d'une clé de schéma ("nom" -> "Nom"). Ne rend pas une
+// formulaire dérivé automatiquement d'une clé de schéma ("name" -> "Name"). Ne rend pas une
 // clé en camelCase lisible pour autant ("categoryId" -> "CategoryId") — c'est précisément
 // pour ces cas que `labels` permet à une ressource de fournir un vrai libellé.
 function capitalize(s: string): string {
