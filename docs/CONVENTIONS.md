@@ -200,6 +200,17 @@ passant.** Un renommage opportuniste au milieu d'une tâche fonctionnelle rend l
 impossible et casse les tests de bout en bout sans que personne ne sache pourquoi. Le code
 neuf, lui, suit la règle dès maintenant.
 
+**Décision du propriétaire (2026-09-03) : un identifiant français rend le code INVALIDE.**
+Ce n'est pas une préférence de style, c'est un critère de validité : une contribution qui
+introduit ne serait-ce qu'un identifiant français — variable locale comprise — est rejetée
+en revue et la tâche n'est pas validée, quel que soit le reste de sa qualité. Le relecteur
+le vérifie systématiquement, au rang bloquant, et le développeur relit son propre diff sur
+ce point avant de déclarer terminé (§ 7). La frontière du § 1 ne bouge pas pour autant :
+libellés, messages, commentaires et segments de route restent en français. Pour le stock
+antérieur à la règle, c'est le renommage (`docs/RENOMMAGE.md`) qui fait foi — un
+identifiant hérité qu'une tâche ne touche pas ne l'invalide pas ; mais tout identifiant
+qu'une tâche **introduit ou réécrit** doit être anglais.
+
 **Le lot ne se dresse pas en liste : il se mesure.** Une liste de fichiers écrite ici serait
 fausse au prochain commit — c'est exactement le défaut que le § 7 interdit. Le critère est
 donc une commande. Est non conforme tout fichier dont le nom, **hors nom imposé par le cadre**
@@ -567,6 +578,10 @@ servant rien sur cette machine :
 npx --no-install playwright test
 ```
 
+Et avant de déclarer terminé, **relisez votre diff : zéro identifiant français introduit**
+(§ 1 — critère de validité, pas une retouche de style). Un seul suffit à faire rejeter la
+contribution en revue.
+
 **N'affirmez que ce que vous avez vérifié.** Les revues de ce projet ont pris trois
 affirmations fausses en flagrant délit sur la seule tâche 12 : une couverture annoncée qui
 n'existait pas, un test censé couvrir l'audit transactionnel mais qui s'arrêtait avant de
@@ -622,6 +637,10 @@ trouve rien doit pouvoir dire ce qu'il a cherché.
 Liste de contrôles concrets, tirée de ce que les revues de ce projet ont **réellement**
 trouvé :
 
+- **Identifiants français introduits ou réécrits par la contribution.** Critère de
+  validité (§ 1), jamais un constat Mineur : un seul identifiant français dans le diff et
+  la tâche est rejetée. Contrôlez le diff, pas seulement les exports — les variables
+  locales comptent.
 - **Valeurs forgées atteignant la base sans garde.** Chaque Server Action exportée est une
   route POST publique. Suivez chaque paramètre depuis le client jusqu'à Prisma. Une quantité
   négative a créé du stock ici (total de -220 000 Ar observé).

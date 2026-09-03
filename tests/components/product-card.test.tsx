@@ -4,7 +4,7 @@ import { ProductCard } from '@/components/product/product-card'
 
 // Produit type utilisé par les quatre scénarios ci-dessous. `initialPrice` égal à
 // `finalPrice` reproduit le cas « pas de promotion » : le prix barré ne doit alors
-// jamais apparaître (voir Price, qui décide sur `initial > montant`, pas sur sa
+// jamais apparaître (voir Price, qui décide sur `initial > amount`, pas sur sa
 // seule présence).
 const product = {
   slug: 'collier-vahine',
@@ -35,8 +35,8 @@ describe('ProductCard', () => {
   it("affiche le prix barré quand une promotion s'applique", () => {
     render(<ProductCard product={{ ...product, finalPrice: 36000 }} />)
     expect(screen.getByText('36\u00A0000\u00A0Ar', rawText)).toBeDefined()
-    const barre = screen.getByText('45\u00A0000\u00A0Ar', rawText)
-    expect(barre.tagName.toLowerCase()).toBe('s')
+    const struckPrice = screen.getByText('45\u00A0000\u00A0Ar', rawText)
+    expect(struckPrice.tagName.toLowerCase()).toBe('s')
   })
 
   it('indique la rupture par du texte, pas par un bouton désactivé', () => {
