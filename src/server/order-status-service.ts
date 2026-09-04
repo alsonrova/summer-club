@@ -2,6 +2,7 @@ import { prisma } from '@/server/db'
 import { recordAudit } from '@/server/audit'
 import { transitionAllowed, stockEffect, type OrderStatus } from '@/domain/order-status'
 import { OrderError, OutOfStockError } from '@/server/orders'
+import { productPathsToRevalidate, type RevalidationTarget } from '@/server/products'
 
 /**
  * Transition refusée par la machine à états (src/domain/order-status.ts).
@@ -31,14 +32,16 @@ export class ForbiddenTransitionError extends OrderError {
  * planifiées). L'invalidation appartient donc aux appelants qui, eux, s'exécutent bien
  * dans une requête : la Server Action d'administration et, tâche 19, le Route Handler du
  * webhook de paiement. Cette liste est exportée pour qu'aucun des deux n'ait à deviner —
- * ni à oublier — ce qu'il faut invalider.
+ * ni à oublier — ce qu'il faut invalider. Chaque cible se passe telle quelle :
+ * `revalidatePath(...target)` (voir RevalidationTarget, src/server/products.ts).
  */
-export function pathsToRevalidate(orderId: string): string[] {
+export function pathsToRevalidate(orderId: string): RevalidationTarget[] {
   return [
-    '/admin/commandes',
-    `/admin/commandes/${orderId}`,
-    // Le stock affiché en boutique change avec le statut (confirmation, annulation).
-    '/boutique',
+    ['/admin/commandes'],
+    [`/admin/commandes/${orderId}`],
+    // Le stock affiché en boutique change avec le statut (confirmation, annulation) — sur
+    // le catalogue (« Rupture ») comme sur la fiche (déclinaison disponible ou non).
+    ...productPathsToRevalidate(),
   ]
 }
 

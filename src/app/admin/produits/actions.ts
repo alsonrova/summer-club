@@ -12,6 +12,7 @@ import {
   UnreadableImageError,
 } from '@/server/media'
 import { isUniqueViolation } from '@/server/prisma-errors'
+import { productPathsToRevalidate } from '@/server/products'
 import { validateFormData, formDataToObject } from '@/admin/engine/actions'
 import { productsResource } from '@/admin/resources/products'
 import { variantsResource } from '@/admin/resources/variants'
@@ -42,6 +43,16 @@ import type {
 // doivent la respecter tout autant que ceux de productSchema/variantSchema, sous peine de
 // laisser passer une valeur que Prisma refuserait avec une erreur non gérée.
 const POSTGRES_INT_MAX = 2147483647
+
+// La vitrine lit ces mêmes produits, déclinaisons et photos : catalogue ET fiches sont
+// rendus statiquement (revalidate = 300) et ne changent qu'à l'invalidation. La liste des
+// chemins vient du module métier — pas recopiée ici, pour qu'un chemin ajouté là-bas ne
+// puisse pas être oublié ici (même motif que pathsToRevalidate pour les commandes).
+function revalidateStorefront() {
+  for (const target of productPathsToRevalidate()) {
+    revalidatePath(...target)
+  }
+}
 
 export async function createProduct(
   _previousState: ProductFormState,
@@ -81,8 +92,9 @@ export async function createProduct(
   })
 
   // Le catalogue public lit ces mêmes produits : sans cette invalidation, une création
-  // resterait invisible en boutique jusqu'à l'expiration naturelle du cache.
-  revalidatePath('/boutique')
+  // resterait invisible en boutique jusqu'à l'expiration naturelle du cache — et une
+  // fiche visitée avant sa création (404 mis en cache) resterait introuvable.
+  revalidateStorefront()
   revalidatePath('/admin/produits')
   redirect(`/admin/produits/${product.id}`)
 }
@@ -137,7 +149,7 @@ export async function updateProduct(
     after: result.data,
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${productId}`)
 
   return { success: true, errors: {}, initialValues: result.data }
@@ -203,7 +215,7 @@ export async function createVariant(
     after: result.data,
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${productId}`)
 
   return { success: true, errors: {}, initialValues: {} }
@@ -245,7 +257,7 @@ export async function adjustStock(
     after: { stock: after.stock },
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${before.productId}`)
 
   return { error: null }
@@ -344,7 +356,7 @@ export async function uploadMedia(
     after: { path: imagePath },
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${productId}`)
 
   return { error: null }
@@ -386,7 +398,7 @@ export async function reorderMedia(
     after: { position: after.position },
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${before.productId}`)
 
   return { error: null }
@@ -417,7 +429,7 @@ export async function updateMediaAlt(
     after: { alt },
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${before.productId}`)
 
   return { error: null }
@@ -453,7 +465,7 @@ export async function setPrimaryPhoto(
     after: { isPrimary: true },
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${media.productId}`)
 
   return { error: null }
@@ -497,7 +509,7 @@ export async function deleteMedia(
     before: { path: media.path, alt: media.alt, isPrimary: media.isPrimary },
   })
 
-  revalidatePath('/boutique')
+  revalidateStorefront()
   revalidatePath(`/admin/produits/${media.productId}`)
 
   return { error: null }

@@ -4029,6 +4029,14 @@ summerclub.mg {
 }
 ```
 
+> **À ajouter ici, consigné le 2026-09-04 (revue de la tâche 14)** : une limitation de
+> débit sur `/boutique/*` (module `rate_limit` de Caddy, ou équivalent). La fiche
+> `/boutique/[slug]` est en ISR avec `dynamicParams` par défaut : chaque slug inconnu est
+> rendu (404) puis écrit dans le cache disque de Next.js sans éviction — un trafic anonyme
+> sur des slugs aléatoires remplit le disque et coûte une requête SQL par slug. Détail et
+> options dans la passation courante (`docs/passation/`, dette « cache ISR des fiches
+> inconnues »). Même pas pour `advanced.ipAddress` de Better Auth (dette déjà consignée).
+
 - [ ] **Step 3: Écrire le script de sauvegarde**
 
 `docker/backup.sh` :

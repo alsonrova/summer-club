@@ -7,24 +7,37 @@ import path from 'node:path'
 // visiteuse anonyme, comme la cliente.
 //
 // Pourquoi le produit est créé par le back-office et non directement via Prisma, à
-// l'inverse du reste de ce fichier (nettoyage) : /boutique est rendu statiquement au build
-// et conservé cinq minutes (`revalidate = 300`, spec § 4.3). Une ligne insérée en base
-// derrière le dos de l'application n'invalide rien — le catalogue continuerait de servir
-// l'instantané du build, sans le produit, et le test rougirait à tort. Le seul chemin réel
-// par lequel un produit apparaît en boutique est l'administration, dont les actions
-// appellent revalidatePath('/boutique') (src/app/admin/produits/actions.ts). C'est donc ce
-// chemin que le test emprunte, dans un contexte séparé qui recharge la session écrite une
-// fois par e2e/auth.setup.ts. La fiche /boutique/[slug] d'un produit créé après le build
-// n'est rendue qu'à sa première visite (generateStaticParams ne l'a pas listée) : elle
-// voit la base telle qu'elle est à ce moment-là.
+// l'inverse du reste de ce fichier (nettoyage) : /boutique et /boutique/[slug] sont rendus
+// statiquement et conservés cinq minutes (`revalidate = 300`, spec § 4.3). Une ligne
+// insérée en base derrière le dos de l'application n'invalide rien — le catalogue
+// continuerait de servir l'instantané du build, sans le produit, et le test rougirait à
+// tort. Le seul chemin réel par lequel un produit apparaît en boutique est
+// l'administration, dont les actions invalident catalogue ET fiches en suivant
+// productPathsToRevalidate (src/server/products.ts). C'est donc ce chemin que le test
+// emprunte, dans un contexte séparé qui recharge la session écrite une fois par
+// e2e/auth.setup.ts. Le test visite la fiche AVANT de créer le produit : ce 404 entre dans
+// le cache ISR, et c'est bien la création qui doit l'en chasser — c'est l'invalidation à la
+// demande de la fiche qui est prouvée ici, pas seulement son rendu.
+//
+// Le slug porte un jeton propre à l'exécution (RUN_TOKEN) : le cache ISR persiste sous
+// .next d'une exécution à l'autre sur le même serveur (reuseExistingServer), et le
+// nettoyage par Prisma ne l'invalide pas — avec un slug stable, la seconde exécution aurait
+// pu lire la fiche mise en cache par la première au lieu d'un rendu du produit qu'elle
+// venait de créer. Le nettoyage, lui, balaie tout ce qui commence par l'identité du test,
+// jetons d'exécutions précédentes compris.
 
 const prisma = new PrismaClient()
 const ADMIN_STATE_PATH = path.join(__dirname, '.auth', 'admin.json')
 
-// Slug propre à chaque test, dérivé de son titre — même raisonnement que
+// Jeton d'exécution, fixé une fois par processus de worker : le même pour les hooks et le
+// corps d'un même test, différent d'une exécution de la suite à l'autre.
+const RUN_TOKEN = Date.now().toString(36)
+
+// Préfixe de slug propre à chaque test, dérivé de son titre — même raisonnement que
 // e2e/admin-products.spec.ts (testSlug) : aucun partage de ligne entre tests ni entre
-// répétitions (`--repeat-each`), et un nettoyage qui ne peut atteindre que sa propre ligne.
-function testSlug(testInfo: TestInfo): string {
+// répétitions (`--repeat-each`), et un nettoyage qui ne peut atteindre que ses propres
+// lignes.
+function testSlugPrefix(testInfo: TestInfo): string {
   const identity = testInfo.title
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -37,25 +50,34 @@ function testSlug(testInfo: TestInfo): string {
   return `e2e-storefront-${identity}${repeat}`
 }
 
-// Supprime le produit de test, ses déclinaisons (cascade Prisma) et les lignes d'audit
-// que sa création par le back-office a écrites. Aucune photo n'est téléversée par ce
-// fichier — la fiche exerce l'image de repli — donc rien à effacer sur disque. Tolère
-// l'absence (deleteMany), pour que les passes d'avant et d'après puissent se croiser.
-async function cleanUpTestProduct(slug: string) {
-  const product = await prisma.product.findUnique({ where: { slug }, include: { variants: true } })
-  if (!product) return
+function testSlug(testInfo: TestInfo): string {
+  return `${testSlugPrefix(testInfo)}-${RUN_TOKEN}`
+}
 
-  const entityIds = [product.id, ...product.variants.map((variant) => variant.id)]
-  await prisma.product.deleteMany({ where: { id: product.id } })
-  await prisma.auditLog.deleteMany({ where: { entityId: { in: entityIds } } })
+// Supprime les produits de test portant ce préfixe — celui de cette exécution et ceux
+// qu'une exécution précédente interrompue aurait laissés —, leurs déclinaisons (cascade
+// Prisma) et les lignes d'audit que leur création par le back-office a écrites. Aucune
+// photo n'est téléversée par ce fichier — la fiche exerce l'image de repli — donc rien à
+// effacer sur disque. Tolère l'absence (deleteMany), pour que les passes d'avant et d'après
+// puissent se croiser.
+async function cleanUpTestProducts(slugPrefix: string) {
+  const products = await prisma.product.findMany({
+    where: { slug: { startsWith: slugPrefix } },
+    include: { variants: true },
+  })
+  for (const product of products) {
+    const entityIds = [product.id, ...product.variants.map((variant) => variant.id)]
+    await prisma.product.deleteMany({ where: { id: product.id } })
+    await prisma.auditLog.deleteMany({ where: { entityId: { in: entityIds } } })
+  }
 }
 
 test.beforeEach(async ({}, testInfo) => {
-  await cleanUpTestProduct(testSlug(testInfo))
+  await cleanUpTestProducts(testSlugPrefix(testInfo))
 })
 
 test.afterEach(async ({}, testInfo) => {
-  await cleanUpTestProduct(testSlug(testInfo))
+  await cleanUpTestProducts(testSlugPrefix(testInfo))
 })
 
 test.afterAll(async () => {
@@ -69,6 +91,12 @@ test("une visiteuse trouve en boutique un produit créé par l'administration et
   const slug = testSlug(testInfo)
   // SKU dérivé de l'identité du test : l'unicité de `sku` est globale (prisma/schema.prisma).
   const sku = slug.toUpperCase()
+
+  // Avant toute création, la fiche est introuvable — et ce 404 entre dans le cache ISR
+  // (mesuré : MISS puis HIT). Si la création ne l'invalidait pas, la visite finale lirait
+  // ce 404 pendant cinq minutes.
+  const before = await page.goto(`/boutique/${slug}`)
+  expect(before?.status()).toBe(404)
 
   // Création par le back-office, dans un contexte administrateur séparé.
   const adminContext = await browser.newContext({ storageState: ADMIN_STATE_PATH })
@@ -93,11 +121,16 @@ test("une visiteuse trouve en boutique un produit créé par l'administration et
   // Visite anonyme : le catalogue liste le produit…
   await page.goto('/boutique')
   await expect(page.getByRole('heading', { level: 1, name: 'La boutique' })).toBeVisible()
-  // Ciblé par le href plutôt que par le nom : un autre test peut laisser un « Bracelet
-  // Lagon » en catalogue, seul le slug est propre à celui-ci.
-  await page.locator(`a[href="/boutique/${slug}"]`).click()
+  // Par son nom, comme la cliente le lit (le nom accessible du lien reprend le texte
+  // alternatif de la photo puis le titre de la carte). Ce fichier est le seul à créer un
+  // « Bracelet Lagon » et le nettoie avant comme après : un doublon en catalogue ferait
+  // échouer le locator en mode strict — à dessein, plutôt que de cibler le href en CSS.
+  const productLink = page.getByRole('link', { name: 'Bracelet Lagon' })
+  await expect(productLink).toBeVisible()
+  await productLink.click()
 
-  // …et la fiche montre le titre, la déclinaison, le prix et ses données structurées.
+  // …et la fiche — celle dont le 404 était en cache — montre le titre, la déclinaison, le
+  // prix et ses données structurées : la création l'a bien invalidée.
   await expect(page).toHaveURL(`/boutique/${slug}`)
   await expect(page.getByRole('heading', { level: 1, name: 'Bracelet Lagon' })).toBeVisible()
   await expect(page.getByRole('radio', { name: 'Taille unique' })).toBeChecked()

@@ -1,10 +1,16 @@
-import { describe, it, expect, afterAll, beforeAll } from 'vitest'
+import { describe, it, expect, afterAll, afterEach, beforeAll, vi } from 'vitest'
 import { readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 import { prisma } from '@/server/db'
 import { processImage } from '@/server/media'
-import { deleteProduct, listProducts, loadProduct } from '@/server/products'
+import {
+  deleteProduct,
+  listActiveProductSlugs,
+  listProducts,
+  loadProduct,
+  productPathsToRevalidate,
+} from '@/server/products'
 
 // deleteProduct est la fonction qui possède la suppression d'un produit. La cascade Prisma
 // (Media.onDelete: Cascade) efface les lignes, mais aucune cascade n'atteint le disque :
@@ -133,12 +139,25 @@ const STOREFRONT_PROMOTION = 'Promotion vitrine (test) -10 %'
 const ACTIVE_SLUG = `${STOREFRONT_PREFIX}actif`
 const INACTIVE_SLUG = `${STOREFRONT_PREFIX}inactif`
 const SOLD_OUT_SLUG = `${STOREFRONT_PREFIX}epuise`
+const EMOJI_SLUG = `${STOREFRONT_PREFIX}emoji`
+const TIED_PHOTOS_SLUG = `${STOREFRONT_PREFIX}photos-ex-aequo`
 
 // Plus de 155 caractères, pour que la troncature de la description en meta soit observable.
 const SOLD_OUT_DESCRIPTION =
   'Bracelet créé pour les tests de la vitrine, jamais visible en production. Sa description ' +
   'dépasse volontairement les cent cinquante-cinq caractères pour vérifier la troncature ' +
   'de la meta description.'
+
+// Aucune espace avant la limite, et un emoji (deux unités UTF-16) à cheval sur elle : la
+// coupe brute `slice(0, 155)` garderait la première moitié du caractère.
+const EMOJI_DESCRIPTION = `${'x'.repeat(154)}\u{1F600} suite de la description.`
+
+// Deux photos à la MÊME position, insérées dans l'ordre inverse de leurs identifiants :
+// sans second critère de tri, l'ordre rendu est celui du plan d'exécution.
+const TIED_PHOTO_IDS = {
+  first: `${STOREFRONT_PREFIX}photo-a`,
+  second: `${STOREFRONT_PREFIX}photo-b`,
+}
 
 async function cleanUpStorefrontFixtures() {
   await prisma.promotion.deleteMany({ where: { name: STOREFRONT_PROMOTION } })
@@ -211,6 +230,34 @@ describe('catalogue et fiche produit', () => {
       },
     })
 
+    await prisma.product.create({
+      data: {
+        slug: EMOJI_SLUG,
+        name: 'Bracelet émoji (test)',
+        description: EMOJI_DESCRIPTION,
+        categoryId: category.id,
+        basePrice: 15000,
+        displayOrder: 4,
+      },
+    })
+
+    await prisma.product.create({
+      data: {
+        slug: TIED_PHOTOS_SLUG,
+        name: 'Bracelet photos ex aequo (test)',
+        description: 'Produit dont deux photos partagent la même position.',
+        categoryId: category.id,
+        basePrice: 12000,
+        displayOrder: 5,
+        media: {
+          create: [
+            { id: TIED_PHOTO_IDS.second, path: `/uploads/${STOREFRONT_PREFIX}ex-aequo-b`, alt: 'B', position: 0 },
+            { id: TIED_PHOTO_IDS.first, path: `/uploads/${STOREFRONT_PREFIX}ex-aequo-a`, alt: 'A', position: 0 },
+          ],
+        },
+      },
+    })
+
     await prisma.promotion.create({
       data: {
         name: STOREFRONT_PROMOTION, type: 'percent', value: 10,
@@ -220,6 +267,33 @@ describe('catalogue et fiche produit', () => {
   })
 
   afterAll(cleanUpStorefrontFixtures)
+  afterEach(() => {
+    // Les espions posés sur prisma (liste blanche de slug) ne doivent pas survivre au test.
+    vi.restoreAllMocks()
+  })
+
+  describe('productPathsToRevalidate', () => {
+    it("publie le catalogue et le gabarit des fiches, pour que chaque appelant invalide les deux", () => {
+      // Le gabarit exige le type `'page'` : sans lui, revalidatePath n'a aucun effet sur un
+      // chemin dynamique (node_modules/next/dist/server/web/spec-extension/revalidate.js,
+      // avertissement console au lieu d'une invalidation). Et il s'écrit avec le groupe de
+      // routes, comme le fichier, pas comme l'URL : `/boutique/[slug]` ne correspond à
+      // aucun tag d'entrée de cache (`_N_T_/(storefront)/boutique/[slug]/page`, mesuré) et
+      // laissait le 404 d'une fiche visitée avant sa création survivre à celle-ci.
+      expect(productPathsToRevalidate()).toEqual([
+        ['/boutique'],
+        ['/(storefront)/boutique/[slug]', 'page'],
+      ])
+    })
+  })
+
+  describe('listActiveProductSlugs', () => {
+    it('liste les slugs des produits actifs, et eux seuls', async () => {
+      const slugs = await listActiveProductSlugs()
+      expect(slugs).toEqual(expect.arrayContaining([ACTIVE_SLUG, SOLD_OUT_SLUG]))
+      expect(slugs).not.toContain(INACTIVE_SLUG)
+    })
+  })
 
   describe('listProducts', () => {
     it("retourne les produits actifs de la catégorie, dans l'ordre d'affichage, avec leur prix effectif", async () => {
@@ -274,6 +348,18 @@ describe('catalogue et fiche produit', () => {
       expect(await loadProduct(INACTIVE_SLUG)).toBeNull()
     })
 
+    it("refuse sans interroger la base un slug qui ne peut pas exister (liste blanche du back-office)", async () => {
+      // Un slug vient de l'URL, donc de n'importe qui. La forme acceptée à l'écriture
+      // (productSchema : minuscules, chiffres, tirets) borne ce qui vaut une requête : un
+      // NUL ferait lever PostgreSQL (500 au lieu de 404), et tout le reste ne peut que
+      // coûter une requête pour rien. Refuser, pas réparer (docs/CONVENTIONS.md § 4, règle 5).
+      const query = vi.spyOn(prisma.product, 'findUnique')
+      for (const hostile of ['a\u0000b', 'Slug Avec Espaces', '../etc/passwd', 'MAJUSCULES', 'accentué', '']) {
+        await expect(loadProduct(hostile)).resolves.toBeNull()
+      }
+      expect(query).not.toHaveBeenCalled()
+    })
+
     it('porte le prix effectif, la disponibilité et la description du produit', async () => {
       const detail = await loadProduct(ACTIVE_SLUG)
       expect(detail).toMatchObject({
@@ -307,17 +393,51 @@ describe('catalogue et fiche produit', () => {
       ])
     })
 
+    it('départage deux photos de même position par leur identifiant, en fiche comme en catalogue', async () => {
+      // Insérées B puis A (voir la fixture) : sans second critère, l'ordre rendu serait
+      // celui de l'insertion — c'est-à-dire du plan d'exécution — et la photo principale
+      // de la fiche ou de la carte pourrait changer d'un rendu à l'autre.
+      const detail = await loadProduct(TIED_PHOTOS_SLUG)
+      expect(detail?.images.map((image) => image.alt)).toEqual(['A', 'B'])
+
+      const card = (await listProducts(STOREFRONT_CATEGORY)).find((p) => p.slug === TIED_PHOTOS_SLUG)
+      expect(card).toMatchObject({
+        image: `/uploads/${STOREFRONT_PREFIX}ex-aequo-a-800.avif`,
+        secondaryImage: `/uploads/${STOREFRONT_PREFIX}ex-aequo-b-800.avif`,
+      })
+    })
+
     it("remplace les photos absentes par l'image de repli, pour que la fiche garde sa galerie", async () => {
       const detail = await loadProduct(SOLD_OUT_SLUG)
       expect(detail?.image).toBe('/placeholder-1200.avif')
       expect(detail?.images).toEqual([{ path: '/placeholder-1200.avif', alt: 'Bracelet épuisé (test)' }])
     })
 
-    it('complète les métadonnées absentes à partir du nom et de la description', async () => {
+    it('complète les métadonnées absentes à partir du nom et de la description, coupée en fin de mot', async () => {
       const detail = await loadProduct(SOLD_OUT_SLUG)
       expect(detail?.metaTitle).toBe('Bracelet épuisé (test) — Summer Club')
-      expect(detail?.metaDescription).toBe(SOLD_OUT_DESCRIPTION.slice(0, 155))
-      expect(detail?.metaDescription).toHaveLength(155)
+      // 155 unités au plus, points de suspension compris, et jamais un mot coupé en deux :
+      // la coupe tombe sur la dernière espace avant la limite (ici au 152e caractère).
+      expect(detail?.metaDescription).toBe(
+        'Bracelet créé pour les tests de la vitrine, jamais visible en production. Sa description ' +
+          'dépasse volontairement les cent cinquante-cinq caractères pour…',
+      )
+      expect(detail?.metaDescription.length).toBeLessThanOrEqual(155)
+    })
+
+    it('garde telle quelle, sans points de suspension, une description qui tient dans la meta', async () => {
+      // Description courte et meta absente : rien à couper, rien à ajouter.
+      const detail = await loadProduct(TIED_PHOTOS_SLUG)
+      expect(detail?.metaDescription).toBe('Produit dont deux photos partagent la même position.')
+    })
+
+    it("ne coupe jamais un caractère en deux : un emoji à la frontière disparaît entier", async () => {
+      const detail = await loadProduct(EMOJI_SLUG)
+      // Sans espace avant la limite, la coupe retombe sur la limite elle-même — mais sans
+      // laisser une moitié de paire de substitution (isWellFormed) dans la meta ni dans le
+      // JSON-LD qui la reprend.
+      expect(detail?.metaDescription.isWellFormed()).toBe(true)
+      expect(detail?.metaDescription).toBe(`${'x'.repeat(154)}…`)
     })
   })
 })

@@ -1,16 +1,16 @@
 import type { Route } from 'next'
 import Link from 'next/link'
 
-// Contrat volontairement minimal (YAGNI) : le tiroir panier arrive à la tâche 16, la
-// route /panier à la tâche 15. L'en-tête collant reste sur `--shell` avec la SEULE ombre
-// autorisée par la charte (spec § 3.5) : `0 1px 0 rgba(185,169,146,.35)`, jamais une
-// ombre portée générique.
+// Contrat volontairement minimal (YAGNI) : le tiroir panier et la route /panier arrivent
+// à la tâche 16 « Panier persistant » (plan, src/app/(storefront)/panier/page.tsx). L'en-tête
+// collant reste sur `--shell` avec la SEULE ombre autorisée par la charte (spec § 3.5) :
+// `0 1px 0 rgba(185,169,146,.35)`, jamais une ombre portée générique.
 //
 // `typedRoutes` (next.config.ts) valide chaque `href` littéral contre les routes qui
 // existent réellement sous src/app/ (.next/types/routes.d.ts) : /panier n'y figure pas
 // encore, d'où le `as Route` — le remède documenté par Next.js pour un lien vers une
 // route non encore statiquement connue (node_modules/next/dist/docs/.../02-typescript.md,
-// § « Statically Typed Links »). À retirer quand la tâche 15 aura créé cette route.
+// § « Statically Typed Links »). À retirer quand la tâche 16 aura créé cette route.
 // /boutique existe depuis la tâche 14 et n'a plus besoin du cast.
 export function Header() {
   return (

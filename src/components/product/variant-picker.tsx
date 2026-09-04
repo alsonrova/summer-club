@@ -13,7 +13,13 @@ import type { ProductDetail } from '@/server/products'
 // Une déclinaison épuisée reste sélectionnable : la charte (spec § 3.8) veut que la
 // rupture s'explique par du texte, pas par un contrôle grisé qui ne dit rien au toucher.
 // La choisir affiche le message ; son libellé est barré pour l'annoncer avant le choix.
-export function VariantPicker({ product }: { product: ProductDetail }) {
+//
+// Le composant ne reçoit que ce qu'il lit (Pick) : composant client, tout ce qu'on lui
+// passe est sérialisé dans la charge RSC de la fiche — la description, les photos et les
+// métadonnées n'ont rien à y faire une seconde fois.
+export type VariantPickerProduct = Pick<ProductDetail, 'variants' | 'finalPrice' | 'initialPrice'>
+
+export function VariantPicker({ product }: { product: VariantPickerProduct }) {
   const firstAvailable = product.variants.find((v) => v.available) ?? product.variants[0]
   const [selectedId, setSelectedId] = useState(firstAvailable?.id ?? '')
   const selected = product.variants.find((v) => v.id === selectedId)

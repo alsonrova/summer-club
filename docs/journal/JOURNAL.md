@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**74 entrées** · 17 tâches · Développeur 47 · Auditeur qualité et sécurité 20 · Coordinateur 7
+**75 entrées** · 17 tâches · Développeur 48 · Auditeur qualité et sécurité 20 · Coordinateur 7
 
 ## Vue d'ensemble
 
@@ -85,6 +85,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | renommage | Développeur | livré | — |
 | 2026-09-03 | renommage | Coordinateur | validé | — |
 | 2026-09-03 | 14 | Développeur | livré | — |
+| 2026-09-04 | 14 | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -811,3 +812,15 @@ Catalogue et fiche produit. src/server/products.ts étendu : listProducts(catego
 - **Réserve** : Type ProductDetail.variants enrichi d'un initialPrice par déclinaison par rapport à la décision 1, sans quoi Price barrerait à tort un prix dont le seul écart vient de priceDelta ; not-found.tsx ajouté sous [slug] (état d'échec en français), absent de la liste du brief.
 - **Réserve** : Interface vérifiée par Playwright (bureau) et par relecture contre la charte, pas dans un navigateur réel aux largeurs mobile et tablette — rôle du testeur UX/UI.
 - **Réserve** : Quatre lignes AuditLog orphelines (admintest-modif-produit, 2026-09-03 19:59–20:01) observées en base, antérieures à cette session et hors périmètre : signalées, non traitées.
+
+### 2026-09-04 · Développeur — livré
+
+Correctifs post-revue (tour 1). Invalidation à la demande des fiches : productPathsToRevalidate() (src/server/products.ts) publie ['/boutique'] et ['/(storefront)/boutique/[slug]', 'page'], suivi par les neuf actions produit (revalidateStorefront) et par pathsToRevalidate (commandes, désormais en tuples RevalidationTarget). Le gabarit s'écrit AVEC le groupe de routes : mesuré sur le serveur de production, l'entrée de cache porte le tag _N_T_/(storefront)/boutique/[slug]/page et '/boutique/[slug]' (piste de la revue) n'invalidait rien — le bout-en-bout réécrit (404 visité avant création, puis fiche servie) l'a montré avant le correctif. Liste blanche de slug avant toute requête (src/domain/slug.ts, partagée avec productSchema ; un NUL faisait lever PostgreSQL 22021, 500 au lieu de 404). Meta description de repli coupée en fin de mot, sans scinder un caractère (isWellFormed), points de suspension. Photos départagées par id à position égale. generateStaticParams via listActiveProductSlugs (slugs seuls). VariantPicker ne reçoit que déclinaisons et prix (Pick). e2e storefront : slug par exécution (RUN_TOKEN), nettoyage par préfixe, sélecteur par libellé, toBeVisible avant clic. Commentaire /panier daté tâche 16. Vecteur de remplissage du cache ISR documenté (passation, plan tâche 22). Cinq preuves par mutation (available, assiette basePrice+priceDelta, liste blanche, revalidation adjustStock, fiches dans pathsToRevalidate), chacune rougit seule, restauration vérifiée par empreinte.
+
+- **Modèle** : claude-fable-5-1
+- **Tests** : Vitest 28 fichiers / 275 tests verts au second passage (premier passage à froid : 3 fichiers en échec, 4 tests, 3 timeouts de worker — symptôme documenté). Playwright non relancé avant intervention. → Vitest 28 fichiers / 281 tests verts (44 s) ; tsc --noEmit sans sortie ; npm run build réussi ; Playwright 16/16 (24 s).
+- **Fichiers** : `src/server/products.ts`, `src/domain/slug.ts`, `src/admin/resources/products.ts`, `src/server/order-status-service.ts`, `src/app/admin/commandes/actions.ts`, `src/app/admin/produits/actions.ts`, `src/app/(storefront)/boutique/[slug]/page.tsx`, `src/app/(storefront)/boutique/page.tsx`, `src/components/product/variant-picker.tsx`, `src/components/layout/header.tsx`, `tests/server/products.test.ts`, `tests/admin/product-actions.test.ts`, `tests/admin/order-actions.test.ts`, `tests/components/variant-picker.test.tsx`, `e2e/storefront.spec.ts`, `docs/passation/2026-08-29-v1.0-taches-1-a-12.md`, `docs/superpowers/plans/2026-08-12-summerclub-v1.0.md`
+- **Réserve** : Cache ISR des fiches inconnues non borné côté application : un slug bien formé mais inconnu est toujours rendu (404) puis écrit sur disque sans éviction ; la liste blanche ne coupe que le coût SQL des slugs mal formés. Mitigation renvoyée à la tâche 22 (limitation de débit Caddy sur /boutique/*, cacheHandler borné en second recours), consignée dans la passation et le plan ; dynamicParams = false écarté.
+- **Réserve** : Laissés en réserve motivée : ordre alphabétique des déclinaisons (aucune colonne d'ordre sur Variant, même tri que le back-office ; une colonne position serait un changement de schéma) ; image du JSON-LD relative (aucune URL publique de site avant la tâche 22) ; StorefrontProduct toujours dans product-card.tsx (décision 4 du coordinateur, import de type seul) ; la photo « principale » (isPrimary) du back-office n'est pas prise en compte par la vitrine, qui trie par position — à arbitrer, hors constats.
+- **Réserve** : Un timeout isolé (5 s) du test deleteProduct observé une fois sous la charge de quatre fichiers en parallèle (sharp) ; vert seul (20/20) et dans la suite complète. Aucun retry ni délai ajouté.
+- **Réserve** : Build et Playwright ont tourné sur la source finale avant le npm test final ; aucune source n'a changé entre les deux (les mutations ont été restaurées à l'identique, empreintes SHA-256 comparées).

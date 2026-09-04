@@ -66,7 +66,9 @@ describe('VariantPicker', () => {
   })
 
   it('sans déclinaison, affiche le prix du produit et la rupture', () => {
-    render(<VariantPicker product={{ ...product, variants: [], inStock: false }} />)
+    // Le composant ne reçoit que déclinaisons et prix (VariantPickerProduct) : la rupture
+    // se déduit de l'absence de déclinaison disponible, pas d'un `inStock` qu'il ne lit pas.
+    render(<VariantPicker product={{ ...product, variants: [] }} />)
     expect(screen.queryByRole('group')).toBeNull()
     expect(screen.getByText('45\u00A0000\u00A0Ar', rawText)).toBeDefined()
     expect(screen.getByText('Rupture — cette pièce revient bientôt.')).toBeDefined()

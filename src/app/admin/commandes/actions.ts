@@ -40,8 +40,8 @@ export async function changeStatus(orderId: string, to: OrderStatus) {
   // `applyStatus` n'invalide rien elle-même (elle doit rester appelable hors requête,
   // cf. son commentaire) : c'est ici, dans une vraie requête, qu'on le fait — en suivant la
   // liste qu'elle publie, pour n'en oublier aucun.
-  for (const path of pathsToRevalidate(orderId)) {
-    revalidatePath(path)
+  for (const target of pathsToRevalidate(orderId)) {
+    revalidatePath(...target)
   }
 
   return order

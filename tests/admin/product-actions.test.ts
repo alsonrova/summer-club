@@ -2,8 +2,10 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } 
 import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
+import { revalidatePath } from 'next/cache'
 import { prisma } from '@/server/db'
 import { UnreadableImageError } from '@/server/media'
+import { productPathsToRevalidate } from '@/server/products'
 import {
   createProduct,
   updateProduct,
@@ -112,6 +114,9 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
+  // Les appels enregistrés par la doublure de revalidatePath ne doivent pas se cumuler
+  // d'un test à l'autre : chaque test prouve l'invalidation de SA seule action.
+  vi.mocked(revalidatePath).mockClear()
   await prisma.variant.update({ where: { id: variantId }, data: { stock: 5 } })
 
   // Nettoyage du journal d'audit restreint aux entités créées par CE fichier : sa
@@ -151,6 +156,18 @@ function formData(entries: Record<string, string>): FormData {
   return fd
 }
 
+// Toute action qui change ce que la vitrine affiche invalide le catalogue ET les fiches :
+// un lien /boutique/<slug> déjà partagé continuerait sinon de servir, depuis le cache ISR,
+// un prix, un stock ou un produit retiré jusqu'à cinq minutes. La liste vient du module
+// métier (productPathsToRevalidate), elle n'est pas recopiée ici — même garantie que
+// tests/admin/order-actions.test.ts pour pathsToRevalidate : un chemin ajouté à la liste
+// ne peut pas être oublié par une action sans faire rougir ce fichier.
+function expectStorefrontRevalidated() {
+  for (const target of productPathsToRevalidate()) {
+    expect(revalidatePath).toHaveBeenCalledWith(...target)
+  }
+}
+
 describe('adjustStock', () => {
   it('refuse un stock non entier', async () => {
     const state = await adjustStock(variantId, { error: null }, formData({ stock: '4.5' }))
@@ -179,6 +196,7 @@ describe('adjustStock', () => {
     })
     expect(audit.before).toEqual({ stock: 5 })
     expect(audit.after).toEqual({ stock: 12 })
+    expectStorefrontRevalidated()
   })
 
   it('accepte un stock ramené à zéro', async () => {
@@ -311,6 +329,7 @@ describe('reorderMedia', () => {
     })
     expect(audit.before).toEqual({ position: 0 })
     expect(audit.after).toEqual({ position: 4 })
+    expectStorefrontRevalidated()
 
     await prisma.media.delete({ where: { id: media.id } })
     await prisma.auditLog.deleteMany({ where: { entityId: media.id } })
@@ -349,6 +368,9 @@ describe('createProduct (chemin nominal)', () => {
       orderBy: { createdAt: 'desc' },
     })
     expect(audit.after).toMatchObject({ name: 'Bracelet Test Nominal', basePrice: 15000, displayOrder: 3 })
+    // Invalidation faite AVANT la redirection (qui lève) : un slug visité avant sa
+    // création — 404 mis en cache — doit répondre la fiche dès la création.
+    expectStorefrontRevalidated()
 
     await prisma.product.delete({ where: { id: product.id } })
     await prisma.auditLog.deleteMany({ where: { entityId: product.id } })
@@ -487,6 +509,7 @@ describe('updateProduct (chemin nominal)', () => {
     expect(Object.keys(before).sort()).toEqual(Object.keys(auditAfter).sort())
     expect(before['basePrice']).toBe(20000)
     expect(auditAfter['basePrice']).toBe(25000)
+    expectStorefrontRevalidated()
 
     await prisma.product.delete({ where: { id: product.id } })
     await prisma.auditLog.deleteMany({ where: { entityId: product.id } })
@@ -555,6 +578,7 @@ describe('createVariant', () => {
       orderBy: { createdAt: 'desc' },
     })
     expect(audit.after).toMatchObject({ label: 'Taille L', sku, priceDelta: 1500, stock: 3 })
+    expectStorefrontRevalidated()
 
     await prisma.variant.delete({ where: { id: variant.id } })
     await prisma.auditLog.deleteMany({ where: { entityId: variant.id } })
@@ -658,12 +682,15 @@ describe('uploadMedia (chemin nominal)', () => {
       orderBy: { createdAt: 'desc' },
     })
     expect(audit.after).toEqual({ path: media.path })
+    expectStorefrontRevalidated()
+    vi.mocked(revalidatePath).mockClear()
 
     // Nettoyage via deleteMedia (Correctif 5) plutôt qu'un rm manuel : exerce du même
     // coup son chemin nominal (effacement des six fichiers produits par processImage), et
     // ne laisse rien dans public/uploads au-delà de .gitkeep.
     const deleteState = await deleteMedia(media.id, { error: null }, new FormData())
     expect(deleteState.error).toBeNull()
+    expectStorefrontRevalidated()
 
     for (const width of [400, 800, 1200] as const) {
       await expect(stat(fileFor(media.path, width, 'avif'))).rejects.toThrow()
@@ -713,6 +740,7 @@ describe('updateMediaAlt', () => {
     })
     expect(audit.before).toEqual({ alt: 'ancien texte' })
     expect(audit.after).toEqual({ alt: 'Bracelet en argent sur fond clair' })
+    expectStorefrontRevalidated()
 
     await prisma.media.delete({ where: { id: media.id } })
     await prisma.auditLog.deleteMany({ where: { entityId: media.id } })
@@ -751,6 +779,7 @@ describe('setPrimaryPhoto', () => {
     ])
     expect(after1.isPrimary).toBe(false)
     expect(after2.isPrimary).toBe(true)
+    expectStorefrontRevalidated()
 
     await prisma.media.deleteMany({ where: { id: { in: [m1.id, m2.id] } } })
     await prisma.auditLog.deleteMany({ where: { entityId: { in: [m1.id, m2.id] } } })
@@ -780,6 +809,7 @@ describe('deleteMedia', () => {
       orderBy: { createdAt: 'desc' },
     })
     expect(audit.before).toMatchObject({ path: '/uploads/suppr-1', isPrimary: true })
+    expectStorefrontRevalidated()
 
     await prisma.media.delete({ where: { id: m2.id } })
     await prisma.auditLog.deleteMany({ where: { entityId: m1.id } })

@@ -3,7 +3,9 @@ import { listProducts } from '@/server/products'
 import { ProductCard } from '@/components/product/product-card'
 
 // Rendu statique revalidé toutes les cinq minutes (spec § 4.3), et à la demande par les
-// actions du back-office qui appellent revalidatePath('/boutique').
+// actions du back-office et les changements de statut de commande, qui invalident les
+// chemins publiés par productPathsToRevalidate (src/server/products.ts) — ce catalogue et
+// les fiches.
 export const revalidate = 300
 
 export const metadata: Metadata = {

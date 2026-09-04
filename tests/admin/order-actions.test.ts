@@ -153,9 +153,13 @@ describe('changeStatus — chemin nominal', () => {
     )
     // La liste vient du module métier, elle n'est pas recopiée ici : c'est ce qui garantit
     // qu'aucun chemin ajouté à `pathsToRevalidate` ne sera oublié par l'action.
-    for (const mediaPath of pathsToRevalidate(c.id)) {
-      expect(revalidatePath).toHaveBeenCalledWith(mediaPath)
+    for (const target of pathsToRevalidate(c.id)) {
+      expect(revalidatePath).toHaveBeenCalledWith(...target)
     }
+    // …et la liste elle-même doit atteindre les fiches, pas seulement le catalogue : une
+    // confirmation qui vide le stock d'une déclinaison change ce que la fiche affiche. Le
+    // gabarit porte le groupe de routes, comme le fichier (voir productPathsToRevalidate).
+    expect(revalidatePath).toHaveBeenCalledWith('/(storefront)/boutique/[slug]', 'page')
   })
 })
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineResource } from '@/admin/resource'
+import { SLUG_PATTERN } from '@/domain/slug'
 
 // 2147483647 = la borne haute d'un entier PostgreSQL (colonnes `Int` du schéma Prisma) :
 // sans cette borne, `z.number().int().positive()` laisse passer des valeurs qu'une colonne
@@ -13,7 +14,9 @@ export const productSchema = z.object({
   // d'espaces. Sans ce trim, un nom de deux espaces passait la validation et fabriquait
   // exactement l'état interdit qu'on prétend fermer.
   name: z.string().trim().min(2, 'Le nom est requis'),
-  slug: z.string().regex(/^[a-z0-9-]+$/, 'Minuscules, chiffres et tirets uniquement'),
+  // Même motif que la liste blanche de lecture de la vitrine (src/domain/slug.ts) : ce qui
+  // s'écrit ici est exactement ce que loadProduct accepte d'aller chercher.
+  slug: z.string().regex(SLUG_PATTERN, 'Minuscules, chiffres et tirets uniquement'),
   description: z.string().min(10, 'Décrivez le produit en une phrase au moins'),
   categoryId: z.string().min(1, 'Choisissez une catégorie'),
   basePrice: z.number().int().positive('Le prix doit être positif').max(POSTGRES_INT_MAX),

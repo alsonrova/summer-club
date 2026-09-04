@@ -1,8 +1,47 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/server/db'
 import { deleteMediaFiles } from '@/server/media'
 import { resolvePrice } from '@/domain/pricing'
+import { isSlug } from '@/domain/slug'
 import type { PromotionRule } from '@/domain/types'
 import type { StorefrontProduct } from '@/components/product/product-card'
+
+// Cible d'invalidation pour revalidatePath (next/cache) : un chemin littéral, ou un
+// gabarit de route dynamique accompagné du type de ce qu'il désigne. Le type n'est pas
+// décoratif : revalidatePath('/boutique/[slug]') sans lui n'invalide RIEN — Next.js se
+// contente d'un avertissement en console (node_modules/next/dist/server/web/
+// spec-extension/revalidate.js, `isDynamicRoute` sans `type`). Un tuple se passe tel quel
+// à l'appel : `revalidatePath(...target)` — d'où l'élément optionnel plutôt qu'une union
+// de tuples, que TypeScript refuse d'étaler en arguments.
+export type RevalidationTarget = [path: string, type?: 'page' | 'layout']
+
+// Chemins publics dont le rendu dépend d'un produit : le catalogue et chaque fiche. Même
+// motif que pathsToRevalidate (src/server/order-status-service.ts) : ce module ne peut pas
+// invalider lui-même (revalidatePath exige un contexte de requête, absent sous Vitest et
+// dans un script), il publie donc la liste pour qu'aucun appelant n'ait à deviner ni à
+// oublier. Sans la fiche, un lien /boutique/<slug> déjà partagé continuait de servir depuis
+// le cache ISR (revalidate = 300) un produit retiré, un stock parti ou un prix changé —
+// jusqu'à cinq minutes ; et un 404 mis en cache avant la création du produit survivait à
+// sa création (constat de la revue de la tâche 14).
+//
+// Le gabarit de la fiche plutôt que le chemin exact du produit, à dessein : un changement
+// de slug doit rendre l'ancienne adresse introuvable autant que la nouvelle visible, et les
+// actions sur une déclinaison ou une photo ne connaissent que l'identifiant du produit. Le
+// coût — chaque fiche re-rendue à sa prochaine visite — est celui d'un catalogue de
+// quelques dizaines de pièces.
+//
+// Le gabarit s'écrit AVEC le groupe de routes, `/(storefront)/boutique/[slug]`, et pas
+// `/boutique/[slug]` comme l'URL : avec `type`, revalidatePath désigne un fichier de
+// route, non une adresse (node_modules/next/dist/docs/01-app/03-api-reference/
+// 04-functions/revalidatePath.md, « or with route groups »). Mesuré sur le serveur de
+// production : l'entrée de cache d'une fiche porte le tag
+// `_N_T_/(storefront)/boutique/[slug]/page` (fichier .meta, en-tête x-next-cache-tags), et
+// `/boutique/[slug]` ne l'atteignait pas — le 404 mis en cache survivait à la création du
+// produit, le bout-en-bout l'a montré avant ce correctif. Le chemin littéral `/boutique`,
+// lui, est bien une adresse : l'entrée du catalogue porte le tag `_N_T_/boutique`.
+export function productPathsToRevalidate(): RevalidationTarget[] {
+  return [['/boutique'], ['/(storefront)/boutique/[slug]', 'page']]
+}
 
 export type ProductDetail = StorefrontProduct & {
   description: string
@@ -29,6 +68,33 @@ function imageFile(mediaPath: string, width: number): string {
 function placeholder(width: number): string {
   return `/placeholder-${width}.avif`
 }
+
+// Longueur usuelle d'une meta description avant que les moteurs ne la tronquent eux-mêmes.
+const META_DESCRIPTION_MAX_LENGTH = 155
+
+// Meta description de repli, dérivée de la description : coupée sur la dernière espace
+// avant la limite pour ne jamais laisser un demi-mot, et jamais un demi-caractère non plus
+// — `slice` compte en unités UTF-16, un emoji à la frontière laisserait une moitié de
+// paire de substitution dans la meta et dans le JSON-LD qui la reprend. Les points de
+// suspension disent que la phrase continue sur la fiche.
+function metaDescriptionFrom(description: string): string {
+  if (description.length <= META_DESCRIPTION_MAX_LENGTH) return description
+  // Un caractère de moins que la limite : la place des points de suspension.
+  const head = description.slice(0, META_DESCRIPTION_MAX_LENGTH - 1)
+  const lastSpace = head.lastIndexOf(' ')
+  // Sans espace (un seul mot interminable), la coupe tombe sur la limite : seule la fin
+  // peut alors être une moitié de caractère, puisque la description relue de PostgreSQL
+  // est bien formée.
+  const cut = lastSpace > 0 ? head.slice(0, lastSpace) : head
+  const wellFormed = cut.isWellFormed() ? cut : cut.slice(0, -1)
+  return `${wellFormed}…`
+}
+
+// Ordre des photos : la position choisie au back-office, puis l'identifiant pour départager
+// deux photos de même position — sans ce second critère, la photo principale d'une carte ou
+// d'une fiche dépendrait du plan d'exécution (même raisonnement que `name` pour les
+// produits, plus bas).
+const MEDIA_ORDER: Prisma.MediaOrderByWithRelationInput[] = [{ position: 'asc' }, { id: 'asc' }]
 
 async function activePromotions(): Promise<PromotionRule[]> {
   return prisma.promotion.findMany({ where: { active: true } })
@@ -77,7 +143,7 @@ export async function listProducts(categorySlug?: string): Promise<StorefrontPro
     include: {
       variants: { select: { stock: true } },
       // La carte n'affiche que la photo principale et celle du survol.
-      media: { orderBy: { position: 'asc' }, take: 2, select: { path: true } },
+      media: { orderBy: MEDIA_ORDER, take: 2, select: { path: true } },
     },
     // `name` départage deux produits de même ordre : sans ce second critère, l'ordre du
     // catalogue dépendrait du plan d'exécution et pourrait changer d'un rendu à l'autre.
@@ -89,12 +155,33 @@ export async function listProducts(categorySlug?: string): Promise<StorefrontPro
   return products.map((product) => toStorefrontProduct(product, promotions, now, CATALOG_WIDTH))
 }
 
+// Slugs des produits actifs, et rien d'autre : ce que generateStaticParams
+// (src/app/(storefront)/boutique/[slug]/page.tsx) a besoin de connaître au build. Passer
+// par listProducts chargeait les promotions, calculait les prix effectifs et projetait les
+// photos de chaque produit pour n'en garder que le slug.
+export async function listActiveProductSlugs(): Promise<string[]> {
+  const products = await prisma.product.findMany({
+    where: { active: true },
+    select: { slug: true },
+    orderBy: { slug: 'asc' },
+  })
+  return products.map((product) => product.slug)
+}
+
 export async function loadProduct(slug: string): Promise<ProductDetail | null> {
+  // Liste blanche AVANT la requête : le slug vient de l'URL, donc de n'importe qui. Une
+  // valeur que le back-office n'aurait jamais acceptée ne peut pas exister en base — elle
+  // ne vaut pas une requête, et un NUL ferait lever PostgreSQL (500 au lieu de 404). Refuser,
+  // pas réparer (docs/CONVENTIONS.md § 4, règle 5). Ce garde ne borne pas le cache ISR :
+  // un slug bien formé mais inconnu est toujours rendu puis mis en cache (voir la
+  // passation, dette « cache ISR des fiches inconnues », tâche 22).
+  if (!isSlug(slug)) return null
+
   const product = await prisma.product.findUnique({
     where: { slug },
     include: {
       variants: { orderBy: { label: 'asc' } },
-      media: { orderBy: { position: 'asc' } },
+      media: { orderBy: MEDIA_ORDER },
     },
   })
   // Un produit désactivé disparaît de la boutique comme s'il n'avait jamais existé :
@@ -115,7 +202,7 @@ export async function loadProduct(slug: string): Promise<ProductDetail | null> {
     description: product.description,
     // `||` et non `??` : une chaîne vide n'est pas un titre.
     metaTitle: product.metaTitle || `${product.name} — Summer Club`,
-    metaDescription: product.metaDescription || product.description.slice(0, 155),
+    metaDescription: product.metaDescription || metaDescriptionFrom(product.description),
     // Sans photo, la fiche garde sa galerie (image de repli) plutôt qu'un vide qui
     // déséquilibrerait la mise en page.
     images: images.length > 0 ? images : [{ path: placeholder(DETAIL_WIDTH), alt: product.name }],
