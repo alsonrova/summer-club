@@ -50,6 +50,17 @@ describe('ProductCard', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  it('rend la mention de rupture dans une couleur lisible sur sable — bark-soft, jamais taupe', () => {
+    // Constat du testeur UX/UI (tâche 14) : « Rupture » en taupe (#B9A992) sur sable
+    // (#F7F3EE) mesurait 2,08:1 à 14 px, sous le seuil de 4,5:1 (tests/tokens.test.ts) —
+    // la disponibilité était l'information la moins lisible de la page. Même couleur que
+    // le prix voisin et que le message de rupture de la fiche (VariantPicker).
+    render(<ProductCard product={{ ...product, inStock: false }} />)
+    const notice = screen.getByText('Rupture')
+    expect(notice.className).toContain('text-bark-soft')
+    expect(notice.className).not.toContain('text-taupe')
+  })
+
   it('donne un texte alternatif décrivant le produit', () => {
     render(<ProductCard product={product} />)
     expect(screen.getByAltText(/Collier Vahiné/)).toBeDefined()

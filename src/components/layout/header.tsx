@@ -1,17 +1,19 @@
-import type { Route } from 'next'
 import Link from 'next/link'
 
-// Contrat volontairement minimal (YAGNI) : le tiroir panier et la route /panier arrivent
-// à la tâche 16 « Panier persistant » (plan, src/app/(storefront)/panier/page.tsx). L'en-tête
-// collant reste sur `--shell` avec la SEULE ombre autorisée par la charte (spec § 3.5) :
-// `0 1px 0 rgba(185,169,146,.35)`, jamais une ombre portée générique.
+// Contrat volontairement minimal (YAGNI) : la marque et le lien vers la boutique. Le tiroir
+// panier, la route /panier et le lien « Panier » de cet en-tête arrivent ensemble à la
+// tâche 16 « Panier persistant » (plan, src/app/(storefront)/panier/page.tsx). Ce lien
+// existait avant sa route : constat du testeur UX/UI (tâche 14), il menait à la 404
+// générique de Next.js, en anglais, sans en-tête ni pied de page, et son préchargement
+// journalisait quatre erreurs 404 dans la console de chaque fiche. Un lien mort est un
+// défaut, pas une promesse — même raisonnement que le bouton « Ajouter au panier » absent
+// de VariantPicker. Avec lui disparaît le cast `as Route` qu'il imposait (`typedRoutes`,
+// next.config.ts, refuse un href littéral vers une route absente de
+// .next/types/routes.d.ts) : la tâche 16 créera la route avant de rendre le lien, et n'en
+// aura pas besoin. tests/components/header.test.tsx garde la liste des adresses visées.
 //
-// `typedRoutes` (next.config.ts) valide chaque `href` littéral contre les routes qui
-// existent réellement sous src/app/ (.next/types/routes.d.ts) : /panier n'y figure pas
-// encore, d'où le `as Route` — le remède documenté par Next.js pour un lien vers une
-// route non encore statiquement connue (node_modules/next/dist/docs/.../02-typescript.md,
-// § « Statically Typed Links »). À retirer quand la tâche 16 aura créé cette route.
-// /boutique existe depuis la tâche 14 et n'a plus besoin du cast.
+// L'en-tête collant reste sur `--shell` avec la SEULE ombre autorisée par la charte
+// (spec § 3.5) : `0 1px 0 rgba(185,169,146,.35)`, jamais une ombre portée générique.
 export function Header() {
   return (
     <header className="sticky top-0 z-40 bg-shell shadow-[0_1px_0_rgba(185,169,146,0.35)]">
@@ -28,12 +30,6 @@ export function Header() {
             className="text-bark-soft transition-colors hover:text-bark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-deep focus-visible:ring-offset-2"
           >
             Boutique
-          </Link>
-          <Link
-            href={'/panier' as Route}
-            className="text-bark-soft transition-colors hover:text-bark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-deep focus-visible:ring-offset-2"
-          >
-            Panier
           </Link>
         </nav>
       </div>

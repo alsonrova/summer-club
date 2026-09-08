@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**75 entrées** · 17 tâches · Développeur 48 · Auditeur qualité et sécurité 20 · Coordinateur 7
+**76 entrées** · 17 tâches · Développeur 49 · Auditeur qualité et sécurité 20 · Coordinateur 7
 
 ## Vue d'ensemble
 
@@ -86,6 +86,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-03 | renommage | Coordinateur | validé | — |
 | 2026-09-03 | 14 | Développeur | livré | — |
 | 2026-09-04 | 14 | Développeur | livré | — |
+| 2026-09-08 | 14 | Développeur | livré | — |
 
 ## Tâche 1
 
@@ -824,3 +825,16 @@ Correctifs post-revue (tour 1). Invalidation à la demande des fiches : productP
 - **Réserve** : Laissés en réserve motivée : ordre alphabétique des déclinaisons (aucune colonne d'ordre sur Variant, même tri que le back-office ; une colonne position serait un changement de schéma) ; image du JSON-LD relative (aucune URL publique de site avant la tâche 22) ; StorefrontProduct toujours dans product-card.tsx (décision 4 du coordinateur, import de type seul) ; la photo « principale » (isPrimary) du back-office n'est pas prise en compte par la vitrine, qui trie par position — à arbitrer, hors constats.
 - **Réserve** : Un timeout isolé (5 s) du test deleteProduct observé une fois sous la charge de quatre fichiers en parallèle (sharp) ; vert seul (20/20) et dans la suite complète. Aucun retry ni délai ajouté.
 - **Réserve** : Build et Playwright ont tourné sur la source finale avant le npm test final ; aucune source n'a changé entre les deux (les mutations ont été restaurées à l'identique, empreintes SHA-256 comparées).
+
+### 2026-09-08 · Développeur — livré
+
+Correctifs post-revue — tour UX. Reprise de l'arbre sale laissé en phase RED (cinq fichiers de tests) : chaque test relu contre les constats, tous gardés ; price.test.tsx réécrit octet par octet (quatre U+00A0 bruts remis en séquence d'échappement, la couche d'outils convertissant la séquence, correction par script Node). Constat 1 : mention « Rupture » de la carte en text-bark-soft au lieu de text-taupe (2,08:1 sur sable) ; point voisin traité, le prix barré de Price passe aussi en bark-soft ; tokens.test.ts fixe que le taupe reste sous 4,5:1. Constat 2, deux pistes : lien « Panier » retiré de l'en-tête avec son cast as Route (la tâche 16 créera la route avant de rendre le lien) ; page 404 racine src/app/not-found.tsx en français dans la coque de la vitrine, extraite en StorefrontShell (src/components/layout/storefront-shell.tsx) partagée avec le layout (storefront) ; un not-found.tsx ne pouvant pas exporter de metadata (doc installée), titre par défaut « Summer Club » posé au layout racine. Tests : +1 unitaire (404 racine rendue sous jsdom), les tests hérités passés RED puis GREEN, e2e de la 404 racine vu RED sur le build existant (titre « 404: This page could not be found. ») puis GREEN. Aucun chemin sensible touché : preuve par le RED de chaque test sur l'ancien code. Mineurs déjà traités au tour 1 laissés tels quels ; réserves motivées reconduites (ordre des déclinaisons, image JSON-LD relative, StorefrontProduct dans product-card.tsx). Rapport : sorties du build et de Playwright reproduites en entier.
+
+- **Modèle** : claude-fable-5-1
+- **Tests** : npm test sur l'arbre repris (tests RED hérités, aucune implémentation) : Test Files 3 failed | 27 passed (30), Tests 3 failed | 284 passed (287), Duration 19.94s — les trois échecs sont les tests RED de ce tour (header, price, product-card), eux seuls. Playwright non relancé en entier avant intervention ; le nouveau test e2e lancé seul sur le build existant : 1 failed (titre reçu « 404: This page could not be found. »), 1 passed (setup). → npm test : Test Files 31 passed (31), Tests 288 passed (288), Duration 19.67s, premier passage | npx --no-install tsc --noEmit : aucune sortie (exit 0), avant et après le build | npm run build : Compiled successfully in 26.0s, 13/13 pages statiques, /_not-found, /boutique et /boutique/collier-vahine en 5m/1y | npx --no-install playwright test : 17 passed (21.9s), premier passage.
+- **Fichiers** : `src/components/product/product-card.tsx`, `src/components/ui/price.tsx`, `src/components/layout/header.tsx`, `src/components/layout/storefront-shell.tsx`, `src/app/(storefront)/layout.tsx`, `src/app/not-found.tsx`, `src/app/layout.tsx`, `tests/components/product-card.test.tsx`, `tests/components/price.test.tsx`, `tests/components/header.test.tsx`, `tests/storefront/not-found.test.tsx`, `tests/tokens.test.ts`, `e2e/storefront.spec.ts`
+- **Réserve** : Titre par défaut « Summer Club » posé au layout racine : il s'applique aussi aux écrans d'administration et à /connexion, qui n'exportaient aucun titre — effet de bord voulu, non demandé par les constats.
+- **Réserve** : La 404 racine s'applique aussi sous /admin/* pour une adresse inconnue visitée avec un cookie de session (coque de la vitrine) ; sans cookie, le proxy redirige vers /connexion comme avant (e2e admin-auth vert).
+- **Réserve** : Réserves motivées reconduites du tour 1 : ordre des déclinaisons (aucune colonne d'ordre, même tri que le back-office ; un tri par identifiant cuid resterait implicite — arbitrage), image du JSON-LD relative (aucune URL publique de site avant la tâche 22), StorefrontProduct dans product-card.tsx (décision 4).
+- **Réserve** : Aucune preuve par mutation au sens du § 6.2 : aucun chemin sensible (stock, argent, statut, authentification) n'est touché ; chaque test a été vu rouge seul sur l'ancien code, sorties rapportées.
+- **Réserve** : Non vérifié dans un navigateur réel aux largeurs mobile/tablette (rôle du testeur UX/UI) : deux couleurs de texte, un lien retiré, une page 404 dans la coque existante.

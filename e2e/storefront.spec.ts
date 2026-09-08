@@ -151,3 +151,19 @@ test('une fiche inconnue répond 404, en français, sans quitter la vitrine', as
   await expect(page.getByText("Cette pièce n'existe pas ou n'est plus en vente.")).toBeVisible()
   await expect(page.getByRole('link', { name: 'Retour à la boutique' })).toBeVisible()
 })
+
+test('une adresse inconnue hors boutique répond 404, en français, sans quitter la vitrine', async ({
+  page,
+}) => {
+  // Constat du testeur UX/UI (tâche 14) : hors de /boutique, toute adresse inconnue tombait
+  // sur la 404 générique de Next.js — titre d'onglet et texte en anglais, sans en-tête ni
+  // pied de page, sans lien de retour. src/app/not-found.tsx couvre désormais toute
+  // adresse sans correspondance ; l'en-tête prouve que la cliente n'a pas quitté la vitrine.
+  // Aucune route n'égale cette adresse : rien à créer ni à nettoyer, et pas de cache ISR.
+  const response = await page.goto('/e2e-storefront-adresse-inconnue')
+  expect(response?.status()).toBe(404)
+  await expect(page).toHaveTitle(/Summer Club/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Page introuvable' })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Navigation principale' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Retour à la boutique' })).toBeVisible()
+})

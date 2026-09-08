@@ -31,6 +31,12 @@ describe('contrastes de la charte', () => {
   it('la sauge décorative reste sous 4.5:1 — elle ne doit pas servir de couleur de texte', () => {
     expect(ratio('#7C8B72', SAND)).toBeLessThan(4.5)
   })
+  it('le taupe reste sous 4.5:1 — il borde et sépare, il ne doit pas servir de couleur de texte', () => {
+    // Mesuré par le testeur UX/UI (tâche 14) sur la mention « Rupture » du catalogue :
+    // 2,08:1 à 14 px. Les seuls tokens qui écrivent sur sable sont bark, bark-soft et
+    // sage-deep (les trois assertions au-dessus).
+    expect(ratio('#B9A992', SAND)).toBeLessThan(4.5)
+  })
   it('les tokens du fichier de charte sont ceux de la spec', () => {
     const css = readFileSync('src/styles/tokens.css', 'utf8')
     expect(css).toContain('--color-sage-deep: #5E6B55')

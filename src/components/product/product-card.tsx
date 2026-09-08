@@ -51,7 +51,12 @@ export function ProductCard({ product }: { product: StorefrontProduct }) {
         {product.inStock ? (
           <Price amount={product.finalPrice} initial={product.initialPrice} />
         ) : (
-          <span className="text-taupe">Rupture</span>
+          // Même couleur que le prix voisin et que le message de rupture de la fiche
+          // (VariantPicker). En taupe, la mention mesurait 2,08:1 sur sable à 14 px
+          // (testeur UX/UI, tâche 14), sous le seuil de 4,5:1 : le taupe borde et sépare,
+          // il n'écrit pas (tests/tokens.test.ts) — et la disponibilité est une
+          // information, pas un ornement.
+          <span className="text-bark-soft">Rupture</span>
         )}
       </p>
     </article>
