@@ -273,14 +273,19 @@ describe('catalogue et fiche produit', () => {
   })
 
   describe('productPathsToRevalidate', () => {
-    it("publie le catalogue et le gabarit des fiches, pour que chaque appelant invalide les deux", () => {
+    it("publie l'accueil, le catalogue et le gabarit des fiches, pour qu'aucun appelant n'en oublie un", () => {
       // Le gabarit exige le type `'page'` : sans lui, revalidatePath n'a aucun effet sur un
       // chemin dynamique (node_modules/next/dist/server/web/spec-extension/revalidate.js,
       // avertissement console au lieu d'une invalidation). Et il s'écrit avec le groupe de
       // routes, comme le fichier, pas comme l'URL : `/boutique/[slug]` ne correspond à
       // aucun tag d'entrée de cache (`_N_T_/(storefront)/boutique/[slug]/page`, mesuré) et
       // laissait le 404 d'une fiche visitée avant sa création survivre à celle-ci.
+      // L'accueil est entré dans cette liste à la tâche 15 : sa section « Notre sélection »
+      // lit listProducts et la page est rendue statiquement (revalidate = 300). Sans elle,
+      // un produit désactivé, renommé ou remisé restait en vitrine jusqu'à cinq minutes —
+      // le jumeau exact du défaut trouvé sur la fiche à la revue de la tâche 14.
       expect(productPathsToRevalidate()).toEqual([
+        ['/'],
         ['/boutique'],
         ['/(storefront)/boutique/[slug]', 'page'],
       ])

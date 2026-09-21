@@ -1,3 +1,38 @@
+import { prisma } from '@/server/db'
+import type { HomeReview } from '@/components/home/reviews'
+
+// Trois avis épinglés en page d'accueil (spec § 8.4). La borne vit ici plutôt que dans la
+// page : c'est la requête qui doit s'arrêter à trois, pas le rendu qui doit en jeter
+// quatre.
+const HOME_REVIEWS_LIMIT = 3
+
+/**
+ * Les avis choisis pour la page d'accueil : épinglés ET publiés.
+ *
+ * Les deux conditions, pas une seule. `pinned` dit « je veux celui-ci en vitrine »,
+ * `status` dit « celui-ci est validé » — et un avis peut porter la première sans la
+ * seconde : `moderateReview` dépunaise quand elle rejette, mais rien n'empêche une ligne
+ * écrite avant cette règle, ou par un script, d'être épinglée en attente de modération.
+ * L'invariant se ferme donc ici aussi, côté lecture (docs/CONVENTIONS.md § 4, règle 2 :
+ * un invariant tenu à un seul endroit n'est pas tenu).
+ *
+ * `position` est l'ordre que la propriétaire choisit au back-office ; `id` départage deux
+ * positions égales, sans quoi l'ordre des trois avis dépendrait du plan d'exécution et
+ * pourrait changer d'un rendu à l'autre (même raisonnement que MEDIA_ORDER,
+ * src/server/products.ts).
+ *
+ * La projection est explicite : ni `orderId`, ni `productId`, ni `createdAt` ne traversent
+ * vers le composant. Ce qui n'est pas projeté ne peut pas fuiter dans le HTML.
+ */
+export async function listPinnedReviews(): Promise<HomeReview[]> {
+  return prisma.review.findMany({
+    where: { pinned: true, status: 'published' },
+    select: { id: true, rating: true, body: true, author: true, source: true },
+    orderBy: [{ position: 'asc' }, { id: 'asc' }],
+    take: HOME_REVIEWS_LIMIT,
+  })
+}
+
 /**
  * Erreurs métier des avis. Même parti pris que la famille dérivée de `OrderError`
  * (src/server/orders.ts) : une classe, pas une chaîne de message.

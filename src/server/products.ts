@@ -15,11 +15,11 @@ import type { StorefrontProduct } from '@/components/product/product-card'
 // de tuples, que TypeScript refuse d'étaler en arguments.
 export type RevalidationTarget = [path: string, type?: 'page' | 'layout']
 
-// Chemins publics dont le rendu dépend d'un produit : le catalogue et chaque fiche. Même
-// motif que pathsToRevalidate (src/server/order-status-service.ts) : ce module ne peut pas
-// invalider lui-même (revalidatePath exige un contexte de requête, absent sous Vitest et
-// dans un script), il publie donc la liste pour qu'aucun appelant n'ait à deviner ni à
-// oublier. Sans la fiche, un lien /boutique/<slug> déjà partagé continuait de servir depuis
+// Chemins publics dont le rendu dépend d'un produit : l'accueil, le catalogue et chaque
+// fiche. Même motif que pathsToRevalidate (src/server/order-status-service.ts) : ce module
+// ne peut pas invalider lui-même (revalidatePath exige un contexte de requête, absent sous
+// Vitest et dans un script), il publie donc la liste pour qu'aucun appelant n'ait à deviner
+// ni à oublier. Sans la fiche, un lien /boutique/<slug> déjà partagé continuait de servir depuis
 // le cache ISR (revalidate = 300) un produit retiré, un stock parti ou un prix changé —
 // jusqu'à cinq minutes ; et un 404 mis en cache avant la création du produit survivait à
 // sa création (constat de la revue de la tâche 14).
@@ -29,6 +29,13 @@ export type RevalidationTarget = [path: string, type?: 'page' | 'layout']
 // actions sur une déclinaison ou une photo ne connaissent que l'identifiant du produit. Le
 // coût — chaque fiche re-rendue à sa prochaine visite — est celui d'un catalogue de
 // quelques dizaines de pièces.
+//
+// L'accueil est entré dans cette liste à la tâche 15, avec sa section « Notre sélection »
+// qui lit listProducts : rendu statiquement lui aussi (revalidate = 300), il aurait gardé
+// jusqu'à cinq minutes un produit désactivé, renommé ou remisé — le jumeau exact du défaut
+// trouvé sur la fiche à la revue de la tâche 14 (docs/CONVENTIONS.md § 4, règle 3 : après
+// un cas corrigé, chercher son symétrique). C'est un chemin littéral, sans `type` : `/`
+// est une adresse, pas un gabarit.
 //
 // Le gabarit s'écrit AVEC le groupe de routes, `/(storefront)/boutique/[slug]`, et pas
 // `/boutique/[slug]` comme l'URL : avec `type`, revalidatePath désigne un fichier de
@@ -40,7 +47,7 @@ export type RevalidationTarget = [path: string, type?: 'page' | 'layout']
 // produit, le bout-en-bout l'a montré avant ce correctif. Le chemin littéral `/boutique`,
 // lui, est bien une adresse : l'entrée du catalogue porte le tag `_N_T_/boutique`.
 export function productPathsToRevalidate(): RevalidationTarget[] {
-  return [['/boutique'], ['/(storefront)/boutique/[slug]', 'page']]
+  return [['/'], ['/boutique'], ['/(storefront)/boutique/[slug]', 'page']]
 }
 
 export type ProductDetail = StorefrontProduct & {
