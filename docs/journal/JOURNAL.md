@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**84 entrées** · 17 tâches · Développeur 49 · Auditeur qualité et sécurité 26 · Testeur UX/UI 1 · Coordinateur 8
+**86 entrées** · 18 tâches · Développeur 51 · Auditeur qualité et sécurité 26 · Testeur UX/UI 1 · Coordinateur 8
 
 ## Vue d'ensemble
 
@@ -95,6 +95,8 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-08 | 14 | Auditeur qualité et sécurité | validé | — |
 | 2026-09-08 | 14 | Testeur UX/UI | correctifs demandés | — |
 | 2026-09-08 | 14 | Coordinateur | validé | — |
+| 2026-09-21 | 15 | Développeur | livré | `555e6cc` |
+| 2026-09-21 | 15 | Développeur | livré | `555e6cc` |
 
 ## Tâche 1
 
@@ -945,3 +947,27 @@ Clôture de la tâche 14 « Catalogue et fiche produit », exécutée en workflo
 - **Modèle** : claude-fable-5-1
 - **Réserve** : Je n'ai relancé aucune suite moi-même : les chiffres (npm test 287, playwright 17, tsc, build) sont ceux des rapports de correctifs, recoupés par les deux re-revues sur le diff. Le build de production interroge PostgreSQL (pré-rendu du catalogue et generateStaticParams) : à prévoir au déploiement, tâche 22.
 - **Réserve** : La 404 racine s'affiche dans la coque de la vitrine, y compris pour une adresse inconnue sous /admin/* : à revoir quand le back-office aura son propre not-found.
+
+## Tâche 15
+
+### 2026-09-21 · Développeur — livré
+
+Page d'accueil (spec § 8). Déplacée dans le groupe (storefront) : src/app/page.tsx, gabarit de create-next-app, supprimé avec ses cinq SVG orphelins — le lien de marque de l'en-tête n'y atterrit plus (arbitrage de clôture de la tâche 14). Cinq sections : Hero (seul h1, seule image priority, LCP), About (trois arguments, borne de la spec gardée par un test), Selection (ProductCard dans la grille du catalogue, huit pièces, s'efface si vide), Reviews (badge « Achat vérifié » réservé à source=verified, note en aria-label, s'efface si vide), CallToAction (région nommée, /boutique + Instagram + WhatsApp conditionnel). Reveal (src/components/ui/reveal.tsx) avec DEUX replis : sans IntersectionObserver le contenu s'affiche sans animation, sans JavaScript une règle <noscript> de la page force l'opacité des conteneurs data-reveal — sans quoi la page n'aurait que son hero ; prefers-reduced-motion est déjà neutralisé par tokens.css, aucun code ajouté. listPinnedReviews (src/server/reviews.ts) exige épinglé ET publié, trie par position puis id, projette cinq colonnes. L'accueil entre dans productPathsToRevalidate (src/server/products.ts). public/hero-1200.avif est un APLAT de --clay 1200x1500, pas une photo : image décorative (alt vide, aria-hidden) jusqu'à la vraie prise de vue, qui devra apporter son texte alternatif.
+
+- **Modèle** : claude-opus-5
+- **Commit** : `555e6cc`
+- **Tests** : Test Files  31 passed (31) / Tests  288 passed (288) — Playwright non relancé avant intervention → Test Files  35 passed (35) / Tests  307 passed (307) ; tsc --noEmit sans sortie ; npm run build réussi (/ statique, revalidate 5m) ; Playwright 19 passed (setup + 18)
+- **Fichiers** : `src/app/(storefront)/page.tsx`, `src/components/home/hero.tsx`, `src/components/home/about.tsx`, `src/components/home/selection.tsx`, `src/components/home/reviews.tsx`, `src/components/home/call-to-action.tsx`, `src/components/ui/reveal.tsx`, `src/server/reviews.ts`, `src/server/products.ts`, `src/app/page.tsx`, `public/hero-1200.avif`, `.env.example`, `tests/components/reveal.test.tsx`, `tests/components/home-sections.test.tsx`, `tests/components/home-reviews.test.tsx`, `tests/server/reviews.test.ts`, `tests/server/products.test.ts`, `e2e/home.spec.ts`
+- **Réserve** : Environnement RECONSTRUIT pour cette session : ni node_modules, ni .env, ni conteneur Docker à l'arrivée. PostgreSQL 16 local (cluster système, port 5432) au lieu du 17-alpine du compose, migrate deploy + seed rejoués. Les chiffres ci-dessus sont mesurés sur cet environnement, pas sur la machine du propriétaire.
+- **Réserve** : Playwright 1.62.1 réclame le build Chromium 1234 ; le conteneur n'a que le 1194. La suite a tourné via une surcharge locale non versionnée (executablePath), supprimée depuis. Rien d'autre n'a été modifié dans la configuration.
+- **Réserve** : public/hero-1200.avif est un aplat, pas une photographie : le hero n'a pas été vu avec une vraie image, et son texte alternatif reste à écrire avec elle. Aucun test UX/UI en navigateur réel n'a été mené — ni largeurs, ni contrastes mesurés, ni prefers-reduced-motion vérifié à l'écran.
+- **Réserve** : La sélection de l'accueil est la tête du catalogue (ordre d'affichage), pas une colonne « mis en avant » : la spec § 8.3 dit « choisis en admin », ce qui est vrai au sens de displayOrder mais pas au sens d'un marquage dédié. À arbitrer.
+- **Réserve** : WHATSAPP_NUMBER n'est renseigné nulle part : le lien WhatsApp du bandeau n'a donc jamais été rendu ni cliqué. Seule son absence est couverte par un test.
+
+### 2026-09-21 · Développeur — livré
+
+Complète l'entrée précédente de la tâche 15, qui a omis les preuves par mutation (§ 6.2). CINQ mutations, une à la fois, chacune restaurée et la restauration vérifiée par diff : (1) status:'published' retiré de listPinnedReviews → 2 tests de tests/server/reviews.test.ts rougissent, eux seuls (305/307) ; (2) pinned:true retiré → les mêmes 2, eux seuls ; (3) liste blanche du numéro WhatsApp remplacée par /.*/ → « refuse un numéro mal formé » rougit seul (306/307) ; (4) observer.disconnect() retiré du corps du rappel → « masque le contenu jusqu'à son entrée dans le champ, puis cesse d'observer » rougit seul (306/307) ; (5) ['/'] retiré de productPathsToRevalidate, build refait, e2e relancé → « la page d'accueil présente ses cinq sections » rougit seule sur l'absence du lien « Anneau Alizé », « un seul h1 » reste verte. La cinquième est celle qui compte : elle prouve que l'accueil est réellement servi depuis le cache ISR et que seule l'invalidation à la demande l'en chasse — pas seulement que la liste contient la bonne chaîne. Phase RED initiale vue sur les 5 fichiers de tests neufs/modifiés (imports non résolus + 4 tests en échec) avant toute implémentation ; quatre tests de reveal.test.tsx ont ensuite rougi une seconde fois sur une erreur du test lui-même (getByText rend l'élément porteur du texte, pas son parent), corrigée côté test, le composant n'a pas bougé.
+
+- **Modèle** : claude-opus-5
+- **Commit** : `555e6cc`
+- **Réserve** : Aucune mutation n'a été tentée sur la règle <noscript> ni sur le repli « sans IntersectionObserver » côté navigateur réel : le premier n'est vérifiable qu'en désactivant JavaScript dans un vrai navigateur, ce qui n'a pas été fait ; le second est couvert sous jsdom, qui n'implémente pas l'API — c'est le cas nominal du test, pas une simulation.
