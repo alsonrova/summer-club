@@ -5,7 +5,7 @@
 
 Ce document recense ce que chaque agent d'intelligence artificielle a fait sur ce dépôt : ce qu'il a produit, ce qu'il a vérifié, ce qu'il a trouvé et ce qu'il laisse en suspens. Mode d'emploi : `docs/journal/README.md`.
 
-**86 entrées** · 18 tâches · Développeur 51 · Auditeur qualité et sécurité 26 · Testeur UX/UI 1 · Coordinateur 8
+**87 entrées** · 18 tâches · Développeur 51 · Auditeur qualité et sécurité 26 · Testeur UX/UI 1 · Coordinateur 9
 
 ## Vue d'ensemble
 
@@ -97,6 +97,7 @@ Ce document recense ce que chaque agent d'intelligence artificielle a fait sur c
 | 2026-09-08 | 14 | Coordinateur | validé | — |
 | 2026-09-21 | 15 | Développeur | livré | `555e6cc` |
 | 2026-09-21 | 15 | Développeur | livré | `555e6cc` |
+| 2026-10-02 | 15 | Coordinateur | livré | — |
 
 ## Tâche 1
 
@@ -971,3 +972,13 @@ Complète l'entrée précédente de la tâche 15, qui a omis les preuves par mut
 - **Modèle** : claude-opus-5
 - **Commit** : `555e6cc`
 - **Réserve** : Aucune mutation n'a été tentée sur la règle <noscript> ni sur le repli « sans IntersectionObserver » côté navigateur réel : le premier n'est vérifiable qu'en désactivant JavaScript dans un vrai navigateur, ce qui n'a pas été fait ; le second est couvert sous jsdom, qui n'implémente pas l'API — c'est le cas nominal du test, pas une simulation.
+
+### 2026-10-02 · Coordinateur — livré
+
+Passation docs/passation/2026-10-02-v1.0-taches-1-a-15.md, qui remplace celle du 2026-08-29 (arrêtée aux tâches 1 à 12, elle annonçait encore que la vitrine n'existait pas). Contenu : tableau d'avancement 1 à 15 avec la tâche 15 marquée LIVRÉE MAIS PAS REVUE — elle n'a eu que son développeur, là où 11 à 14 ont traversé le protocole complet ; où vit le code (branche claude/affectionate-darwin-y1f4n4 poussée, origin/main resté à la tâche 14) ; le renommage et le critère de validité qui en découle ; ce qu'ont livré les tâches 13, 14 et 15 avec les trois points hors brief de la 15 à faire regarder en revue ; renvoi aux conventions sans les résumer, plus les deux règles d'orchestration ; journal ; à reprendre — revue de la 15 d'abord, puis tâche 16 avec une table des quatre endroits où son brief enfreint les conventions (groupe (boutique), identifiants français, src/lib absent de l'architecture, clé localStorage persistée à trancher avant écriture), zustand non installé, /panier qui ramènera le lien de l'en-tête ; pièges d'environnement scindés en machine de la propriétaire / conteneur cloud / partout, avec la recette de remise en route vérifiée ; décisions du propriétaire et le point à lui dire (ses signets de filtre ne filtrent plus) ; dettes classées en rattachées à une tâche, héritées de la 15, sans tâche assignée. Aucun compteur ni SHA figé pour l'état courant : renvoi aux commandes. Identifiants cités vérifiés un par un contre le code — STOCK_ENGAGE corrigé en STOCK_COMMITTED, et la dette V1.1 reformulée en « la promotion appliquée et le prix avant remise » au lieu d'inventer un nom de colonne, OrderItem ne portant que nameSnapshot/unitPriceSnapshot/quantity.
+
+- **Modèle** : claude-opus-5
+- **Tests** : Test Files  35 passed (35) / Tests  307 passed (307) — mesuré le 2026-10-02 après redémarrage du cluster PostgreSQL du conteneur → inchangé : aucune ligne de code touchée, la passation est un document
+- **Fichiers** : `docs/passation/2026-10-02-v1.0-taches-1-a-15.md`
+- **Réserve** : Document écrit par l'agent qui a implémenté la tâche 15 : son appréciation de ce qui reste à vérifier sur cette tâche n'est pas celle d'un relecteur indépendant, et ne remplace pas la revue qu'il réclame.
+- **Réserve** : Les pièges du conteneur cloud sont ceux d'une seule session (2026-09-21, recette rejouée le 2026-10-02) ; ceux de la machine de la propriétaire sont repris de la passation précédente sans avoir pu être revérifiés.
